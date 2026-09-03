@@ -4,9 +4,9 @@
 
 ## 프로젝트
 
-말로 하루를 이야기하면 AI가 **말투에서** 감정을 읽어 실시간 대화 상대가 되어주고, 쌓인 대화에서 패턴을 발견해 돌려주는 모바일 서비스. 원티드 AI Championship 2026 출품작.
+말로 하루를 이야기하면 AI가 **말투에서** 감정을 읽어 실시간 대화 상대가 되어주고, 쌓인 대화에서 패턴을 발견해 돌려주는 **모바일 우선 웹 서비스**(제출물이 웹 URL이라 브라우저가 1순위 타깃 — PRD §14-4). 원티드 AI Championship 2026 출품작.
 
-- 팀 3인: **앱**(RN 또는 Flutter) · **백엔드**(Java/Spring Boot · Supabase, 팀장) · **AI**(Hume CLM 엔드포인트)
+- 팀 3인: **앱**(Flutter · 웹 1순위) · **백엔드**(Java/Spring Boot · Supabase, 팀장) · **AI**(Hume CLM 엔드포인트)
 - 음성 스택: **Hume EVI + Custom Language Model** — 프로소디 측정은 Hume이, 대화 두뇌는 우리가
 - 핵심 개념: **갭 = |텍스트 valence − 음성 valence|**. 절대 감정("슬픔 78%")을 주장하지 않고 두 채널의 차이만 본다
 - 일정 상수: **9/10 팀 실사용(도그푸딩) 시작 · 9/20 제출.** 개발 타임라인은 따로 세우지 않는다 (PRD §12)
@@ -59,8 +59,12 @@
 
 ## 현재 상태 (2026-09-03)
 
-- **스택 미결**: 앱 프레임워크(RN/Flutter), AI서버 언어, LLM 모델 — PRD §14. 9/10 도그푸딩 최소 조건(녹음 + STT + 프로소디 점수 저장)이 이 결정에 걸려 있다
+- **앱 프레임워크 확정(2026-09-03)**: **Flutter · 웹 1순위.** 제출물 링크가 웹 URL이고, 웹이면 도그푸딩 배포가 링크 공유로 끝난다. 빌드·렌더링·EVI 세션 수립까지 실측했고 **마이크 음성 왕복은 미검증**이다 — 근거와 전환 조건은 PRD §14-4
+- **스택 미결**: AI서버 언어, LLM 모델 — PRD §14
 - **착수 전 확정 항목**: 48종 → valence 매핑표(§14-1), 위기 키워드 목록(§14-2), Hume 플랜 실측(§14-3), 고정 임계값(§14-5)
 - **누락 문서 3개**: `decisions.md`, `voice-emotion-stack-options.md`, `selected-topic.md` — PRD가 참조하지만 저장소에 없음. `docs/00-context/`에 올릴 것
-- **열린 요청**: `docs/request/ai/clm-turn-pipeline-review.md` — PRD §9.1 실시간 턴 처리의 순환·채널 독립성 문제. **AI 담당이 회신하기 전에는 §9.1·FR-021 구현에 착수하지 않는다**
+- **열린 요청 3건** (전부 ⏳ 회신 대기)
+  - `docs/request/ai/clm-turn-pipeline-review.md` — PRD §9.1 실시간 턴 처리의 순환·채널 독립성 문제. **AI 담당이 회신하기 전에는 §9.1·FR-021 구현에 착수하지 않는다**
+  - `docs/request/backend/hume-config-id.md` — EVI handshake에 필요한 `config_id`가 계약에 없다. **CLM 전환 시점부터 F2-02 연결이 막힌다**
+  - `docs/request/backend/live-turn-signal.md` — 대화 중 턴 신호(위기·갭·valence)를 앱이 읽을 경로가 없다. **S07·데모 모드 트리거 보류**
 - 코드는 아직 없다. 각 서비스 폴더에는 담당·계약 위치를 적은 README만 있다
