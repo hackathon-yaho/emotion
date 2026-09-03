@@ -64,7 +64,7 @@
 | 필드 | null이 되는 경우 | 소비 측 처리 |
 | --- | --- | --- |
 | `textValence` | 텍스트 valence 분석 호출 실패·타임아웃 (spec F3-06) | 갭 미표시 |
-| `voiceValence` | 프로소디 점수 누락 | 갭 미표시 |
+| `voiceValence` | 프로소디 점수 누락, 또는 긍정·부정 합계 질량이 기준(초기 0.05) 미만 — 중립만 찍힌 발화 ([ai-pipeline.md](ai-pipeline.md) §3) | 갭 미표시 |
 | `gap` | 위 둘 중 **하나라도** null | 그래프에서 점을 찍지 않는다 |
 | `summary` | 요약 생성 실패 | 요약 영역 숨김 |
 | `observations[]` | 조건 미달로 관찰 미생성 | **빈 배열.** "아직 없어요" 안내만 표시하고 억지 문구를 만들지 않는다 |
@@ -624,4 +624,4 @@ data: [DONE]
 | --- | --- | --- |
 | v1.0 | 2026-09-03 | 최초 작성. PRD §8·spec 기준으로 12개 공개 엔드포인트 + 2개 내부 엔드포인트 확정 |
 | v1.1 | 2026-09-03 | 문서 교차 검증 반영 — ① `POST /api/session/{id}/resume` 신설(중단 세션 이어하기) ② `POST /api/observations/{id}/feedback` 신설(측정 절차가 없던 §1.4 "맞아요" 지표를 실제로 수집 가능하게) ③ `GET /api/me`에 `openSession` 추가 ④ `endReason`에 `timeout`·`resumed` 추가 ⑤ 409 `SESSION_NOT_RESUMABLE` 추가 ⑥ JWT 만료 7일 명시 ⑦ `gapThreshold` 예시값 표기 |
-| v1.2 | 2026-09-03 | AI 파이프라인 개정 반영(`request/ai/clm-turn-pipeline-review.md` 회신) — ① §1-3 `textValence` null 사유를 "분석 호출 실패·타임아웃"으로 ② §4 마지막 경고를 "메타 태그 없음"으로, CLM 인증 방향 각주 ③ 상위 문서에 `ai-pipeline.md` 추가. **필드 변경 없음.** 계약 공백 2건은 별도 요청(`request/backend/session-context-lookup.md`, `session-summary-endpoint.md`)으로 다음 버전에서 |
+| v1.2 | 2026-09-03 | AI 파이프라인 개정 반영(`request/ai/clm-turn-pipeline-review.md` 회신) — ① §1-3 `textValence` null 사유를 "분석 호출 실패·타임아웃"으로 ② §4 마지막 경고를 "메타 태그 없음"으로, CLM 인증 방향 각주 ③ 상위 문서에 `ai-pipeline.md` 추가 ④ §1-3 `voiceValence` null 사유에 합계 질량 부족(중립만 찍힌 발화) 추가. **필드 변경 없음.** 계약 공백 2건은 별도 요청(`request/backend/session-context-lookup.md`, `session-summary-endpoint.md`)으로 다음 버전에서 |
