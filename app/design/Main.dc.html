@@ -56,6 +56,9 @@
           <sc-if value="{{ring.hasCaption}}" hint-placeholder-val="{{ true }}">
             <p class="serif" style="margin: 0; font-size: 22px; line-height: 1.65; text-align: center; text-wrap: pretty">{{ring.caption}}</p>
           </sc-if>
+          <sc-if value="{{resumedNote}}" hint-placeholder-val="{{ false }}">
+            <p style="margin: 0; font-size: 13px; color: var(--faint)">이어서 이야기합니다 · 남은 시간 4분 42초</p>
+          </sc-if>
         </div>
       </div>
       <sc-if value="{{demo}}" hint-placeholder-val="{{ false }}">
@@ -148,8 +151,29 @@
 
             <div style="flex-grow: 1"></div>
 
+            <sc-if value="{{resume.show}}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; flex-direction: column; padding: 0 0 20px 0">
+                <div style="height: 1px; background: var(--line)"></div>
+                <div style="display: flex; flex-direction: column; gap: 12px; padding: 20px 0 0 0">
+                  <p class="lab" style="margin: 0">중단된 대화</p>
+                  <p style="margin: 0; font-size: 16px; line-height: 1.7; color: {{resume.color}}; text-wrap: pretty">{{resume.text}}</p>
+                  <sc-if value="{{resume.hasRemain}}" hint-placeholder-val="{{ true }}">
+                    <p style="margin: 0; font-size: 13px; color: var(--faint)">남은 시간 {{resume.remain}} · 원래 7분 중 이미 쓴 시간을 뺀 값입니다</p>
+                  </sc-if>
+                </div>
+                <sc-if value="{{resume.hasResumeBtn}}" hint-placeholder-val="{{ true }}">
+                  <div style="display: flex; gap: 8px; padding: 20px 0 0 0">
+                    <button onClick="{{goResume}}" style="flex-grow: 1; height: 56px; background: var(--accent); color: var(--onAccent); font-size: 15px; font-weight: 500; display: flex; align-items: center; justify-content: center; border-radius: 2px">이어서 하기</button>
+                    <button onClick="{{goTalk}}" style="width: 120px; height: 56px; border: 1px solid var(--line); color: var(--paper); font-size: 15px; display: flex; align-items: center; justify-content: center; border-radius: 2px">새로 시작</button>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{resume.showCta}}" hint-placeholder-val="{{ true }}">
             <button onClick="{{goTalk}}" style="height: 60px; border: 1px solid var(--line); color: var(--paper); font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 12px; border-radius: 2px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M12 4v9"/><path d="M8.5 8.5v3.5a3.5 3.5 0 007 0V8.5"/><path d="M12 17v3"/></svg> {{cta.label}}</button>
             <p style="margin: 16px 0 0 0; text-align: center; font-size: {{cta.noteSize}}px; line-height: 1.7; letter-spacing: {{cta.noteSpacing}}; color: {{cta.noteColor}}; text-wrap: pretty">{{cta.note}}</p>
+            </sc-if>
           </div>
         </sc-if>
 
@@ -170,8 +194,13 @@
                     <div style="display: flex; align-items: center; gap: 24px">
                       <button style="height: 44px; font-size: 14px; color: var(--accent)">근거 보기</button>
                       <div style="flex-grow: 1"></div>
-                      <button style="height: 44px; font-size: 14px; color: var(--muted)">맞아요</button>
-                      <button style="height: 44px; font-size: 14px; color: var(--faint)">아니에요</button>
+                      <sc-if value="{{o.open}}" hint-placeholder-val="{{ true }}">
+                        <button onClick="{{o.agree}}" style="height: 44px; font-size: 14px; color: var(--muted)">맞아요</button>
+                        <button onClick="{{o.disagree}}" style="height: 44px; font-size: 14px; color: var(--faint)">아니에요</button>
+                      </sc-if>
+                      <sc-if value="{{o.answered}}" hint-placeholder-val="{{ false }}">
+                        <span style="height: 44px; display: flex; align-items: center; font-size: 13px; color: var(--faint)">{{o.answerText}}</span>
+                      </sc-if>
                     </div>
                   </div>
                 </div>
@@ -221,6 +250,24 @@
                 <div style="display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 2px; background: var(--warm)"></span><span style="font-size: 13px; color: var(--muted)">목소리</span></div>
               </div>
               <p style="margin: 0; font-size: 13px; line-height: 1.7; color: var(--faint); text-wrap: pretty">음영 구간에서 두 선이 가장 크게 벌어졌습니다. 눌러서 그날 대화를 볼 수 있습니다.</p>
+
+              <div style="height: 1px; background: var(--line)"></div>
+              <div style="display: flex; flex-direction: column; gap: 14px">
+                <div style="display: flex; align-items: baseline; justify-content: space-between">
+                  <p class="lab" style="margin: 0">이야기별 갭</p>
+                  <p style="margin: 0; font-size: 12px; color: var(--faint)">내 평균 {{bars.avg}} · 점선은 ×1.5</p>
+                </div>
+                <svg width="342" height="{{bars.h}}" viewBox="0 0 342 {{bars.h}}" fill="none" style="display: block">
+                  <line x1="{{bars.avgX}}" y1="0" x2="{{bars.avgX}}" y2="{{bars.h}}" stroke="var(--line)" stroke-width="1"></line>
+                  <line x1="{{bars.thX}}" y1="0" x2="{{bars.thX}}" y2="{{bars.h}}" stroke="var(--faint)" stroke-width="1" stroke-dasharray="2 4"></line>
+                  <sc-for list="{{bars.rows}}" as="b" hint-placeholder-count="5">
+                    <text x="0" y="{{b.ty}}" fill="var(--muted)" font-size="13" font-family="'Noto Sans KR', sans-serif">{{b.label}}</text>
+                    <rect x="{{bars.x0}}" y="{{b.by}}" width="{{b.w}}" height="6" rx="2" fill="{{b.fill}}"></rect>
+                    <text x="342" y="{{b.ty}}" fill="{{b.vfill}}" font-size="12" text-anchor="end" font-family="'Noto Sans KR', sans-serif">{{b.v}}</text>
+                  </sc-for>
+                </svg>
+                <p style="margin: 0; font-size: 12px; line-height: 1.7; color: var(--faint); text-wrap: pretty">세 번 이상 나온 이야기만 셉니다. 점선을 넘으면 발견이 됩니다.</p>
+              </div>
             </sc-if>
             <sc-if value="{{isEmpty}}" hint-placeholder-val="{{ false }}">
               <p style="margin: 0; font-size: 16px; line-height: 1.75; color: var(--muted); text-wrap: pretty">아직 그릴 기록이 없습니다.<br>대화가 쌓이면 말한 내용과 목소리를 나란히 보여드립니다.</p>
@@ -297,14 +344,14 @@
 </x-dc>
 <script data-dc-script data-props='{
   "theme": {"editor": "enum", "options": ["dark", "light"], "default": "dark", "section": "테마"},
-  "state": {"editor": "enum", "options": ["normal", "empty", "loading", "startError"], "default": "normal", "section": "상태"},
+  "state": {"editor": "enum", "options": ["normal", "empty", "loading", "startError", "resume", "resumeExpired"], "default": "normal", "section": "상태"},
   "demoMode": {"editor": "boolean", "default": false, "section": "데모"},
   "$preview": {"width": 390, "height": 844}
 }'>
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { screen: 'shell', tab: 'home', step: 1 };
+    this.state = { screen: 'shell', tab: 'home', step: 1, feedback: {}, resumed: false };
   }
 
   data() {
@@ -363,6 +410,40 @@ class Component extends DCLogic {
     return { textSegs: segs('t'), voiceSegs: segs('v'), dots: dots, ticks: ticks, hl: hl };
   }
 
+  tagRows() {
+    // 샘플 — 계약서 §2-8/F9-03 형태. 등장 3회 미만은 서버가 이미 제외
+    return [
+      { tag: '회의', n: 7, gap: 1.31 },
+      { tag: '주말', n: 4, gap: 1.16 },
+      { tag: '야근', n: 4, gap: 0.98 },
+      { tag: '팀장', n: 3, gap: 0.88 },
+      { tag: '가족', n: 4, gap: 0.65 }
+    ];
+  }
+
+  buildBars(width, labelW) {
+    const avg = 0.72; const th = avg * 1.5;
+    const rows = this.tagRows();
+    const maxV = Math.max(th, ...rows.map((r) => r.gap)) * 1.12;
+    const x0 = labelW; const plotW = width - labelW - 44;
+    const sx = (v) => x0 + (v / maxV) * plotW;
+    const rowH = 36;
+    return {
+      avg: avg.toFixed(2), h: rows.length * rowH, x0: x0,
+      avgX: sx(avg).toFixed(1), thX: sx(th).toFixed(1),
+      rows: rows.map((r, i) => {
+        const hit = r.n >= 3 && r.gap >= th;
+        return {
+          label: r.tag + ' · ' + r.n + '회',
+          ty: (i * rowH + 21).toFixed(0), by: (i * rowH + 13).toFixed(0),
+          w: (sx(r.gap) - x0).toFixed(1), v: r.gap.toFixed(2),
+          fill: hit ? 'var(--paper)' : 'var(--faint)',
+          vfill: hit ? 'var(--paper)' : 'var(--faint)'
+        };
+      })
+    };
+  }
+
   rings() {
     return [
       { label: '연결하고 있습니다', caption: '', size: 176, gap: 4, o1: 0.3, o2: 0.2 },
@@ -387,7 +468,26 @@ class Component extends DCLogic {
     const isEmpty = st === 'empty';
     const isLoading = st === 'loading';
     const isStartError = st === 'startError';
+    const isResume = st === 'resume';
+    const isExpired = st === 'resumeExpired';
     const dataOk = !isEmpty && !isLoading;
+    const resume = isResume
+      ? { show: true, showCta: false, hasResumeBtn: true, hasRemain: true, remain: '4분 42초', color: 'var(--paper)',
+          text: '5분 전에 중단된 대화가 있습니다. 이어서 이야기할까요?' }
+      : isExpired
+        ? { show: true, showCta: true, hasResumeBtn: false, hasRemain: false, remain: '', color: 'var(--muted)',
+            text: '이어갈 수 있는 시간이 지났습니다. 새 대화로 시작합니다.' }
+        : { show: false, showCta: true, hasResumeBtn: false, hasRemain: false, remain: '', color: '', text: '' };
+    const fb = this.state.feedback;
+    const mkObs = (o, i) => {
+      const a = fb[i];
+      return Object.assign({}, o, {
+        open: !a, answered: !!a,
+        answerText: a === 'agree' ? '"맞아요"로 답했습니다' : '"아니에요"로 답했습니다',
+        agree: () => this.setState({ feedback: Object.assign({}, fb, { [i]: 'agree' }) }),
+        disagree: () => this.setState({ feedback: Object.assign({}, fb, { [i]: 'disagree' }) })
+      });
+    };
     const cta = isStartError
       ? { label: '다시 시도', note: '지금은 대화를 시작할 수 없습니다. 잠시 후 다시 시도해 주세요.', noteColor: 'var(--muted)', noteSize: 13, noteSpacing: '0' }
       : { label: '오늘 이야기하기', note: '목소리는 분석 직후 삭제됩니다', noteColor: 'var(--faint)', noteSize: 11, noteSpacing: '0.06em' };
@@ -397,11 +497,15 @@ class Component extends DCLogic {
       isShell: this.state.screen === 'shell',
       isTalk: this.state.screen === 'talk',
       isSummary: this.state.screen === 'summary',
+      resumedNote: this.state.resumed && this.state.step % 3 === 1,
       onHome: tab === 'home', onDiscover: tab === 'discover',
       onTrend: tab === 'trend', onRecord: tab === 'record',
       homeNormal: dataOk, homeEmpty: isEmpty,
       listNormal: dataOk, isEmpty: isEmpty, isLoading: isLoading,
       cta: cta,
+      resume: resume,
+      bars: this.buildBars(342, 96),
+      goResume: () => this.setState({ screen: 'talk', step: 1, resumed: true }),
       topLabel: labels[tab],
       tab_home: mk('home'), tab_discover: mk('discover'),
       tab_trend: mk('trend'), tab_record: mk('record'),
@@ -412,7 +516,7 @@ class Component extends DCLogic {
         bx: ((box - r.size) / 2 + r.gap / 2).toFixed(1)
       },
       chart: this.buildChart(),
-      goTalk: () => { if (!isStartError) this.setState({ screen: 'talk', step: 1 }); },
+      goTalk: () => { if (!isStartError) this.setState({ screen: 'talk', step: 1, resumed: false }); },
       goHome: () => this.setState({ screen: 'shell', tab: 'home' }),
       goSummary: () => this.setState({ screen: 'summary' }),
       cycle: () => this.setState({ step: this.state.step + 1 }),
@@ -424,7 +528,7 @@ class Component extends DCLogic {
       obsList: [
         { sentence: '회의 얘기를 하실 때만 목소리가 유독 무거워지시네요.', tag: '회의 7회', ratio: '평균의 1.82배' },
         { sentence: '주말 이야기를 할 때는 말이 조금 빨라지시네요.', tag: '주말 4회', ratio: '평균의 1.61배' }
-      ],
+      ].map(mkObs),
       records: [
         { date: '9.14', summary: '회의가 많았던 하루에 대해 이야기했습니다.', meta: '3분 34초 · 12턴', gap: '0.94', tags: '회의 · 야근' },
         { date: '9.13', summary: '늦게까지 남아 일한 이야기를 했습니다.', meta: '2분 58초 · 9턴', gap: '0.71', tags: '야근 · 팀장' },
