@@ -1,0 +1,439 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    .n a { color: var(--accent); text-decoration: none; }
+    .n a:hover { opacity: 0.75; }
+    .n-dark {
+      --bg: #0D0D0C; --lift: #161614; --paper: #F2EFE9; --muted: #8A8781; --faint: #55534E;
+      --line: rgba(242,239,233,0.12); --hair: rgba(242,239,233,0.07);
+      --accent: #C98A4B; --care: #C98087; --cool: #5A8FC9; --warm: #C25A38;
+      --shade: rgba(242,239,233,0.07); --onAccent: #0D0D0C;
+    }
+    .n-light {
+      --bg: #F5F2EC; --lift: #FFFFFF; --paper: #1A1815; --muted: #6B675F; --faint: #9A968D;
+      --line: rgba(26,24,21,0.14); --hair: rgba(26,24,21,0.07);
+      --accent: #8A5A22; --care: #A85A62; --cool: #2F6FA8; --warm: #B5411F;
+      --shade: rgba(26,24,21,0.06); --onAccent: #FFFFFF;
+    }
+    .n { font-family: 'Noto Sans KR', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    .n .serif { font-family: 'Gowun Batang', 'Noto Sans KR', serif; }
+    .n .lab { font-size: 11px; letter-spacing: 0.14em; color: var(--faint); }
+    .n button { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+    .n .dbl { position: relative; }
+    .n .dbl .under { position: absolute; left: 3px; top: 3px; color: var(--warm); opacity: 0.45; }
+    .n .dbl .over { position: relative; }
+      .n .sk { height: 2px; background: var(--line); animation: skPulse 1.6s ease-in-out infinite; }
+    @keyframes skPulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+  </style>
+</helmet>
+
+<div class="n {{th.cls}}" style="width: 390px; height: 844px; background: var(--bg); color: var(--paper); display: flex; flex-direction: column; overflow: hidden; position: relative">
+
+  <sc-if value="{{isTalk}}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; height: 100%">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 40px 24px 0 24px">
+        <button onClick="{{goHome}}" style="width: 44px; height: 44px; display: flex; align-items: center; color: var(--muted); margin-left: -12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+        <sc-if value="{{demo}}" hint-placeholder-val="{{ false }}">
+          <span class="lab" style="letter-spacing: 0.16em; color: var(--accent)">DEMO</span>
+        </sc-if>
+      </div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 44px; padding: 0 32px">
+        <button onClick="{{cycle}}" style="position: relative; width: 208px; height: 208px; display: flex; align-items: center; justify-content: center">
+          <span style="position: absolute; left: {{ring.ax}}px; top: {{ring.ax}}px; width: {{ring.size}}px; height: {{ring.size}}px; border-radius: 999px; border: 1px solid var(--cool); opacity: {{ring.o1}}"></span>
+          <span style="position: absolute; left: {{ring.bx}}px; top: {{ring.bx}}px; width: {{ring.size}}px; height: {{ring.size}}px; border-radius: 999px; border: 1px solid var(--warm); opacity: {{ring.o2}}"></span>
+        </button>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 18px; min-height: 108px">
+          <p class="lab" style="margin: 0">{{ring.label}}</p>
+          <sc-if value="{{ring.hasCaption}}" hint-placeholder-val="{{ true }}">
+            <p class="serif" style="margin: 0; font-size: 22px; line-height: 1.65; text-align: center; text-wrap: pretty">{{ring.caption}}</p>
+          </sc-if>
+        </div>
+      </div>
+      <sc-if value="{{demo}}" hint-placeholder-val="{{ false }}">
+        <div style="margin: 0 24px 20px 24px; display: flex; flex-direction: column">
+          <div style="height: 1px; background: var(--line)"></div>
+          <div style="display: flex; justify-content: space-between; padding: 14px 0"><span class="lab" style="margin: 0">말한 내용</span><span style="font-size: 13px; color: var(--muted)">0.70</span></div>
+          <div style="height: 1px; background: var(--line)"></div>
+          <div style="display: flex; justify-content: space-between; padding: 14px 0"><span class="lab" style="margin: 0">목소리</span><span style="font-size: 13px; color: var(--muted)">−0.62</span></div>
+          <div style="height: 1px; background: var(--line)"></div>
+          <div style="display: flex; justify-content: space-between; padding: 14px 0"><span class="lab" style="margin: 0">갭 · 트리거</span><span style="font-size: 13px; color: var(--accent)">1.32 · 예</span></div>
+          <div style="height: 1px; background: var(--line)"></div>
+        </div>
+      </sc-if>
+      <div style="padding: 0 24px 40px 24px">
+        <button onClick="{{goSummary}}" style="width: 100%; height: 56px; border: 1px solid var(--line); color: var(--paper); font-size: 15px; display: flex; align-items: center; justify-content: center; border-radius: 2px">대화 마치기</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isSummary}}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; height: 100%; padding: 0 24px">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; gap: 28px">
+        <p class="lab" style="margin: 0">오늘의 대화</p>
+        <p class="serif" style="margin: 0; font-size: 27px; line-height: 1.7; text-wrap: pretty">회의가 많았던 하루에 대해 이야기했습니다.</p>
+        <div style="display: flex; align-items: baseline; gap: 14px">
+          <p style="margin: 0; font-size: 13px; color: var(--muted)">3분 34초</p>
+          <span style="width: 1px; height: 11px; background: var(--line)"></span>
+          <p style="margin: 0; font-size: 13px; color: var(--muted)">12턴</p>
+        </div>
+      </div>
+      <button onClick="{{goHome}}" style="height: 60px; background: var(--accent); color: var(--onAccent); font-size: 16px; font-weight: 500; display: flex; align-items: center; justify-content: center; border-radius: 2px; margin-bottom: 40px">홈으로</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isShell}}" hint-placeholder-val="{{ true }}">
+    <div style="display: flex; flex-direction: column; height: 100%">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 44px 24px 0 24px">
+        <p class="lab" style="margin: 0">{{topLabel}}</p>
+        <button style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: flex-end; color: var(--faint); margin: -14px -8px 0 0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="2.5"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4L18 18M18 6l-1.6 1.6M7.6 16.4L6 18" stroke-linecap="round"/></svg></button>
+      </div>
+
+      <div style="flex-grow: 1; display: flex; flex-direction: column; padding: 0 24px; overflow: hidden">
+
+        <!-- ── 오늘 ── -->
+        <sc-if value="{{onHome}}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; height: 100%">
+            <div style="padding: 40px 0 0 0">
+              <p class="lab" style="margin: 0 0 20px 0">이번 주에 발견한 것</p>
+
+              <sc-if value="{{homeNormal}}" hint-placeholder-val="{{ true }}">
+                <p class="serif" style="margin: 0; font-size: 27px; line-height: 1.7; text-wrap: pretty">회의 얘기를 하실 때만<br>목소리가 유독 무거워지시네요.</p>
+                <div style="display: flex; align-items: baseline; gap: 14px; padding: 26px 0 0 0">
+                  <p style="margin: 0; font-size: 13px; color: var(--muted)">회의 7회</p>
+                  <span style="width: 1px; height: 11px; background: var(--line)"></span>
+                  <p style="margin: 0; font-size: 13px; color: var(--muted)">평균의 1.82배</p>
+                </div>
+                <button style="display: flex; align-items: center; gap: 10px; height: 48px; color: var(--accent); font-size: 14px">근거가 된 대화 7건 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 12h13M13 7l5 5-5 5"/></svg></button>
+              </sc-if>
+
+              <sc-if value="{{homeEmpty}}" hint-placeholder-val="{{ false }}">
+                <p style="margin: 0; font-size: 16px; line-height: 1.75; color: var(--muted); text-wrap: pretty">아직 발견한 것이 없습니다.<br>대화가 쌓이면 여기에 보입니다.</p>
+                <div style="height: 24px"></div>
+              </sc-if>
+
+              <sc-if value="{{isLoading}}" hint-placeholder-val="{{ false }}">
+                <div style="padding: 12px 0 0 0"><div style="display: flex; flex-direction: column; gap: 42px"><span class="sk" style="width: 100%"></span><span class="sk" style="width: 92%"></span><span class="sk" style="width: 58%"></span></div></div>
+                <div style="padding: 32px 0 26px 0"><div style="display: flex; flex-direction: column; gap: 0px"><span class="sk" style="width: 34%"></span></div></div>
+              </sc-if>
+            </div>
+
+            <div style="height: 1px; background: var(--line)"></div>
+
+            <div style="display: flex; flex-direction: column; gap: 18px; padding: 24px 0 0 0">
+              <p class="lab" style="margin: 0">지난 대화</p>
+              <sc-if value="{{homeNormal}}" hint-placeholder-val="{{ true }}">
+                <sc-for list="{{sessions}}" as="s" hint-placeholder-count="2">
+                  <div style="display: flex; gap: 16px; align-items: baseline">
+                    <p style="margin: 0; font-size: 13px; color: var(--faint); width: 40px; flex-shrink: 0">{{s.date}}</p>
+                    <p style="margin: 0; font-size: 15px; line-height: 1.6; color: var(--muted); text-wrap: pretty">{{s.summary}}</p>
+                  </div>
+                </sc-for>
+              </sc-if>
+              <sc-if value="{{homeEmpty}}" hint-placeholder-val="{{ false }}">
+                <p style="margin: 0; font-size: 15px; line-height: 1.6; color: var(--faint)">첫 대화를 기다리고 있습니다.</p>
+              </sc-if>
+              <sc-if value="{{isLoading}}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; flex-direction: column; gap: 40px"><span class="sk" style="width: 80%"></span><span class="sk" style="width: 66%"></span></div>
+              </sc-if>
+            </div>
+
+            <div style="flex-grow: 1"></div>
+
+            <button onClick="{{goTalk}}" style="height: 60px; border: 1px solid var(--line); color: var(--paper); font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 12px; border-radius: 2px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M12 4v9"/><path d="M8.5 8.5v3.5a3.5 3.5 0 007 0V8.5"/><path d="M12 17v3"/></svg> {{cta.label}}</button>
+            <p style="margin: 16px 0 0 0; text-align: center; font-size: {{cta.noteSize}}px; line-height: 1.7; letter-spacing: {{cta.noteSpacing}}; color: {{cta.noteColor}}; text-wrap: pretty">{{cta.note}}</p>
+          </div>
+        </sc-if>
+
+        <!-- ── 발견 ── -->
+        <sc-if value="{{onDiscover}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; padding: 36px 0 0 0">
+            <sc-if value="{{listNormal}}" hint-placeholder-val="{{ true }}">
+              <sc-for list="{{obsList}}" as="o" hint-placeholder-count="2">
+                <div style="display: flex; flex-direction: column">
+                  <div style="height: 1px; background: var(--line)"></div>
+                  <div style="display: flex; flex-direction: column; gap: 16px; padding: 24px 0">
+                    <p class="serif" style="margin: 0; font-size: 20px; line-height: 1.7; text-wrap: pretty">{{o.sentence}}</p>
+                    <div style="display: flex; align-items: baseline; gap: 14px">
+                      <p style="margin: 0; font-size: 13px; color: var(--muted)">{{o.tag}}</p>
+                      <span style="width: 1px; height: 11px; background: var(--line)"></span>
+                      <p style="margin: 0; font-size: 13px; color: var(--muted)">{{o.ratio}}</p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 24px">
+                      <button style="height: 44px; font-size: 14px; color: var(--accent)">근거 보기</button>
+                      <div style="flex-grow: 1"></div>
+                      <button style="height: 44px; font-size: 14px; color: var(--muted)">맞아요</button>
+                      <button style="height: 44px; font-size: 14px; color: var(--faint)">아니에요</button>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="height: 1px; background: var(--line)"></div>
+            </sc-if>
+            <sc-if value="{{isEmpty}}" hint-placeholder-val="{{ false }}">
+              <p style="margin: 0; font-size: 16px; line-height: 1.75; color: var(--muted); text-wrap: pretty">아직 발견한 것이 없습니다. 대화가 쌓이면 여기에 보입니다.</p>
+              <p style="margin: 20px 0 0 0; font-size: 14px; line-height: 1.75; color: var(--faint); text-wrap: pretty">같은 이야기가 세 번 이상 나오고, 그때 목소리가 평소와 달라야 발견으로 칩니다.</p>
+            </sc-if>
+            <sc-if value="{{isLoading}}" hint-placeholder-val="{{ false }}">
+              <div style="height: 1px; background: var(--line)"></div>
+              <div style="padding: 28px 0"><div style="display: flex; flex-direction: column; gap: 30px"><span class="sk" style="width: 100%"></span><span class="sk" style="width: 72%"></span></div></div>
+              <div style="height: 1px; background: var(--line)"></div>
+              <div style="padding: 28px 0"><div style="display: flex; flex-direction: column; gap: 30px"><span class="sk" style="width: 100%"></span><span class="sk" style="width: 72%"></span></div></div>
+              <div style="height: 1px; background: var(--line)"></div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- ── 추세 ── -->
+        <sc-if value="{{onTrend}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; padding: 36px 0 0 0; gap: 24px">
+            <p class="dbl serif" style="margin: 0; font-size: 24px; line-height: 1.4">말한 내용과 목소리</p>
+            <sc-if value="{{listNormal}}" hint-placeholder-val="{{ true }}">
+              <svg width="342" height="216" viewBox="0 0 342 216" fill="none" style="display: block">
+                <rect x="{{chart.hl.x}}" y="8" width="{{chart.hl.w}}" height="168" fill="var(--shade)" onClick="{{openRecord}}" style="cursor: pointer"></rect>
+                <line x1="24" y1="92" x2="336" y2="92" stroke="var(--line)" stroke-width="1"></line>
+                <text x="0" y="12" fill="var(--faint)" font-size="12" font-family="'Noto Sans KR', sans-serif">+1</text>
+                <text x="4" y="96" fill="var(--faint)" font-size="12" font-family="'Noto Sans KR', sans-serif">0</text>
+                <text x="0" y="180" fill="var(--faint)" font-size="12" font-family="'Noto Sans KR', sans-serif">−1</text>
+                <sc-for list="{{chart.ticks}}" as="k" hint-placeholder-count="4">
+                  <text x="{{k.x}}" y="204" fill="var(--faint)" font-size="12" text-anchor="middle" font-family="'Noto Sans KR', sans-serif">{{k.d}}</text>
+                </sc-for>
+                <sc-for list="{{chart.textSegs}}" as="d" hint-placeholder-count="2">
+                  <path d="{{d.p}}" stroke="var(--cool)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </sc-for>
+                <sc-for list="{{chart.voiceSegs}}" as="d" hint-placeholder-count="2">
+                  <path d="{{d.p}}" stroke="var(--warm)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </sc-for>
+                <sc-for list="{{chart.dots}}" as="p" hint-placeholder-count="10">
+                  <circle cx="{{p.x}}" cy="{{p.y}}" r="4" fill="{{p.fill}}"></circle>
+                </sc-for>
+              </svg>
+              <div style="display: flex; gap: 22px">
+                <div style="display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 2px; background: var(--cool)"></span><span style="font-size: 13px; color: var(--muted)">말한 내용</span></div>
+                <div style="display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 2px; background: var(--warm)"></span><span style="font-size: 13px; color: var(--muted)">목소리</span></div>
+              </div>
+              <p style="margin: 0; font-size: 13px; line-height: 1.7; color: var(--faint); text-wrap: pretty">음영 구간에서 두 선이 가장 크게 벌어졌습니다. 눌러서 그날 대화를 볼 수 있습니다.</p>
+            </sc-if>
+            <sc-if value="{{isEmpty}}" hint-placeholder-val="{{ false }}">
+              <p style="margin: 0; font-size: 16px; line-height: 1.75; color: var(--muted); text-wrap: pretty">아직 그릴 기록이 없습니다.<br>대화가 쌓이면 말한 내용과 목소리를 나란히 보여드립니다.</p>
+            </sc-if>
+            <sc-if value="{{isLoading}}" hint-placeholder-val="{{ false }}">
+              <div style="padding: 8px 0 0 0"><div style="display: flex; flex-direction: column; gap: 50px"><span class="sk" style="width: 100%"></span><span class="sk" style="width: 100%"></span><span class="sk" style="width: 100%"></span><span class="sk" style="width: 100%"></span></div></div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- ── 기록 ── -->
+        <sc-if value="{{onRecord}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; padding: 36px 0 0 0">
+            <sc-if value="{{listNormal}}" hint-placeholder-val="{{ true }}">
+              <sc-for list="{{records}}" as="r" hint-placeholder-count="4">
+                <div style="display: flex; flex-direction: column">
+                  <div style="height: 1px; background: var(--line)"></div>
+                  <button style="display: flex; gap: 16px; align-items: baseline; padding: 20px 0; width: 100%">
+                    <span style="font-size: 13px; color: var(--faint); width: 40px; flex-shrink: 0">{{r.date}}</span>
+                    <span style="flex-grow: 1; display: flex; flex-direction: column; gap: 10px">
+                      <span style="font-size: 15px; line-height: 1.6; color: var(--paper); text-wrap: pretty">{{r.summary}}</span>
+                      <span style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap">
+                        <span style="font-size: 12px; color: var(--faint)">{{r.meta}}</span>
+                        <span style="width: 1px; height: 10px; background: var(--line)"></span>
+                        <span style="font-size: 12px; color: var(--muted)">갭 {{r.gap}}</span>
+                        <span style="width: 1px; height: 10px; background: var(--line)"></span>
+                        <span style="font-size: 12px; color: var(--faint)">{{r.tags}}</span>
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              </sc-for>
+              <div style="height: 1px; background: var(--line)"></div>
+            </sc-if>
+            <sc-if value="{{isEmpty}}" hint-placeholder-val="{{ false }}">
+              <p style="margin: 0; font-size: 16px; line-height: 1.75; color: var(--muted); text-wrap: pretty">아직 대화가 없습니다.</p>
+            </sc-if>
+            <sc-if value="{{isLoading}}" hint-placeholder-val="{{ false }}">
+              <div style="height: 1px; background: var(--line)"></div>
+              <div style="padding: 24px 0"><div style="display: flex; flex-direction: column; gap: 22px"><span class="sk" style="width: 70%"></span><span class="sk" style="width: 44%"></span></div></div>
+              <div style="height: 1px; background: var(--line)"></div>
+              <div style="padding: 24px 0"><div style="display: flex; flex-direction: column; gap: 22px"><span class="sk" style="width: 70%"></span><span class="sk" style="width: 44%"></span></div></div>
+              <div style="height: 1px; background: var(--line)"></div>
+              <div style="padding: 24px 0"><div style="display: flex; flex-direction: column; gap: 22px"><span class="sk" style="width: 70%"></span><span class="sk" style="width: 44%"></span></div></div>
+              <div style="height: 1px; background: var(--line)"></div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+      </div>
+
+      <div style="display: flex; padding: 28px 24px 36px 24px; gap: 26px">
+    <button onClick="{{tab_home.pick}}" style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+      <span style="font-size: 13px; color: {{tab_home.color}}">오늘</span>
+      <span style="width: 100%; height: 1px; background: {{tab_home.bar}}"></span>
+    </button>
+    <button onClick="{{tab_discover.pick}}" style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+      <span style="font-size: 13px; color: {{tab_discover.color}}">발견</span>
+      <span style="width: 100%; height: 1px; background: {{tab_discover.bar}}"></span>
+    </button>
+    <button onClick="{{tab_trend.pick}}" style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+      <span style="font-size: 13px; color: {{tab_trend.color}}">추세</span>
+      <span style="width: 100%; height: 1px; background: {{tab_trend.bar}}"></span>
+    </button>
+    <button onClick="{{tab_record.pick}}" style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+      <span style="font-size: 13px; color: {{tab_record.color}}">기록</span>
+      <span style="width: 100%; height: 1px; background: {{tab_record.bar}}"></span>
+    </button>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{
+  "theme": {"editor": "enum", "options": ["dark", "light"], "default": "dark", "section": "테마"},
+  "state": {"editor": "enum", "options": ["normal", "empty", "loading", "startError"], "default": "normal", "section": "상태"},
+  "demoMode": {"editor": "boolean", "default": false, "section": "데모"},
+  "$preview": {"width": 390, "height": 844}
+}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { screen: 'shell', tab: 'home', step: 1 };
+  }
+
+  data() {
+    return [
+      { d: '9/1', t: 0.35, v: 0.20 }, { d: '9/2', t: 0.42, v: 0.10 },
+      { d: '9/3', t: 0.30, v: -0.05 }, { d: '9/4', t: null, v: null },
+      { d: '9/5', t: 0.55, v: -0.20 }, { d: '9/6', t: 0.61, v: -0.42 },
+      { d: '9/7', t: 0.58, v: -0.50 }, { d: '9/8', t: 0.44, v: -0.30 },
+      { d: '9/9', t: null, v: null }, { d: '9/10', t: null, v: null },
+      { d: '9/11', t: 0.20, v: 0.11 }, { d: '9/12', t: 0.15, v: 0.05 },
+      { d: '9/13', t: -0.10, v: -0.22 }, { d: '9/14', t: 0.25, v: 0.18 }
+    ];
+  }
+
+  gapRun(rows, threshold) {
+    const th = threshold ?? 0.85;
+    let best = null; let cur = null;
+    rows.forEach((r, i) => {
+      const over = r.t !== null && r.v !== null && Math.abs(r.t - r.v) > th;
+      if (over) {
+        cur = cur === null ? { from: i, to: i } : { from: cur.from, to: i };
+        if (best === null || cur.to - cur.from >= best.to - best.from) best = cur;
+      } else { cur = null; }
+    });
+    return best;
+  }
+
+  buildChart() {
+    const rows = this.data();
+    const padL = 24; const plotW = 312; const top = 8; const plotH = 168;
+    const step = plotW / (rows.length - 1);
+    const x = (i) => padL + i * step;
+    const y = (val) => top + ((1 - val) / 2) * plotH;
+    const segs = (key) => {
+      const out = []; let cur = [];
+      rows.forEach((r, i) => {
+        if (r[key] === null) { if (cur.length) { out.push(cur); cur = []; } }
+        else { cur.push(x(i).toFixed(1) + ',' + y(r[key]).toFixed(1)); }
+      });
+      if (cur.length) out.push(cur);
+      return out.filter((c) => c.length > 1).map((c) => ({ p: 'M' + c.join(' L') }));
+    };
+    const dots = [];
+    rows.forEach((r, i) => {
+      if (r.t !== null) dots.push({ x: x(i).toFixed(1), y: y(r.t).toFixed(1), fill: 'var(--cool)' });
+      if (r.v !== null) dots.push({ x: x(i).toFixed(1), y: y(r.v).toFixed(1), fill: 'var(--warm)' });
+    });
+    const run = this.gapRun(rows);
+    const hl = run === null ? { x: '0', w: '0' }
+      : { x: (x(run.from) - step / 2).toFixed(1), w: ((run.to - run.from + 1) * step).toFixed(1) };
+    const ticks = [];
+    rows.forEach((r, i) => {
+      const marked = run !== null && (i === run.from || i === run.to);
+      if (i === 0 || i === rows.length - 1 || marked) ticks.push({ x: x(i).toFixed(1), d: r.d });
+    });
+    return { textSegs: segs('t'), voiceSegs: segs('v'), dots: dots, ticks: ticks, hl: hl };
+  }
+
+  rings() {
+    return [
+      { label: '연결하고 있습니다', caption: '', size: 176, gap: 4, o1: 0.3, o2: 0.2 },
+      { label: '듣고 있습니다', caption: '오늘 완전 괜찮았어요', size: 200, gap: 8, o1: 0.85, o2: 0.6 },
+      { label: '말하고 있습니다', caption: '', size: 168, gap: 3, o1: 0.5, o2: 0.35 }
+    ];
+  }
+
+  renderVals() {
+    const theme = this.props.theme ?? 'dark';
+    const st = this.props.state ?? 'normal';
+    const tab = this.state.tab;
+    const labels = { home: '9월 14일 목요일', discover: '발견', trend: '추세', record: '기록' };
+    const mk = (k) => ({
+      color: tab === k ? 'var(--paper)' : 'var(--faint)',
+      bar: tab === k ? 'var(--paper)' : 'transparent',
+      pick: () => this.setState({ tab: k })
+    });
+    const all = this.rings();
+    const r = all[this.state.step % all.length];
+    const box = 208;
+    const isEmpty = st === 'empty';
+    const isLoading = st === 'loading';
+    const isStartError = st === 'startError';
+    const dataOk = !isEmpty && !isLoading;
+    const cta = isStartError
+      ? { label: '다시 시도', note: '지금은 대화를 시작할 수 없습니다. 잠시 후 다시 시도해 주세요.', noteColor: 'var(--muted)', noteSize: 13, noteSpacing: '0' }
+      : { label: '오늘 이야기하기', note: '목소리는 분석 직후 삭제됩니다', noteColor: 'var(--faint)', noteSize: 11, noteSpacing: '0.06em' };
+    return {
+      th: { cls: theme === 'light' ? 'n-light' : 'n-dark' },
+      demo: !!this.props.demoMode,
+      isShell: this.state.screen === 'shell',
+      isTalk: this.state.screen === 'talk',
+      isSummary: this.state.screen === 'summary',
+      onHome: tab === 'home', onDiscover: tab === 'discover',
+      onTrend: tab === 'trend', onRecord: tab === 'record',
+      homeNormal: dataOk, homeEmpty: isEmpty,
+      listNormal: dataOk, isEmpty: isEmpty, isLoading: isLoading,
+      cta: cta,
+      topLabel: labels[tab],
+      tab_home: mk('home'), tab_discover: mk('discover'),
+      tab_trend: mk('trend'), tab_record: mk('record'),
+      ring: {
+        label: r.label, caption: r.caption, hasCaption: r.caption.length > 0,
+        size: r.size, o1: r.o1, o2: r.o2,
+        ax: ((box - r.size) / 2 - r.gap / 2).toFixed(1),
+        bx: ((box - r.size) / 2 + r.gap / 2).toFixed(1)
+      },
+      chart: this.buildChart(),
+      goTalk: () => { if (!isStartError) this.setState({ screen: 'talk', step: 1 }); },
+      goHome: () => this.setState({ screen: 'shell', tab: 'home' }),
+      goSummary: () => this.setState({ screen: 'summary' }),
+      cycle: () => this.setState({ step: this.state.step + 1 }),
+      openRecord: () => this.setState({ tab: 'record' }),
+      sessions: [
+        { date: '9.13', summary: '늦게까지 남아 일한 이야기' },
+        { date: '9.12', summary: '가족과 통화한 이야기' }
+      ],
+      obsList: [
+        { sentence: '회의 얘기를 하실 때만 목소리가 유독 무거워지시네요.', tag: '회의 7회', ratio: '평균의 1.82배' },
+        { sentence: '주말 이야기를 할 때는 말이 조금 빨라지시네요.', tag: '주말 4회', ratio: '평균의 1.61배' }
+      ],
+      records: [
+        { date: '9.14', summary: '회의가 많았던 하루에 대해 이야기했습니다.', meta: '3분 34초 · 12턴', gap: '0.94', tags: '회의 · 야근' },
+        { date: '9.13', summary: '늦게까지 남아 일한 이야기를 했습니다.', meta: '2분 58초 · 9턴', gap: '0.71', tags: '야근 · 팀장' },
+        { date: '9.12', summary: '가족과 통화한 이야기를 했습니다.', meta: '4분 02초 · 14턴', gap: '0.38', tags: '가족 · 엄마' },
+        { date: '9.11', summary: '회의 준비가 버거웠던 이야기를 했습니다.', meta: '3분 11초 · 11턴', gap: '1.02', tags: '회의' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
