@@ -6,7 +6,7 @@
 | 작성일 | 2026. 09. 03. |
 | 상위 문서 | [prd.md](prd.md) |
 | 서비스 | 감정 케어 보이스 저널 |
-| 기술 스택 | 백엔드 Java / Spring Boot · Supabase(PostgreSQL) · AI서버(담당자 결정) · 앱 **Flutter(웹 1순위)** · Hume EVI + Custom Language Model |
+| 기술 스택 | 백엔드 Java / Spring Boot · Supabase(PostgreSQL) · AI서버(담당자 결정) · 앱 **Flutter(웹·모바일 앱 모두 지원, 배포는 웹)** · Hume EVI + Custom Language Model |
 
 > 이 문서는 PRD(`prd.md`) 기능 요구사항(§4)을 실행 단위(F1~F11, **55개 기능**)까지 쪼갠 상세 명세입니다.
 > API 요청·응답 스키마는 [api-contract.md](../02-architecture/api-contract.md)가 단일 출처이며, 이 문서와 다르면 계약서가 우선합니다.
@@ -271,7 +271,7 @@
 | 예외 | F2-04 |
 | 수용 기준 | 사용자가 말하는 도중 앱이 개입하지 않으며, 응답 지연 p95 2초 이내(NFR-01) |
 | 연관 | F2-03, F2-04 |
-| 개발 주의 | **Flutter · 웹 1순위**(PRD §14-4). 웹에서는 `record`+`audioplayers` 순수 Dart 경로를 타고(`kIsWeb` 분기), 녹음은 PCM16 48kHz 모노에 `echoCancel`·`noiseSuppress`·`autoGain`이 `getUserMedia` 제약으로 전달된다. **마이크는 HTTPS(또는 localhost)에서만 열린다.** 공식 예제는 `access_token`·`config_id`만 넘기므로 **`custom_session_id`는 우리가 쿼리에 추가**한다. 또한 예제는 연결·마이크 실패에서 처리되지 않은 예외를 던지므로 **F2-04 경로는 새로 작성한다**(실측 확인, 2026-09-03) — [Flutter 예제](https://github.com/HumeAI/hume-api-examples/blob/main/evi/evi-flutter/README.md) |
+| 개발 주의 | **Flutter · 웹·모바일 앱 모두 지원**(PRD §14-4). 오디오 경로가 타깃마다 갈린다 — **iOS는 네이티브 플러그인**, **웹·안드로이드는 `record`+`audioplayers` 순수 Dart 경로**(`kIsWeb` 분기). 녹음은 PCM16 48kHz 모노에 `echoCancel`·`noiseSuppress`·`autoGain`을 건다. **웹에서 마이크는 HTTPS(또는 localhost)에서만 열리고, iOS는 `Info.plist`의 마이크 사용 설명이 필요하다.** 공식 예제는 `access_token`·`config_id`만 넘기므로 **`custom_session_id`는 우리가 쿼리에 추가**한다. 또한 예제는 연결·마이크 실패에서 처리되지 않은 예외를 던지므로 **F2-04 경로는 새로 작성한다**(실측 확인, 2026-09-03) — [Flutter 예제](https://github.com/HumeAI/hume-api-examples/blob/main/evi/evi-flutter/README.md) |
 
 ### F2-03 세션 길이 제어
 
