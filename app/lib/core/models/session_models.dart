@@ -9,7 +9,8 @@ class SessionStart {
     required this.softWrapSec,
     required this.hardCutSec,
     required this.demoMode,
-    this.humeConfigId,
+    required this.humeConfigId,
+    required this.livePollIntervalSec,
   });
 
   final String sessionId;
@@ -29,11 +30,15 @@ class SessionStart {
 
   final bool demoMode;
 
-  /// EVI handshake의 `config_id`.
+  /// EVI handshake의 `config_id` (계약 v1.3 §2-4).
   ///
-  /// **계약에 아직 없다** — `docs/request/backend/hume-config-id.md` (⏳).
-  /// 회신 전에는 null이 오고 앱이 `Env.humeConfigIdFallback`을 쓴다.
-  final String? humeConfigId;
+  /// **null이 될 수 없다** — 백엔드가 환경변수를 기동 시 fail-fast로 검증하므로
+  /// 런타임에는 항상 값이 있다. 앱은 폴백을 두지 않는다.
+  final String humeConfigId;
+
+  /// `GET /api/session/{id}/live` 폴링 간격(초). 기본 2.
+  /// **앱에 상수로 박지 않는다** — 서버가 내려주는 값을 쓴다 (§2-4).
+  final int livePollIntervalSec;
 
   factory SessionStart.fromJson(Map<String, dynamic> j) => SessionStart(
         sessionId: j['sessionId'] as String,
@@ -44,7 +49,8 @@ class SessionStart {
         softWrapSec: j['softWrapSec'] as int,
         hardCutSec: j['hardCutSec'] as int,
         demoMode: j['demoMode'] as bool? ?? false,
-        humeConfigId: j['humeConfigId'] as String?,
+        humeConfigId: j['humeConfigId'] as String,
+        livePollIntervalSec: j['livePollIntervalSec'] as int? ?? 2,
       );
 }
 
@@ -58,7 +64,7 @@ class SessionResume {
     required this.thresholdMode,
     required this.gapThreshold,
     required this.demoMode,
-    this.humeConfigId,
+    required this.humeConfigId,
   });
 
   final String sessionId;
@@ -73,7 +79,9 @@ class SessionResume {
   final String thresholdMode;
   final double gapThreshold;
   final bool demoMode;
-  final String? humeConfigId;
+
+  /// 재연결도 **같은 Config로** 붙어야 CLM이 이어진다 (회신 3번).
+  final String humeConfigId;
 
   factory SessionResume.fromJson(Map<String, dynamic> j) => SessionResume(
         sessionId: j['sessionId'] as String,
@@ -83,7 +91,7 @@ class SessionResume {
         thresholdMode: j['thresholdMode'] as String,
         gapThreshold: (j['gapThreshold'] as num).toDouble(),
         demoMode: j['demoMode'] as bool? ?? false,
-        humeConfigId: j['humeConfigId'] as String?,
+        humeConfigId: j['humeConfigId'] as String,
       );
 }
 

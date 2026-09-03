@@ -10,6 +10,9 @@ abstract final class Endpoints {
   static String sessionEnd(String id) => '/api/session/$id/end';
   static String sessionResume(String id) => '/api/session/$id/resume';
 
+  /// 대화 중 턴 신호 (계약 v1.3 §2-13). **S02에서만 폴링한다.**
+  static String sessionLive(String id) => '/api/session/$id/live';
+
   static const observations = '/api/observations';
   static String observationEvidence(String id) =>
       '/api/observations/$id/evidence';

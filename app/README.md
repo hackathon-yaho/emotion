@@ -43,6 +43,9 @@ lib/
 
 ## 지켜야 하는 것
 
+- **S07은 `crisisDetected`의 `false → true` 전이에서 한 번만** 띄웁니다. 폴링이 계속 true를 줘도 다시 띄우지 않습니다 (계약 §2-13)
+- **`GET /live`의 `turns: []`는 "볼 권한이 없다"이지 "값이 없다"가 아닙니다.** 비데모 세션에서는 항상 빈 배열이고, `null`(측정 못함)과 뜻이 다릅니다
+
 - **S02 대화 화면에 valence·갭 수치를 그리지 않습니다.** `demoMode == true`일 때만 예외 (FR-031)
 - **감정에 반응하는 색을 쓰지 않습니다.** 두 링은 색이 고정이고 간격·크기·투명도만 상태에 반응합니다 — 색이 변하면 사실상 갭 노출입니다 (FR-030)
 - **차가운 색 = 말한 내용, 따뜻한 색 = 목소리.** 제품 전체에서 같은 의미로만 씁니다
@@ -57,8 +60,9 @@ lib/
 
 | 항목 | 상태 |
 | --- | --- |
-| `HUME_CONFIG_ID` | 계약에 필드가 없어 로컬 `.env`로 씁니다 — [`hume-config-id.md`](../docs/request/backend/hume-config-id.md) (⏳). 회신되면 `SessionStart.humeConfigId`를 쓰고 `.env` 항목을 지웁니다. **저장소에 상수로 커밋하지 않습니다** |
-| S07 트리거 | 위기 감지를 앱이 알 경로가 없습니다 — [`live-turn-signal.md`](../docs/request/backend/live-turn-signal.md) (⏳) |
+| ~~`HUME_CONFIG_ID`~~ | ✅ 해결 — 계약 v1.3 §2-4의 `humeConfigId`로 옵니다. 백엔드가 기동 시 fail-fast로 검증하므로 **null이 될 수 없고 앱은 폴백을 두지 않습니다** |
+| ~~S07 트리거~~ | ✅ 해결 — 계약 v1.3 §2-13 `GET /api/session/{id}/live` 폴링. 간격은 `livePollIntervalSec`(기본 2초)를 따릅니다 |
+| F9-03 이야기별 갭 | 출력이 계약 어디에도 없습니다 — [`tag-gap-endpoint.md`](../docs/request/backend/tag-gap-endpoint.md) (⏳). S04의 두 선 그래프는 영향 없습니다 |
 | 산세리프 서체 | 문서상 Pretendard지만 Google Fonts에 없어 **Noto Sans KR로 대체** 중입니다(캔버스와 동일). `fonts/`에 넣고 `pubspec.yaml`의 fonts 항목을 켠 뒤 `AppType.sans`만 바꾸면 전 화면에 적용됩니다 |
 | 제품 이름 | 미확정(PRD §14-6). Dart 패키지명 `voice_journal`, 번들 ID `com.hackathonyaho.voiceJournal`은 임시입니다. 확정되면 `main.dart`의 `title`과 `web/index.html`·`manifest.json`을 함께 고칩니다 |
 | 화면 구현 | 라우팅·테마·API 계층까지가 골격입니다. 확정된 디자인은 `design/`에 있고 위젯으로 옮기는 것이 다음 작업입니다 |
@@ -70,11 +74,11 @@ lib/
 ## EVI 연결 메모 (공식 예제 실측, 2026-09-03)
 
 ```
-wss://api.hume.ai/v0/evi/chat?access_token={백엔드 발급}&config_id={미정}&custom_session_id={sessionId}
+wss://api.hume.ai/v0/evi/chat?access_token={humeAccessToken}&config_id={humeConfigId}&custom_session_id={sessionId}
 ```
 
 - `access_token` — 계약서 §2-4의 `humeAccessToken`
-- `config_id` — 위 표 참조
+- `config_id` — `session/start` 응답의 `humeConfigId` (계약 v1.3 §2-4)
 - `custom_session_id` — 예제에 없어 우리가 추가합니다 (spec F2-02, CLM 계약 §4)
 - **`session_settings`에 `language_model_api_key`를 넣지 않습니다** — 웹 번들에 노출되므로, CLM 인증은 AI서버가 `custom_session_id`를 백엔드로 검증하는 방식입니다 (`ai-pipeline.md` AI-11)
 - 연결 성공 시 `chat_metadata`로 `chat_group_id`가 옵니다 → F2-07 이어하기의 `resumedChatGroupId` 원천

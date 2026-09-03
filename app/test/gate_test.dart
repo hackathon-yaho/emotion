@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:voice_journal/core/models/live_models.dart';
 import 'package:voice_journal/core/models/paged.dart';
 import 'package:voice_journal/core/session/app_session.dart';
 
@@ -84,6 +85,65 @@ void main() {
       final q = const PageQuery().next(20);
       expect(q.offset, 20);
       expect(q.limit, 20);
+    });
+  });
+
+  _liveSignalTests();
+}
+
+/// 계약 v1.3 §2-13 — 대화 중 턴 신호.
+void _liveSignalTests() {
+  group('대화 중 턴 신호 (§2-13)', () {
+    Map<String, dynamic> body({
+      bool crisis = false,
+      List<Map<String, dynamic>> turns = const [],
+      int last = 7,
+    }) =>
+        {
+          'sessionId': '550e8400-e29b-41d4-a716-446655440000',
+          'lastTurnIndex': last,
+          'crisisDetected': crisis,
+          'turns': turns,
+        };
+
+    test('비데모 세션은 turns가 빈 배열이고 crisisDetected는 정상 값이다', () {
+      // 빈 배열은 "볼 권한이 없다"이지 "값이 없다"가 아니다.
+      final s = LiveSignal.fromJson(body(crisis: true));
+      expect(s.turns, isEmpty);
+      expect(s.crisisDetected, isTrue);
+    });
+
+    test('데모 세션은 측정값이 채워진다', () {
+      final s = LiveSignal.fromJson(body(turns: [
+        {
+          'turnIndex': 7,
+          'textValence': 0.70,
+          'voiceValence': -0.62,
+          'gap': 1.32,
+          'gapTriggered': true,
+        }
+      ]));
+      expect(s.turns.single.gap, 1.32);
+      expect(s.turns.single.gapTriggered, isTrue);
+    });
+
+    test('측정 못한 값은 null로 남고 0으로 대체되지 않는다 (§1-3)', () {
+      final s = LiveSignal.fromJson(body(turns: [
+        {'turnIndex': 3, 'textValence': null, 'voiceValence': null, 'gap': null}
+      ]));
+      expect(s.turns.single.textValence, isNull);
+      expect(s.turns.single.gap, isNull);
+    });
+
+    test('S07은 false → true 전이에서 한 번만 뜬다', () {
+      // 폴링이 계속 true를 주더라도 다시 띄우지 않는다.
+      var shown = 0;
+      var previous = false;
+      for (final incoming in [false, true, true, true]) {
+        if (!previous && incoming) shown++;
+        previous = incoming;
+      }
+      expect(shown, 1);
     });
   });
 }

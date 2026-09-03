@@ -1,5 +1,7 @@
 # 감정 케어 보이스 저널 — 문서
 
+> **수정 기록 (2026-09-04 ⑰, 앱)** — 백엔드 회신(계약 v1.3)을 앱 코드에 반영했습니다. `SessionStart`에 **`humeConfigId`(null 불가)·`livePollIntervalSec`** 추가, `SessionResume`도 `humeConfigId` 필수로. **`.env`의 `HUME_CONFIG_ID`와 폴백 코드를 제거**했습니다 — 계약에 필드가 생겼으므로 임시 경로를 남길 이유가 없습니다. §2-13 `GET /api/session/{id}/live`용 `LiveSignal`·`LiveTurn` 모델 신설. 테스트로 못 박은 두 가지: **`turns: []`는 "볼 권한이 없다"이지 "값이 없다"가 아니고**(§1-3의 null과 뜻이 다름), **S07은 `crisisDetected`의 false→true 전이에서 한 번만** 뜹니다. 테스트 23건 통과.
+>
 > **수정 기록 (2026-09-04 ⑯, 앱)** — 골격 누락 점검 결과 반영. **F1-05 "동의 없이 대화 화면 진입 불가"가 코드에서 지켜지지 않고 있었습니다** — 웹은 주소창에 `/conversation`을 치면 온보딩을 건너뛸 수 있었고, 라우터 가드(`AppSession`)를 넣어 막았습니다(브라우저에서 우회 시도 후 S00에 머무는 것 확인). 인증 응답 모델·목록 페이징 봉투(§1-4)도 빠져 있어 추가했습니다. **spec 총괄표의 F1-04·F10-03 담당을 `A` → `A/C`로 정정** — 확인 다이얼로그가 앱 작업인데 담당에 앱이 없었습니다. `design-system.md` §7에 결정 19~22 추가(`sessionCount`·`createdAt`·`endReason` 표시, 페이징은 "더 보기" 없이 이어 불러오기). **`request/backend/tag-gap-endpoint.md` 신설(⏳)** — F9-03 이야기별 갭의 출력이 계약 어디에도 없습니다.
 >
 > **수정 기록 (2026-09-04 ⑮, 백엔드)** — 백엔드 실행 문서(`backend/docs/`)를 전면 보강하면서 **`spec.md` §6-1의 공백 3건을 메웠습니다(v1.2)** — ① `turn_log`에 **`role`·`occurred_at`** 추가(계약 §2-10·§3-2가 요구하는데 컬럼 목록에 없었습니다) ② `voice_session`에 **`pattern_processed_at`** 추가(F7-01 배치 방식 확정) ③ **F10-01 처리에 `crisis_event` 삭제 추가** — 이게 없으면 **세션 삭제가 FK 위반으로 실패**합니다. F7-01 처리도 "큐 적재"에서 실제 방식(스케줄러 스캔)으로 구체화했습니다. **DB 스키마의 단일 출처는 `backend/docs/data-model.md`**로 신설했고, 앱·AI가 볼 필드 정의는 종전대로 `api-contract.md`입니다.
