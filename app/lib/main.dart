@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'core/config/env.dart';
 import 'core/providers.dart';
 import 'core/router/app_router.dart';
+import 'core/session/app_session.dart';
 import 'core/theme/app_theme.dart';
 
 Future<void> main() async {
@@ -20,7 +22,7 @@ class VoiceJournalApp extends ConsumerStatefulWidget {
 }
 
 class _VoiceJournalAppState extends ConsumerState<VoiceJournalApp> {
-  final _router = createRouter();
+  late final GoRouter _router = createRouter(ref.read(appSessionProvider));
 
   @override
   Widget build(BuildContext context) {

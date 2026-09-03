@@ -1,5 +1,7 @@
 import 'package:go_router/go_router.dart';
 
+import '../session/app_session.dart';
+
 import '../../features/conversation/conversation_screen.dart';
 import '../../features/conversation/summary_screen.dart';
 import '../../features/discover/discover_screen.dart';
@@ -17,9 +19,33 @@ import 'routes.dart';
 ///
 /// 하단 탭 4개(오늘·발견·추세·기록)는 셸 라우트 안에 두고, 대화·근거·상세·
 /// 설정은 셸 밖에 둔다 — 탭 바가 없는 화면들이다.
-GoRouter createRouter() {
+GoRouter createRouter(AppSession session) {
   return GoRouter(
     initialLocation: Routes.onboarding,
+    refreshListenable: session,
+
+    /// **동의 없이 대화 화면으로 진입할 수 없다** (F1-05 수용 기준).
+    ///
+    /// 웹은 주소창에 URL을 치면 바로 들어가므로 가드가 없으면 온보딩이
+    /// 통째로 건너뛰어진다. 네이티브보다 더 직접적인 우회 경로다.
+    redirect: (context, state) {
+      final atOnboarding = state.matchedLocation == Routes.onboarding;
+
+      switch (session.status) {
+        // 저장소를 아직 못 읽었다 — 판단을 보류하고 그대로 둔다.
+        case GateStatus.unknown:
+          return null;
+
+        // 고지 미동의·미로그인 → S00으로. 이미 S00이면 그대로.
+        case GateStatus.needsOnboarding:
+        case GateStatus.needsLogin:
+          return atOnboarding ? null : Routes.onboarding;
+
+        // 통과한 사용자가 S00에 머무를 이유가 없다.
+        case GateStatus.ready:
+          return atOnboarding ? Routes.home : null;
+      }
+    },
     routes: [
       GoRoute(
         path: Routes.onboarding,

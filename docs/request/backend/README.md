@@ -13,6 +13,7 @@
 
 | 문서 | 상태 | 반영 |
 | --- | --- | --- |
+| [tag-gap-endpoint.md](tag-gap-endpoint.md) | ⏳ **회신 대기** (2026-09-03) | 이야기별 갭(F9-03) 출력이 어느 엔드포인트에도 없음. **3회 이상이지만 1.5배 미만인 태그**가 관찰로도 오지 않아 막대의 비교 대상이 사라짐. S04 막대만 보류(두 선 그래프는 진행) |
 | [hume-config-id.md](hume-config-id.md) | ✅ **회신 완료** (2026-09-03) | `humeConfigId` 필드 신설. `response/app/hume-config-id.md`, 계약 v1.3 |
 | [live-turn-signal.md](live-turn-signal.md) | ✅ **회신 완료** (2026-09-03) | `GET /api/session/{id}/live` 신설(폴링). `response/app/live-turn-signal.md`, 계약 v1.3 §2-13 |
 | [session-context-lookup.md](session-context-lookup.md) | ✅ **회신 완료** (2026-09-03, 요청자 AI) | `GET /internal/sessions/{id}` 신설, CLM 인증 확정(`custom_session_id` 검증). `response/ai/session-context-lookup.md`, 계약 v1.3 §3-4·§4 |
