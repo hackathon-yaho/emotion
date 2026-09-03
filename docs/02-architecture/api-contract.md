@@ -2,9 +2,9 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 문서 버전 | v1.0 |
+| 문서 버전 | v1.2 |
 | 작성일 | 2026. 09. 03. |
-| 상위 문서 | [prd.md](../00-context/prd.md) · [spec.md](../00-context/spec.md) |
+| 상위 문서 | [prd.md](../00-context/prd.md) · [spec.md](../00-context/spec.md) · AI 내부 설계 [ai-pipeline.md](ai-pipeline.md) |
 | 범위 | ① 앱 ↔ 백엔드 ② AI서버 ↔ 백엔드(내부) ③ Hume ↔ AI서버(외부·변경 불가) |
 
 > **이 문서는 인터페이스의 단일 출처다.** PRD §8의 엔드포인트 표와 다르면 **이 문서가 우선**한다.
@@ -63,7 +63,7 @@
 
 | 필드 | null이 되는 경우 | 소비 측 처리 |
 | --- | --- | --- |
-| `textValence` | LLM 응답의 `<v>` 파싱 실패 (spec F3-06) | 갭 미표시 |
+| `textValence` | 텍스트 valence 분석 호출 실패·타임아웃 (spec F3-06) | 갭 미표시 |
 | `voiceValence` | 프로소디 점수 누락 | 갭 미표시 |
 | `gap` | 위 둘 중 **하나라도** null | 그래프에서 점을 찍지 않는다 |
 | `summary` | 요약 생성 실패 | 요약 영역 숨김 |
@@ -584,7 +584,8 @@ data: {"choices":[{"delta":{"content":"목소리는 좀 다르네요. 무슨 일
 data: [DONE]
 ```
 
-> **`<v>0.70</v>` 는 이 스트림에 절대 실려 나가면 안 된다.** AI서버가 앞부분을 버퍼링해 파싱·제거한 뒤 본문만 흘려보낸다 (spec F3-02). 사용자에게 태그가 음성으로 읽히면 즉시 결함이다.
+> **이 스트림에는 대화 텍스트만 실린다.** 텍스트 valence·태그·위기 판정은 응답 호출과 분리된 분석 호출에서 나오므로(spec F3-02, v1.2), 스트림에 메타 태그·JSON이 섞일 경로 자체가 없다. 섞여 나오면 즉시 결함이다 — 사용자에게 음성으로 읽힌다.
+> **CLM 인증**: `language_model_api_key`는 앱이 `session_settings`로 보내야 해서 웹 번들에 노출된다. AI서버는 대신 `custom_session_id`를 백엔드 세션 조회로 검증한다 — `request/backend/session-context-lookup.md` (회신 대기, 확정 시 이 절에 반영).
 
 출처: [Hume Custom Language Model 가이드](https://dev.hume.ai/docs/speech-to-speech-evi/guides/custom-language-model)
 
@@ -623,3 +624,4 @@ data: [DONE]
 | --- | --- | --- |
 | v1.0 | 2026-09-03 | 최초 작성. PRD §8·spec 기준으로 12개 공개 엔드포인트 + 2개 내부 엔드포인트 확정 |
 | v1.1 | 2026-09-03 | 문서 교차 검증 반영 — ① `POST /api/session/{id}/resume` 신설(중단 세션 이어하기) ② `POST /api/observations/{id}/feedback` 신설(측정 절차가 없던 §1.4 "맞아요" 지표를 실제로 수집 가능하게) ③ `GET /api/me`에 `openSession` 추가 ④ `endReason`에 `timeout`·`resumed` 추가 ⑤ 409 `SESSION_NOT_RESUMABLE` 추가 ⑥ JWT 만료 7일 명시 ⑦ `gapThreshold` 예시값 표기 |
+| v1.2 | 2026-09-03 | AI 파이프라인 개정 반영(`request/ai/clm-turn-pipeline-review.md` 회신) — ① §1-3 `textValence` null 사유를 "분석 호출 실패·타임아웃"으로 ② §4 마지막 경고를 "메타 태그 없음"으로, CLM 인증 방향 각주 ③ 상위 문서에 `ai-pipeline.md` 추가. **필드 변경 없음.** 계약 공백 2건은 별도 요청(`request/backend/session-context-lookup.md`, `session-summary-endpoint.md`)으로 다음 버전에서 |

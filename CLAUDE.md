@@ -6,7 +6,7 @@
 
 말로 하루를 이야기하면 AI가 **말투에서** 감정을 읽어 실시간 대화 상대가 되어주고, 쌓인 대화에서 패턴을 발견해 돌려주는 **모바일 서비스**. **웹·모바일 앱을 모두 지원하고 배포는 웹으로 한다**(PRD §14-4). 원티드 AI Championship 2026 출품작.
 
-- 팀 3인: **앱**(Flutter · 웹·앱 모두 지원, 배포는 웹) · **백엔드**(Java/Spring Boot · Supabase, 팀장) · **AI**(Hume CLM 엔드포인트)
+- 팀 3인: **앱**(Flutter · 웹·앱 모두 지원, 배포는 웹) · **백엔드**(Java/Spring Boot · Supabase, 팀장) · **AI**(Python/FastAPI · Hume CLM 엔드포인트)
 - 음성 스택: **Hume EVI + Custom Language Model** — 프로소디 측정은 Hume이, 대화 두뇌는 우리가
 - 핵심 개념: **갭 = |텍스트 valence − 음성 valence|**. 절대 감정("슬픔 78%")을 주장하지 않고 두 채널의 차이만 본다
 - 일정 상수: **9/10 팀 실사용(도그푸딩) 시작 · 9/20 제출.** 개발 타임라인은 따로 세우지 않는다 (PRD §12)
@@ -17,7 +17,8 @@
 2. `docs/00-context/prd.md` — 단일 진실 공급원. 기능 요구사항 FR-001~093, AI 파이프라인 §9, 미해결 이슈 §14
 3. `docs/00-context/spec.md` — 기능 55개 상세(F1~F11), 화면 11개, TC 23개, **§11 스코프 컷 순서**
 4. `docs/02-architecture/api-contract.md` — 인터페이스 단일 출처. 앱↔백엔드 · AI서버↔백엔드 · Hume↔AI서버
-5. `docs/request/{내 역할}/` — 나에게 온 요청. `docs/response/{내 역할}/` — 내가 보낸 요청의 회신
+5. `docs/02-architecture/ai-pipeline.md` — AI서버 설계 단일 출처. 실시간 턴 처리·LLM 경계·규칙·평가 (AI·BE 필독)
+6. `docs/request/{내 역할}/` — 나에게 온 요청. `docs/response/{내 역할}/` — 내가 보낸 요청의 회신
 
 **문서 우선순위**: 필드·스키마 수준은 **계약서 > PRD > spec**. 요구사항 수준은 **PRD > spec > 그 외**. 문서를 요약해서 컨텍스트에 넣지 말고 **파일을 그대로 첨부**한다. 기능 구현 시 spec의 **수용 기준**을 완료 조건으로 삼는다.
 
@@ -30,6 +31,7 @@
 | 패턴의 존재·강도는 **코드가 판정**한다(3회 이상 AND 1.5배 이상). LLM은 문장만 쓴다. 조건 미달이면 **침묵** | FR-051·052·054 |
 | 모든 관찰에 evidence를 붙인다. 문장 ↔ 숫자 불일치 **0건** | FR-053, §1.4 |
 | 태그는 **발화 원문에 등장한 표현만.** 코드가 대조해 폐기 | FR-043 |
+| 텍스트 valence·응답 LLM의 입력에 **프로소디 원본을 넣지 않는다.** 응답 LLM에는 플래그만, 수치도 없이 | FR-025 |
 | **음성 원본을 서버에 받지도 저장하지도 않는다** | FR-041 |
 | Hume API 키를 앱에 내장하지 않는다. 백엔드가 **단기 토큰** 발급 | FR-013 |
 | 로그·`crisis_event`·오류에 **발화 내용을 남기지 않는다** | FR-092 |
@@ -46,7 +48,7 @@
 
 - `app/`: S02 대화 화면에 valence·갭 수치를 그리는 코드가 생기지 않았는지 (데모 모드 분기 제외)
 - `backend/`: 관찰 생성 판정(F7-03)에 LLM 호출이 섞이지 않았는지 · `crisis_event`에 `turn_id`가 생기지 않았는지 · 로그에 `transcript`가 찍히지 않는지
-- `ai-server/`: 응답 스키마에 갭 판정·관찰 판정 필드가 생기지 않았는지 · `<v>`·`<m>` 같은 메타 태그가 Hume 스트림으로 새지 않는지 · 위기 키워드 규칙이 LLM 호출 실패 경로에서도 도는지
+- `ai-server/`: 분석·응답 호출 payload에 `prosody` 키가 생기지 않았는지 · 응답 스트림에 메타 태그·JSON을 싣거나 파싱하는 코드가 생기지 않았는지(설계상 없어야 한다) · `app/rules/`에 네트워크·LLM 호출이 생기지 않았는지 · 위기 키워드 규칙(Tier A)이 LLM 호출 실패 경로에서도 도는지 · 로그에 발화·매칭 표현·폐기 태그가 찍히지 않는지
 - 공통: 음성 파일을 쓰는 코드가 어디에도 없는지 (`.wav`, `.mp3`, `audio/*` 저장·전송)
 
 ## 협업 규칙
@@ -60,11 +62,13 @@
 ## 현재 상태 (2026-09-03)
 
 - **앱 프레임워크 확정(2026-09-03)**: **Flutter — 웹·모바일 앱 모두 지원, 배포·제출·시연은 웹.** 빌드·렌더링·EVI 세션 수립까지 실측했고 **마이크 음성 왕복은 미검증**이다 — 근거와 전환 조건은 PRD §14-4
-- **스택 미결**: AI서버 언어, LLM 모델 — PRD §14
-- **착수 전 확정 항목**: 48종 → valence 매핑표(§14-1), 위기 키워드 목록(§14-2), Hume 플랜 실측(§14-3), 고정 임계값(§14-5)
+- **AI 스택 확정(2026-09-03)**: **Python 3.12 / FastAPI / Anthropic SDK.** 모델은 환경변수(분석 `claude-haiku-4-5` · 응답 `claude-sonnet-5` · 문장화 `claude-opus-5`, TC-12 후 조정). 설계 단일 출처 `docs/02-architecture/ai-pipeline.md`
+- **착수 전 확정 항목**: ~~매핑표(§14-1)~~ ✅ · ~~위기 키워드(§14-2)~~ ✅ (`ai-server/rules/`) · Hume 플랜 실측(§14-3, 백엔드) · 고정 임계값(§14-5) — 절차 확정, 수치는 20쌍 측정 후
 - **누락 문서 3개**: `decisions.md`, `voice-emotion-stack-options.md`, `selected-topic.md` — PRD가 참조하지만 저장소에 없음. `docs/00-context/`에 올릴 것
-- **열린 요청 3건** (전부 ⏳ 회신 대기)
-  - `docs/request/ai/clm-turn-pipeline-review.md` — PRD §9.1 실시간 턴 처리의 순환·채널 독립성 문제. **AI 담당이 회신하기 전에는 §9.1·FR-021 구현에 착수하지 않는다**
-  - `docs/request/backend/hume-config-id.md` — EVI handshake에 필요한 `config_id`가 계약에 없다. **CLM 전환 시점부터 F2-02 연결이 막힌다**
-  - `docs/request/backend/live-turn-signal.md` — 대화 중 턴 신호(위기·갭·valence)를 앱이 읽을 경로가 없다. **S07·데모 모드 트리거 보류**
-- 코드는 아직 없다. 각 서비스 폴더에는 담당·계약 위치를 적은 README만 있다
+- **요청 현황**
+  - ✅ `docs/request/ai/clm-turn-pipeline-review.md` — 회신 완료(2026-09-03). §9.1 개정, FR-025 신설. 회신은 `docs/response/app/`
+  - ⏳ `docs/request/backend/hume-config-id.md` — `config_id`가 계약에 없다. **CLM 전환 시점부터 F2-02 연결이 막힌다.** Hume Config는 AI가 생성·소유하기로 회신에 명시
+  - ⏳ `docs/request/backend/live-turn-signal.md` — 대화 중 턴 신호를 앱이 읽을 경로가 없다. **S07·데모 모드 트리거 보류**
+  - ⏳ `docs/request/backend/session-context-lookup.md` (AI) — AI서버가 임계값·모드를 알 경로 + CLM 인증. 회신 전엔 `.env` 고정 임계값
+  - ⏳ `docs/request/backend/session-summary-endpoint.md` (AI) — F2-05 요약 생성 경로
+- 코드는 아직 없다. `ai-server/`에는 프롬프트 3종·규칙 데이터 3종·`.env.example`·`pyproject.toml`·평가 세트 안내가 있다

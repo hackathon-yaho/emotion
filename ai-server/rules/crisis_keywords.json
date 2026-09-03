@@ -1,0 +1,78 @@
+{
+  "version": "1.0",
+  "updated": "2026-09-03",
+  "policy": "재현율 우선(PRD FR-032). Tier A = 코드 정규식, LLM 실패 경로에서도 항상 동작. Tier B = 분석 호출(LLM)에 힌트로 전달, 맥락을 보고 판정. 갭은 어떤 계층에서도 트리거가 아니다(FR-034). 자체 추정 표현은 넣지 않는다(PRD §2.5) — 출처가 없는 항목은 variant_of로 출처 항목을 가리키고 review=true로 표시해 팀 검토 대상임을 남긴다.",
+  "matching": {
+    "normalize": "전사에서 공백·구두점·이모지를 제거한 뒤 부분 문자열 매칭. 부정어 예외 없음('죽고 싶지 않아'도 감지 — 재현율 우선).",
+    "logging": "매칭된 표현·발화 내용을 어디에도 남기지 않는다(FR-092). by='rule'만 기록."
+  },
+  "sources": [
+    {
+      "id": "mohw-kfsp-psyautopsy",
+      "name": "보건복지부·한국생명존중희망재단 심리부검 결과 (2015~2023, 9년)",
+      "finding": "자살사망자의 96.6%가 사망 전 경고신호를 보였고, 주변이 인지한 비율은 23.8%",
+      "url": "https://news.hidoc.co.kr/news/articleView.html?idxno=33198",
+      "accessed": "2026-09-03"
+    },
+    {
+      "id": "gmhc-warning-signs",
+      "name": "광주광역시자살예방센터 — 자살위험신호(언어적·행동적·상황적)",
+      "url": "https://www.gmhc.kr/contents.do?S=S02&M=0202000000",
+      "accessed": "2026-09-03"
+    },
+    {
+      "id": "ntc-korea-kr",
+      "name": "국립정신건강센터 국가트라우마센터 — 주변 사람의 자살 위험 신호 (정책브리핑)",
+      "url": "https://www.korea.kr/news/healthView.do?newsId=148894818",
+      "accessed": "2026-09-03"
+    },
+    {
+      "id": "spec-f4-03",
+      "name": "spec.md F4-03 수용 기준 예시",
+      "url": "../../docs/00-context/spec.md"
+    }
+  ],
+  "tier_a_rule": [
+    { "pattern": "죽고싶", "source": "mohw-kfsp-psyautopsy", "quote": "죽고 싶다", "note": "활용형 포함: 죽고 싶어/싶었어/싶다고" },
+    { "pattern": "죽었으면", "source": "gmhc-warning-signs", "quote": "차라리 죽었으면 좋겠어" },
+    { "pattern": "죽어야", "source": "mohw-kfsp-psyautopsy", "quote": "죽어야 편해질 것 같다" },
+    { "pattern": "죽어버리", "source": "variant_of:mohw-kfsp-psyautopsy", "quote": "죽고 싶다", "review": true, "note": "활용 변형 — 죽어버리고 싶다" },
+    { "pattern": "자살", "source": "gmhc-warning-signs", "quote": "자살하는 사람의 마음을 알 것 같아", "note": "국가트라우마센터 '자살 계획에 대해 이야기'도 해당" },
+    { "pattern": "없어지는것이낫", "source": "mohw-kfsp-psyautopsy", "quote": "내가 없어지는 것이 낫다" },
+    { "pattern": "없어지는게낫", "source": "gmhc-warning-signs", "quote": "내가 없어지는 것이 낫겠어" },
+    { "pattern": "없어지고싶", "source": "variant_of:mohw-kfsp-psyautopsy", "quote": "내가 없어지는 것이 낫다", "review": true },
+    { "pattern": "내가사라지", "source": "gmhc-warning-signs", "quote": "내가 사라지면 모든 것이 해결될거야", "note": "'내가' 없이 '사라지면'만으로는 매칭하지 않는다 — '걱정이 사라지면' 오탐" },
+    { "pattern": "사라지고싶", "source": "variant_of:gmhc-warning-signs", "quote": "내가 사라지면 모든 것이 해결될거야", "review": true },
+    { "pattern": "살기싫", "source": "variant_of:mohw-kfsp-psyautopsy", "quote": "죽고 싶다", "review": true, "note": "의미 등가 변형" },
+    { "pattern": "살고싶지않", "source": "variant_of:mohw-kfsp-psyautopsy", "quote": "죽고 싶다", "review": true, "note": "의미 등가 변형" },
+    { "pattern": "다끝내고싶", "source": "variant_of:mohw-kfsp-psyautopsy", "quote": "죽어야 편해질 것 같다", "review": true },
+    { "pattern": "목숨을끊", "source": "ntc-korea-kr", "quote": "자살 계획에 대해 이야기합니다", "note": "수단·행위 언급 = 계획 이야기로 간주" },
+    { "pattern": "생을마감", "source": "ntc-korea-kr", "quote": "자살 계획에 대해 이야기합니다" },
+    { "pattern": "목을매", "source": "ntc-korea-kr", "quote": "자살 계획에 대해 이야기합니다" },
+    { "pattern": "뛰어내리", "source": "ntc-korea-kr", "quote": "자살 계획에 대해 이야기합니다", "review": true, "note": "'번지점프에서 뛰어내리' 오탐 가능 — 합성 세트로 확인" },
+    { "pattern": "자해", "source": "ntc-korea-kr", "quote": "자살 계획에 대해 이야기합니다" },
+    { "pattern": "손목을긋", "source": "ntc-korea-kr", "quote": "자살 계획에 대해 이야기합니다" },
+    { "pattern": "유서", "source": "gmhc-warning-signs", "quote": "유서 작성", "note": "행동적 신호 항목이나 발화로 언급되면 감지" }
+  ],
+  "tier_b_llm_hints": [
+    { "phrase": "희망이 없다", "source": "mohw-kfsp-psyautopsy", "category": "절망" },
+    { "phrase": "나는 가망이 없다", "source": "mohw-kfsp-psyautopsy", "category": "절망" },
+    { "phrase": "나는 아무짝에 쓸모없어", "source": "gmhc-warning-signs", "category": "절망·죄책" },
+    { "phrase": "내가 사라지면 모든 것이 해결될거야", "source": "gmhc-warning-signs", "category": "절망·죄책" },
+    { "phrase": "이제 그만 쉬고 싶어요", "source": "spec-f4-03", "category": "간접 표현" },
+    { "phrase": "짜증이 나고 화가 나서 견딜 수가 없어", "source": "gmhc-warning-signs", "category": "감정 변화" },
+    { "phrase": "모든게 귀찮아", "source": "gmhc-warning-signs", "category": "감정 변화" },
+    { "phrase": "너무 외로워", "source": "gmhc-warning-signs", "category": "감정 변화" },
+    { "phrase": "세상에 나 혼자밖에 없는 것 같아", "source": "gmhc-warning-signs", "category": "감정 변화" },
+    { "phrase": "나는 아무것도 못하는 사람이야", "source": "gmhc-warning-signs", "category": "감정 변화" },
+    { "phrase": "요즘 계속 잠을 못자", "source": "gmhc-warning-signs", "category": "신체 불편감", "note": "단독으로는 약한 신호. 다른 신호와 함께일 때 가중" },
+    { "phrase": "입맛도 없고 밥을 먹을 수가 없어", "source": "gmhc-warning-signs", "category": "신체 불편감", "note": "단독으로는 약한 신호" },
+    { "phrase": "요즘 일이 전혀 손에 안잡혀", "source": "gmhc-warning-signs", "category": "집중력 저하", "note": "단독으로는 약한 신호" },
+    { "phrase": "집중하기 어렵다", "source": "mohw-kfsp-psyautopsy", "category": "집중력 저하", "note": "단독으로는 약한 신호" }
+  ],
+  "eval": {
+    "file": "../eval/crisis_set.jsonl",
+    "targets": { "overall_recall": 0.95, "tier_a_direct_recall": 1.0 },
+    "note": "Tier A 단독 재현율(직접 표현 군)이 100%가 아니면 규칙을 늘린다. 오탐 확인군('유사하지만 위기가 아닌 문장')으로 review=true 항목의 존속 여부를 정한다."
+  }
+}

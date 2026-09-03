@@ -1,5 +1,7 @@
 # 감정 케어 보이스 저널 — 문서
 
+> **수정 기록 (2026-09-03 ⑦, AI)** — `request/ai/clm-turn-pipeline-review.md` **회신 완료(✅)**. PRD §9.1을 **분석 호출(전사만 입력) + 응답 호출** 구조로 개정하고 **FR-025(프로소디 미노출, P0)** 를 신설했습니다. 태그·위기 LLM 판정도 분석 호출로 옮겨 **응답 스트림에 메타 태그가 없습니다.** 상세 설계는 신설한 **`02-architecture/ai-pipeline.md`** 가 단일 출처입니다. spec F3-02·F3-06·F4-01·F4-03·F6-01·F6-02·TC-06 개정, **TC-24·25 신설**, api-contract **v1.2**(필드 변경 없음). PRD §14의 미결 1(매핑표)·2(위기 키워드)·AI 스택(Python/FastAPI)을 해소했고(`ai-server/rules/`·`prompts/`), 임계값(5)은 결정 절차만 확정. spec F6-01의 동의어 병합 예시(`미팅`→`회의`)는 FR-043·§1.4와 충돌해 삭제했습니다. **백엔드에 요청 2건 신설(⏳)**: `request/backend/session-context-lookup.md`(AI서버가 임계값·모드를 알 경로 + CLM 인증), `session-summary-endpoint.md`(F2-05 요약 생성 경로).
+>
 > **수정 기록 (2026-09-03 ⑥)** — ⑤의 타깃 서술을 정리했습니다. **웹과 모바일 앱을 모두 지원 타깃으로 두고(우선순위 없음), 배포·제출·시연은 웹 URL 하나로 합니다.** 프레임워크(Flutter)와 실측 결과는 그대로이며, 제품 정의는 **"모바일 서비스"로 유지**합니다(⑤에서 "모바일 우선 웹 서비스"로 바꿨던 것을 되돌림). 웹 배포라 도그푸딩이 링크 공유로 끝나므로 스토어 심사·기기 등록 문제가 없습니다.
 >
 > **수정 기록 (2026-09-03 ⑤)** — **앱 프레임워크 확정: Flutter.** 결정 근거·실측 결과·전환 조건은 **PRD 신설 §14-4**에 있습니다(빌드·렌더링·EVI 세션 수립은 실측, **마이크 음성 왕복은 미검증**). 이에 맞춰 PRD(헤더·§1.1·§2.1·§6·§6.1·§14), spec(헤더·F2-02), 루트 `README.md`, `CLAUDE.md`, `app/README.md`를 갱신했습니다.
@@ -44,6 +46,7 @@
 | `00-context/voice-emotion-stack-options.md` | ⚠️ **누락** — 스택 4조합 비교 (Hume EVI+CLM 채택 근거) | AI, BE |
 | `00-context/selected-topic.md` | ⚠️ **누락** — 주제 확정 기획 | 전원 |
 | `02-architecture/api-contract.md` | **인터페이스 단일 출처** — 앱↔백엔드 12개 · 내부 2개 · Hume CLM 외부 계약 · 오류 규약 · null 규칙 | 앱 ↔ BE ↔ AI |
+| `02-architecture/ai-pipeline.md` | **AI서버 설계 단일 출처** — 실시간 턴 처리, LLM 경계, 매핑표·위기 규칙·태깅, 배치, 실패 처리, 평가, 레포 구조 | AI, BE |
 | `05-planning/git-branching.md` | Git 운영 규칙 (main 직접 커밋) — 해빙에서 가져옴 | 전원 |
 | `request/app/*` | 앱 담당자에게 요청할 사항 문서 | 앱 |
 | `request/backend/*` | 백엔드 담당자에게 요청할 사항 문서 | BE |
