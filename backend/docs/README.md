@@ -1,6 +1,13 @@
 # 백엔드 작업 문서
 
+> **수정 기록 (2026-09-04 ⑤)** — **Phase 문서 7개를 해빙 밀도로 재작성 + [`data-model.md`](data-model.md) 신설.** 종전 Phase 문서는 근거만 달린 한 줄 체크리스트(16~36줄)라 실행 문서로 얇았다 — 해빙의 `README.md`만 이식하고 `phase-*.md`를 안 봤던 탓이다. 목표·하위 절·실행 단위 체크박스·각 항목의 근거·미래 Phase 대비·**이 Phase에서 하지 않는 것**을 채웠다. 결정 4건 추가(삭제 정책·`crisis_event`·배치 트리거·`api-spec` 범위). **작성 중 spec 공백 3건 발견** — `turn_log.role`·`occurred_at` 누락, F10-01의 `crisis_event` 처리 누락 → spec 개정.
+>
+> **수정 기록 (2026-09-04 ④)** — **착수 블로커 6건 전부 결정.** 스택 표의 미확정 5건을 확정값으로 교체(해빙 설정 복제 + `com.hackathonyaho.voicejournal`), 패키지 구조를 "제안"에서 확정으로 올리고 **인터페이스+`Impl` 생략**을 명시, 결정 로그 7건 추가. **PRD §12가 v1.1로 개정돼 9/10이 목표로 내려갔고 배포는 세 파트 확인 후로 결정**되어 `roadmap.md`를 의존 순서 중심으로 재작성했다. 통합 테스트 도달 문제로 `request/ai/integration-test-path.md` 신설(⏳). 아래 불일치 표의 포트 항목 해소.
+>
+> **수정 기록 (2026-09-04 ③)** — **`roadmap.md` 신설.** PRD §12 일정 상수에서 9/10 도그푸딩 최소 조건을 역산해 Phase 1~7을 두 마감(9/10·9/20)으로 재배치했다. 발견 2건 — ① v1.3 fail-closed 회신 때문에 **`GET /internal/sessions/{id}`가 도그푸딩 P0로 올라갔다**(없으면 CLM이 401로 막힘) ② **Phase 7의 배포 항목만 9/10 앞으로 당겨진다**(앱이 붙을 주소가 필요). 아래 불일치 표에 백엔드 로컬 포트 불일치(앱 8080 / AI 8000) 추가.
+>
 > **수정 기록 (2026-09-03 ②)** — 받은 요청 4건에 회신 완료(api-contract v1.3). 결정 로그에 10건 추가(CLM 인증·sessionId 형식·재시도 3회·요약 동기 생성 등), "받은 요청"을 "회신한 요청"으로 갱신, phase-2·3·5의 ⚠️ 해소, 절대 원칙에 `sessionId` 로깅 금지 추가.
+>
 > **수정 기록 (2026-09-03 ①)** — 문서 신설(2026-finance-ai-challenge/backend/docs/README.md의 운영 규칙을 이식).
 
 > 감정 케어 보이스 저널 백엔드의 실행 계획 문서입니다. **여기 적힌 모든 항목은 루트 `../../docs/`의 스펙·계약 문서에 근거가 있으며, 근거 없는 항목은 "미확정"으로 표시했습니다.**
@@ -70,15 +77,17 @@
 
 | 문서 | 내용 | 언제 보나 |
 | --- | --- | --- |
-| 이 파일 | 작업 규칙, 스택, 추적 매트릭스, 결정 로그, 회신 대기 현황 | 작업 시작할 때 |
+| 이 파일 | 작업 규칙, 스택, 추적 매트릭스, 결정 로그, 회신 현황 | 작업 시작할 때 |
+| [roadmap.md](roadmap.md) | **착수 계획** — 의존 순서, Phase별 성격, 착수 블로커 | **지금 무엇을 먼저 할지 정할 때** |
+| [data-model.md](data-model.md) | **스키마 단일 출처** — 11테이블 DDL·인덱스·FK·삭제 순서 | 테이블을 만들거나 삭제 로직을 짤 때 |
 | [api-spec.md](api-spec.md) | **구현 현황 문서** (엔드포인트별 실제 동작) | **API를 완료·수정할 때마다 갱신** |
-| `phase-1~7-*.md` | Phase별 실행 체크리스트 | 다음에 뭘 할지 정할 때 |
+| `phase-1~7-*.md` | Phase별 실행 문서 (목표·절차·완료 기준·하지 않는 것) | 그 Phase를 실제로 구현할 때 |
 
 ## Phase 목록
 
 | Phase | 문서 | 내용 |
 | --- | --- | --- |
-| 1 | [phase-1-skeleton.md](phase-1-skeleton.md) | 프로젝트 골격, Supabase 연결, 헬스체크, 카카오 로그인·JWT (F1) |
+| 1 | [phase-1-skeleton.md](phase-1-skeleton.md) | 프로젝트 골격, docker-compose, **DB 스키마 11테이블 전부**, 헬스체크·스케줄러 뼈대, 카카오 로그인·JWT (F1) |
 | 2 | [phase-2-session.md](phase-2-session.md) | 대화 세션 시작·종료·이어하기, Hume 단기 토큰, 미종료 세션 정리 (F2) |
 | 3 | [phase-3-turn-ingest.md](phase-3-turn-ingest.md) | `/internal/turns` 수신, 임계값 모드·baseline, 발화 암호화 저장, 태그 저장 (F3-04·05, F5, F6-03) |
 | 4 | [phase-4-pattern-batch.md](phase-4-pattern-batch.md) | 패턴 배치 — 태그 집계·규칙 판정·evidence 부착, `/internal/observations` 호출 (F7) |
@@ -86,35 +95,42 @@
 | 6 | [phase-6-data-lifecycle.md](phase-6-data-lifecycle.md) | 세션 삭제·관찰 연쇄 무효화·탈퇴 전량 삭제 (F10) |
 | 7 | [phase-7-ops-deploy.md](phase-7-ops-deploy.md) | 데모 모드, 오류 로깅, 배포 (F11) |
 
-Phase 순서는 의존 관계 순서다 — Phase 3은 Phase 2의 세션이, Phase 4는 Phase 3의 턴 로그가, Phase 5는 Phase 4의 관찰이 있어야 동작한다. Phase 1(인증)·7(운영)은 나머지와 독립적이라 여유 있을 때 끼워 넣어도 된다.
+Phase 순서는 의존 관계 순서다 — Phase 3은 Phase 2의 세션이, Phase 4는 Phase 3의 턴 로그가, Phase 5는 Phase 4의 관찰이 있어야 동작한다.
+
+**어느 Phase가 언제까지인지는 [roadmap.md](roadmap.md)가 단일 출처다.** 요지만 옮기면 — **9/10 도그푸딩 전에 Phase 1·2·3 + Phase 7의 배포 항목**이 서야 턴 로그가 쌓이기 시작하고, Phase 4~6은 도그푸딩이 도는 동안 붙여도 이미 쌓인 데이터에 소급 적용된다.
 
 일정이 밀릴 때 버리는 순서는 `../../docs/00-context/spec.md` §11(스코프 컷 순서)을 단일 기준으로 삼는다. 백엔드가 임의로 순서를 바꾸지 않는다. **F4(위기 감지)는 백엔드가 직접 만들지 않지만(AI서버 담당), 이를 막는 방향의 변경(예: `crisis_event`에 필드 추가 거부)도 하지 않는다.**
 
 ## 스택
 
+**전부 2026-09-04 확정.** 해빙(`2026-finance-ai-challenge`) 백엔드 설정을 복제했다 — 같은 사람이 최근 돌려본 설정이라 빌드·배포에서 처음 만나는 문제가 없다.
+
 | 항목 | 값 | 근거 |
 | --- | --- | --- |
-| 언어·버전 | Java (버전 미확정) | `../README.md` — "Java/Spring Boot"까지만 확정 |
-| 프레임워크 | Spring Boot 3.x | `../../docs/00-context/spec.md` 헤더 |
-| 빌드 도구 | 미확정 (Gradle/Maven) | — |
-| 베이스 패키지명 | 미확정 | — |
-| 로컬 인프라 | 미확정 (docker-compose 여부 포함) | — |
-| DB | Supabase PostgreSQL | `../../docs/00-context/spec.md` §6-1 |
-| 배포 | 미확정 | `../../docs/00-context/prd.md` — 웹 배포·제출 URL 필요, 플랫폼은 미결 |
+| 언어·버전 | **Java 21** (toolchain) | 해빙 `build.gradle` 복제 |
+| 프레임워크 | **Spring Boot 3.4.5** | 같음 |
+| 빌드 도구 | **Gradle (Groovy `build.gradle`)** | 같음 |
+| 베이스 패키지명 | **`com.hackathonyaho.voicejournal`** (group `com.hackathonyaho`) | 앱 Android 패키지 `com.hackathonyaho.voice_journal`과 계열 일치 |
+| 로컬 인프라 | **docker-compose Postgres 16** (해빙 compose 복제) | 개발 데이터가 도그푸딩 로그에 닿지 않게 물리적 분리 — PRD §12 데이터 원칙 |
+| DB (배포) | Supabase PostgreSQL | `../../docs/00-context/spec.md` §6-1 |
+| 스키마 관리 | **`ddl-auto: none` + `db/migration.sql`** | 해빙 방식. 같은 PostgreSQL이라 로컬·배포에 동일 적용 |
+| 서버 포트 | **`server.port: ${PORT:8080}`** | 해빙 `application.yml`. Render가 `PORT`를 주입 |
+| 배포 | **Render Free + cron 10분 킵얼라이브**, AI서버와 **별도 계정** | 750시간은 워크스페이스당. 시점은 세 파트 확인 후 — [roadmap.md](roadmap.md) |
+| 발화 암호화 | **앱 레벨 AES-GCM + JPA `AttributeConverter`**, 키는 환경변수 | F5-02. pgcrypto는 키가 SQL로 흘러 방어가 반감 |
 | 인증 | 카카오 로그인 → 자체 JWT(`Authorization: Bearer`), 만료 7일 | `../../docs/02-architecture/api-contract.md` §1-1 |
-| 내부 API 인증 | 공유 시크릿 헤더 | `../../docs/00-context/spec.md` F5-01, api-contract §3-1 |
+| 내부 API 인증 | 공유 시크릿 헤더 `X-Internal-Secret` | `../../docs/00-context/spec.md` F5-01, api-contract §3-1 |
 
-### 패키지 구조 (제안 — 미확정)
+### 패키지 구조 (2026-09-04 확정)
 
-참고할 사내 레퍼런스 프로젝트가 없어 F-그룹 기준으로 도메인을 나눈 초안이다. **팀 결정 전까지 구속력 없음.**
+도메인별 최상위 패키지 + 도메인 안에 계층. **해빙과 달리 서비스는 인터페이스+`Impl` 쌍을 만들지 않는다** — 구현이 하나뿐인 인터페이스는 파일만 2배가 되고 교체 시점이 오지 않는다. 필요해지면 그때 추출한다.
 
 ```
-(베이스 패키지)
+com.hackathonyaho.voicejournal
 ├── auth/          ← F1 카카오 로그인 · JWT
 ├── session/       ← F2 대화 세션 (시작·종료·이어하기·정리 스케줄러)
 ├── turn/          ← F3-04·05, F5, F6-03 턴 로그 수신·저장
 ├── pattern/       ← F7 패턴 배치 (집계·규칙 판정·evidence)
-├── dashboard/      ← F9 트렌드·대화기록 조회
+├── dashboard/     ← F9 트렌드·대화기록 조회
 ├── account/       ← F10 삭제·탈퇴
 ├── health/        ← F11-02
 └── common/
@@ -123,6 +139,7 @@ Phase 순서는 의존 관계 순서다 — Phase 3은 Phase 2의 세션이, Pha
                    exception/BusinessException.java, handler/GlobalExceptionHandler.java
 ```
 
+- 도메인 안은 `controller/` · `dto/request/` `dto/response/` · `entity/` · `repository/` · `service/`. **서비스는 클래스 하나**(`SessionService.java`)로 둔다.
 - 오류 응답은 `common/global`의 `ErrorCode` + `GlobalExceptionHandler`로 일원화한다. `../../docs/02-architecture/api-contract.md` §1-2의 오류 코드(`VALIDATION_ERROR`, `UNAUTHORIZED`, `TOKEN_EXPIRED`, `KAKAO_VERIFY_FAILED`, `INTERNAL_AUTH_FAILED`, `FORBIDDEN`, `NOT_FOUND`, `SESSION_NOT_RESUMABLE`, `HUME_TOKEN_ISSUE_FAILED`, `INTERNAL_ERROR`)를 `ErrorCode` enum으로 정의한다.
 - **음성 파일을 다루는 코드/패키지를 두지 않는다.** 음성 원본은 앱↔Hume 구간에만 존재한다(FR-041). 루트 `CLAUDE.md` "경계 감시" 참조.
 
@@ -191,6 +208,17 @@ F3(측정)·F4(안전)·F7-04(문장화)·F8(제안)의 판정·생성 로직은
 | `/internal/turns` 재시도 | **1회 → 3회**(백오프), 전 세션 동일 정책 | `api-contract.md` §3-2, v1.3 | 데모 계정 전용 분기는 무대에서 처음 도는 코드가 됨 |
 | 세션 요약 생성 | **동기 호출(3초), `endReason: timeout`은 미호출** | `api-contract.md` §3-5, v1.3 | spec F2-05 수용 기준이 "S02-1에 요약 표시". 스케줄러 정리는 건당 대기 없음 |
 | 계약 개정 단위 | **v1.3 한 번에 묶는다** (부분 적용 안 함) | `api-contract.md` §6 | `sessionId` 형식 하나가 4개 절에 걸쳐 있어 쪼개면 중간 버전에서 예시가 어긋남 |
+| 프로젝트 골격 (2026-09-04) | **해빙 백엔드 설정 복제** — Java 21 · Boot 3.4.5 · Gradle Groovy · temurin Dockerfile · `${PORT:8080}` · `ddl-auto: none` | 이 파일 스택 표 | 같은 사람이 최근 돌려본 설정이라 빌드·배포에서 처음 만나는 문제가 없다. 골격 세우는 시간을 Phase 2·3으로 넘긴다 |
+| 베이스 패키지명 (2026-09-04) | **`com.hackathonyaho.voicejournal`** | 같은 표 | 앱 Android 패키지가 이미 `com.hackathonyaho.voice_journal`이라 계열을 맞춤 |
+| 로컬 개발 DB (2026-09-04) | **docker-compose Postgres 16.** 배포는 Supabase | 같은 표 | 같은 DB를 쓰면 개발·테스트 쓰기가 도그푸딩 로그에 섞인다. PRD §12가 "발표 근거는 실사용 로그만"으로 못박은 지점이고, F10-02 연쇄 무효화 때문에 사후 삭제도 위험 |
+| 배포 플랫폼·시점 (2026-09-04) | **Render Free + cron 10분 킵얼라이브**, AI서버와 별도 계정. **세 파트 기능 확인 후 배포** | `roadmap.md`, PRD §12 | 750시간은 워크스페이스당이라 계정을 나누면 각각 750시간. 배포 시점은 팀 결정 |
+| 9/10 위상 (2026-09-04) | **일정 상수 → 팀 내부 목표.** 고정 마감은 9/20 제출 하나 | PRD §12 (v1.1로 개정) | 팀 결정. 대가(로그 기간 단축 → FR-051 미달 → S03 빈 화면)를 §12에 함께 명시 |
+| 발화 암호화 (2026-09-04) | **앱 레벨 AES-GCM + JPA `AttributeConverter`**, 키는 환경변수 | 같은 표, `phase-3-turn-ingest.md` | `javax.crypto`는 JDK 내장이라 의존성 0, 엔티티는 `String`으로 두고 나머지 코드 무수정. pgcrypto는 키가 SQL 쿼리로 흘러 DB 유출을 가정한 방어가 반감된다 |
+| 서비스 인터페이스 (2026-09-04) | **인터페이스+`Impl` 쌍을 만들지 않는다.** 클래스 하나 | 같은 표 | 구현이 하나뿐인 인터페이스는 파일만 2배. 해빙과 다른 유일한 지점 |
+| 삭제 정책 (2026-09-04) | **FK는 전부 명시하되 `ON DELETE NO ACTION`.** 삭제 순서는 애플리케이션이 정한다 | `data-model.md` | 계약 §2-11이 `deletedTurnCount`·`removedObservationIds` 등 **건수를 응답으로 요구**한다. CASCADE는 조용히 지워 셀 수가 없다. F10-02의 "3회 미만 삭제 / 이상 재계산"도 조건부라 DB 제약으로 표현 불가 |
+| `crisis_event` 세션 삭제 (2026-09-04) | **세션 삭제 시 함께 삭제**한다 | `data-model.md`, `spec.md` F10-01(개정) | 탈퇴 삭제 대상 10테이블에 이미 포함된 사용자 데이터이고, F10-01 수용 기준이 "어디에도 남지 않는다"이다. **spec에 이 처리가 없어 그대로 구현하면 FK 위반으로 세션 삭제가 실패한다** |
+| 배치 트리거 (2026-09-04) | **`voice_session.pattern_processed_at` + 기존 스케줄러 스캔.** 인메모리 큐·전용 큐 테이블 모두 미채택 | `data-model.md`, `phase-4` | 인메모리 큐는 Render 슬립·재배포에 증발하고, **그 세션은 관찰이 영영 안 생기는데 아무도 모른다.** F2-06이 "추가 인프라 0"으로 만든 선례를 재사용 |
+| `api-spec.md` 범위 (2026-09-04) | **구현 현황 표 + 계약과 달라진 부분만.** 요청·응답 스키마를 복제하지 않는다 | 이 파일 "API 작업 규칙" | `api-contract.md`가 3자 계약이라 복제하면 개정 때 두 곳이 어긋난다. 해빙은 `api-spec.md`를 프론트용 명세서로 썼지만 감정은 계약서가 그 역할을 겸한다 |
 
 ### 회신한 요청 (2026-09-03, 4건 전부 ✅)
 
@@ -213,4 +241,6 @@ F3(측정)·F4(안전)·F7-04(문장화)·F8(제안)의 판정·생성 로직은
 
 | 지점 | 내용 | 처리 |
 | --- | --- | --- |
-| (현재 없음) | — | — |
+| **백엔드 로컬 포트** | 앱 `.env.example`은 `API_BASE_URL=http://localhost:8080`, AI `.env.example`은 `BACKEND_BASE_URL=http://localhost:8000`. 두 역할이 다르게 가정 (2026-09-04 발견) | **해소 (2026-09-04)** — 해빙 설정 복제로 `server.port: ${PORT:8080}` 확정. **앱이 맞고 AI가 8080으로 고치면 된다.** `request/ai/integration-test-path.md`로 통보함 |
+| `AI_TURN_POST_RETRIES` | AI `.env.example`이 아직 `1`이다. v1.3에서 **3회로 상향**했고 회신(`response/ai/session-context-lookup.md` 5번)에도 적었으나 AI 폴더 반영은 AI 몫 | 계약이 단일 출처이므로 문서상 불일치는 아니다. **`/internal/turns` 실패가 잦으면 이 값부터 확인**한다 |
+| **`turnId`·`observationId` 형식** | 계약 §2-6·§2-7·§2-10 **예시**는 `turn_0031`·`obs_014`인데, `data-model.md`는 전 PK를 **UUID**로 정했다 (2026-09-04 발견) | **계약 개정하지 않는다.** 계약이 형식을 규정한 필드는 `sessionId`(§1-1)뿐이고 나머지는 예시일 뿐이다. 이 ID들은 앱이 **그대로 되돌려주기만 하는 불투명 문자열**이라 형식이 바뀌어도 앱 코드가 깨지지 않는다. 다만 **예시만 보고 파싱하는 코드를 앱이 만들면 깨지므로**, 앱이 ID에서 의미를 추출하려 하면 그때 계약에 "불투명 문자열" 문구를 넣는다 |

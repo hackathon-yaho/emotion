@@ -1,0 +1,261 @@
+# 데이터 모델 — 백엔드
+
+> **수정 기록 (2026-09-04 ①)** — 문서 신설. `spec.md` §6-1은 "무엇을 저장하는가"(컬럼명·개인정보 여부)까지만 정의하고 타입·제약·인덱스·FK가 없어, 구현에 필요한 DDL을 여기서 확정한다. 작성 중 발견한 공백 3건은 아래 "spec과 달라진 점"에 적었다.
+
+`spec.md` §6-1이 **무엇을** 저장할지의 단일 출처이고, 이 문서는 **어떻게** 저장할지를 정한다. 컬럼이 추가·삭제되면 **§6-1을 먼저 고치고** 여기를 따라 고친다.
+
+- 산출물은 `src/main/resources/db/migration.sql` 하나다. `ddl-auto: none`이므로 **JPA가 스키마를 만들지 않는다.**
+- 같은 SQL을 **로컬 compose Postgres와 배포 Supabase 양쪽에** 적용한다.
+- 앱·AI는 이 문서를 볼 필요가 없다. 그쪽이 보는 필드 정의는 `api-contract.md`다.
+
+## spec §6-1과 달라진 점 (작성 중 발견)
+
+| 지점 | 내용 | 처리 |
+| --- | --- | --- |
+| `turn_log.role` | 계약 §2-10 응답과 §3-2 요청이 `role`(`user`/`assistant`)을 주고받는데 **§6-1 컬럼 목록에 없다** | **컬럼 추가.** 없으면 §2-10 응답을 만들 수 없다. spec §6-1 개정 필요 |
+| `turn_log.occurred_at` | 계약이 `occurredAt`(발화 시각, AI가 보냄)을 요구하는데 §6-1엔 `created_at`(적재 시각)만 있다 | **둘 다 둔다.** 적재가 지연·재시도되면 두 값이 갈린다 |
+| `voice_session.pattern_processed_at` | 배치 트리거를 스케줄러 방식으로 정하면서(2026-09-04) 필요해진 컬럼 | **컬럼 추가.** spec §6-1·F7-01 개정 필요 |
+
+## 공통 규약
+
+| 항목 | 값 | 이유 |
+| --- | --- | --- |
+| PK 타입 | **`uuid`** (`gen_random_uuid()`) | `sessionId`가 CLM 인증 수단이라 추측 불가해야 한다(계약 §1-1). 나머지도 같은 타입으로 맞춰 조인·코드를 단순하게 |
+| 시각 | **`timestamptz`**, 저장·전송은 UTC | 계약 §1-1. 일자 집계만 KST로 변환 |
+| valence·gap | **`numeric(3,2)`** | −1.00~1.00(gap은 0.00~2.00). 계약이 소수 2자리 반올림을 규정 |
+| 소수 NULL | valence·gap은 **NULL 허용** | 계약 §1-3 — NULL은 "측정하지 못했다"는 뜻이며 0으로 대체하지 않는다 |
+| FK | **전부 명시, `ON DELETE NO ACTION`** | 삭제 건수를 응답에 담아야 해서(계약 §2-11) 앱이 순서대로 지운다. 아래 "삭제 순서" |
+| 확장 | `pgcrypto` **사용 안 함** | 발화 암호화는 앱 레벨 AES-GCM(F5-02). 키가 SQL로 흐르지 않게 |
+
+> **`gen_random_uuid()`는 PostgreSQL 13+ 내장**이라 확장 설치가 필요 없다. Postgres 16(로컬)·Supabase 모두 해당.
+
+## 테이블
+
+### 계정 · 프로필 (F1 · 식별자 분리)
+
+```sql
+create table account (
+    id          uuid primary key default gen_random_uuid(),
+    kakao_sub   text        not null unique,
+    created_at  timestamptz not null default now()
+);
+
+create table profile (
+    id          uuid primary key default gen_random_uuid(),
+    created_at  timestamptz not null default now()
+);
+
+create table account_profile (
+    account_id  uuid primary key references account(id),
+    profile_id  uuid not null unique references profile(id)
+);
+```
+
+> **감정 데이터는 `profile_id`만 참조한다.** `account`(카카오 식별자)와의 연결은 `account_profile` 한 곳에만 있다 — PRD §5.1 식별자 분리. 이 테이블을 조인하지 않으면 어떤 감정 데이터도 실명 계정에 닿지 않는다.
+
+### 대화 세션 (F2)
+
+```sql
+create table voice_session (
+    id                   uuid primary key default gen_random_uuid(),
+    profile_id           uuid        not null references profile(id),
+    started_at           timestamptz not null default now(),
+    ended_at             timestamptz,
+    duration_sec         integer,
+    threshold_mode       text        not null check (threshold_mode in ('fixed','personal')),
+    end_reason           text        check (end_reason in ('user_end','soft_wrap','hard_cut','timeout','resumed')),
+    summary              text,
+    hume_chat_group_id   text,
+    pattern_processed_at timestamptz
+);
+
+create index idx_session_profile_started on voice_session (profile_id, started_at desc);
+create index idx_session_open            on voice_session (profile_id) where ended_at is null;
+create index idx_session_batch_pending   on voice_session (ended_at) where ended_at is not null and pattern_processed_at is null;
+```
+
+| 컬럼 | 규칙 |
+| --- | --- |
+| `id` | **UUIDv4.** CLM 인증에 `custom_session_id`로 쓰이므로 **로그에 남기지 않는다**(백엔드 절대 원칙 6번) |
+| `ended_at` `duration_sec` | 종료 전에는 NULL. `duration_sec`는 종료 시 계산해 넣는다 |
+| `end_reason` | 앱은 `timeout`·`resumed`를 보내지 않는다(계약 §2-5). 서버 내부에서만 기록 |
+| `summary` | **NULL 가능** — 생성 실패·`endReason: timeout`(§2-5) |
+| `pattern_processed_at` | **NULL이면 배치 미처리.** 스케줄러가 이 조건으로 훑는다(F7-01) |
+| `resumableUntil` | **컬럼을 두지 않는다.** `ended_at + 30분`으로 계산한다 — 값이 하나면 규칙이 하나다 |
+
+> `idx_session_batch_pending`은 **부분 인덱스**다. 처리 끝난 세션은 인덱스에서 빠지므로, 도그푸딩이 길어져도 배치 스캔 비용이 늘지 않는다.
+
+### 턴 로그 (F3 · F5 · F6)
+
+```sql
+create table turn_log (
+    id             uuid primary key default gen_random_uuid(),
+    session_id     uuid        not null references voice_session(id),
+    turn_index     integer     not null,
+    role           text        not null check (role in ('user','assistant')),
+    occurred_at    timestamptz not null,
+    transcript_enc text        not null,
+    text_valence   numeric(3,2),
+    voice_valence  numeric(3,2),
+    gap            numeric(3,2),
+    gap_triggered  boolean     not null default false,
+    top_prosody    jsonb,
+    created_at     timestamptz not null default now(),
+    unique (session_id, turn_index)
+);
+
+create index idx_turn_session_index on turn_log (session_id, turn_index);
+create index idx_turn_occurred      on turn_log (occurred_at);
+
+create table turn_tag (
+    turn_id uuid not null references turn_log(id),
+    tag     text not null,
+    primary key (turn_id, tag)
+);
+
+create index idx_turn_tag_tag on turn_tag (tag);
+```
+
+| 컬럼 | 규칙 |
+| --- | --- |
+| `transcript_enc` | **AES-GCM 암호문(base64).** JPA `AttributeConverter`가 변환하므로 애플리케이션 코드는 평문 `String`으로 다룬다(F5-02) |
+| `role` | **assistant 턴은 valence·gap이 전부 NULL, 태그 없음**(계약 §3-2). 측정 대상은 사용자 발화뿐 |
+| `occurred_at` / `created_at` | 발화 시각 / 적재 시각. `/internal/turns`가 재시도되면 갈린다 |
+| `unique (session_id, turn_index)` | 같은 턴이 두 번 적재되는 것을 DB가 막는다 — `/internal/turns`가 **3회 재시도**하므로(계약 §3-2 v1.3) 중복이 실제로 발생할 수 있다 |
+| `top_prosody` | 상위 5개까지. 디버깅·재현성 검증용 |
+| **음성 원본** | **컬럼이 없다.** 어떤 형태로도 저장하지 않는다(FR-041) |
+
+> `idx_turn_tag_tag`는 F7-02 태그별 집계가 전 기간을 훑기 때문에 필요하다.
+> **`unique (session_id, turn_index)`가 재시도 중복을 막는 유일한 장치다.** 애플리케이션은 이 제약 위반을 "이미 적재됨"으로 해석하고 202를 돌려준다 — 오류가 아니다.
+
+### 개인 baseline (F3-04 · F3-05)
+
+```sql
+create table user_baseline (
+    profile_id    uuid primary key references profile(id),
+    session_count integer     not null default 0,
+    avg_gap       numeric(3,2),
+    stddev_gap    numeric(3,2),
+    updated_at    timestamptz not null default now()
+);
+```
+
+| 컬럼 | 규칙 |
+| --- | --- |
+| `session_count` | **5 미만이면 `fixed`, 이상이면 `personal`**(F3-04). 세션 시작 시 읽는다 |
+| `avg_gap` `stddev_gap` | 갭이 NULL인 턴은 집계에서 제외(F3-05). 세션이 없으면 NULL |
+
+> **갱신은 증분이 아니라 전체 재계산으로 한다.** 도그푸딩 규모(3인 × 10일)에서 턴 수가 수백 건이라 전체 재계산이 밀리초 단위이고, 세션 삭제(F10-01) 후 재계산과 **같은 코드 경로**를 쓸 수 있다. 증분으로 하면 삭제 경로를 따로 만들어야 하고 표준편차 증분은 부동소수 오차가 누적된다.
+
+### 관찰 (F7)
+
+```sql
+create table observation (
+    id           uuid primary key default gen_random_uuid(),
+    profile_id   uuid        not null references profile(id),
+    sentence     text        not null,
+    tag          text        not null,
+    occurrences  integer     not null,
+    tag_avg_gap  numeric(3,2) not null,
+    user_avg_gap numeric(3,2) not null,
+    ratio        numeric(4,2) not null,
+    status       text        not null default 'active' check (status in ('active','invalidated')),
+    feedback     text        check (feedback in ('agree','disagree')),
+    created_at   timestamptz not null default now()
+);
+
+create index idx_observation_profile on observation (profile_id, created_at desc);
+
+create table observation_evidence (
+    observation_id uuid not null references observation(id),
+    turn_id        uuid not null references turn_log(id),
+    primary key (observation_id, turn_id)
+);
+
+create index idx_evidence_turn on observation_evidence (turn_id);
+```
+
+| 컬럼 | 규칙 |
+| --- | --- |
+| `occurrences` `tag_avg_gap` `user_avg_gap` `ratio` | **계약 §2-6의 `evidence` 객체가 이 4개 그대로다.** 관찰 문장 ↔ 이 숫자의 불일치는 0건이어야 한다(§1.4) |
+| `feedback` | **NULL이 기본**(미응답). `agree`/`disagree` 둘뿐이고 취소·수정 없다(F7-08) |
+| `status` | `disagree`가 관찰을 **삭제하지 않는다**(F7-08). 무효화는 F10-02 경로에서만 |
+
+> **`idx_evidence_turn`이 F10-02의 핵심이다.** 턴을 지울 때 "이 턴을 근거로 쓰던 관찰"을 역방향으로 찾아야 하는데, 이 인덱스가 없으면 전체 스캔이 된다.
+
+### 위기 이벤트 (F4-04)
+
+```sql
+create table crisis_event (
+    id          uuid primary key default gen_random_uuid(),
+    profile_id  uuid        not null references profile(id),
+    session_id  uuid        not null references voice_session(id),
+    detected_by text        not null check (detected_by in ('rule','llm')),
+    created_at  timestamptz not null default now()
+);
+
+create index idx_crisis_session on crisis_event (session_id);
+```
+
+> **`turn_id` 컬럼을 두지 않는다.** turn ID가 있으면 조인 한 번으로 "그때 무슨 말을 했는지"에 도달한다 — 가장 민감한 지점에서 그 경로를 아예 만들지 않는다(spec §6-1). 세션 단위까지만 남겨도 "언제 몇 번 감지됐는지"는 파악된다.
+> **발화 내용을 넣지 않는다**(FR-092). `detected_by`는 규칙/LLM 구분일 뿐 매칭된 표현을 담지 않는다.
+> `idx_crisis_session`은 세션 삭제(F10-01)와 `/live`의 `crisisDetected` 조회에 쓰인다.
+
+### 운영 로그 (F11-03)
+
+```sql
+create table ops_error_log (
+    id         uuid primary key default gen_random_uuid(),
+    service    text        not null,
+    code       text        not null,
+    message    text        not null,
+    created_at timestamptz not null default now()
+);
+```
+
+> **탈퇴 삭제 대상이 아니다**(spec §6-1). 사용자 데이터를 담지 않고 장애 분석에 필요하다.
+> **`message`에 발화 내용·`sessionId`를 넣지 않는다**(FR-092, 백엔드 절대 원칙 3·6번). 이 테이블이 규칙을 깨기 가장 쉬운 자리다.
+
+## 삭제 순서 (FK가 `NO ACTION`이므로 코드가 순서를 지킨다)
+
+### F10-01 세션 삭제 — `DELETE /api/sessions/{id}`
+
+계약 §2-11이 **건수와 ID 목록을 응답으로 요구**하므로 각 단계에서 결과를 수집한다.
+
+```
+① 영향받는 관찰 수집   SELECT DISTINCT observation_id
+                        FROM observation_evidence e JOIN turn_log t ON e.turn_id = t.id
+                        WHERE t.session_id = ?
+② turn_tag 삭제        WHERE turn_id IN (해당 세션의 turn)
+③ observation_evidence 삭제  (같은 조건)
+④ turn_log 삭제        WHERE session_id = ?        → deletedTurnCount
+⑤ ①의 관찰별 남은 근거 수 재집계
+     < 3  → observation 삭제 (evidence 행 먼저)   → removedObservationIds
+     ≥ 3  → occurrences·tag_avg_gap·ratio 갱신    → recalculatedObservationIds
+⑥ crisis_event 삭제    WHERE session_id = ?        ← 2026-09-04 결정 (spec F10-01에 없던 항목)
+⑦ voice_session 삭제
+⑧ user_baseline 재계산 (F3-05와 같은 코드)
+```
+
+> **①을 ④보다 먼저 하지 않으면 안 된다.** 턴을 지우면 `observation_evidence` 연결이 사라져 "어느 관찰이 영향받았는지"를 알 방법이 없어진다.
+> 전 과정이 **단일 트랜잭션**이다. 중간 실패 시 롤백해 "절반만 지워진" 상태를 만들지 않는다.
+
+### F10-03 탈퇴 — `DELETE /api/account`
+
+**10개 테이블, 단일 트랜잭션.** `ops_error_log`는 제외한다.
+
+```
+observation_evidence → observation → turn_tag → turn_log → crisis_event
+→ voice_session → user_baseline → account_profile → account → profile
+```
+
+> 자식부터 부모 순서다. FK가 `NO ACTION`이라 순서를 어기면 제약 위반으로 실패하고 전체가 롤백된다 — **순서 실수가 조용히 넘어가지 않는다는 뜻**이라 오히려 안전하다.
+> 수용 기준: 같은 카카오 계정으로 재가입 시 **신규 사용자로 시작**한다(F10-03).
+
+## 마이그레이션 파일
+
+`src/main/resources/db/migration.sql` 하나에 위 DDL을 **테이블 생성 순서대로**(부모 먼저) 담는다.
+
+- 로컬: compose Postgres에 적용 후 애플리케이션 기동 확인 (Phase 1)
+- 배포: 같은 파일을 Supabase에 적용 (배포 시점)
+- **스키마를 코드로 관리한다** — Supabase 콘솔에서 직접 테이블을 고치지 않는다. 고치면 로컬과 갈라지고, 갈라진 걸 알아채는 시점이 배포 후가 된다

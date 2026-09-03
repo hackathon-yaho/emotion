@@ -1,16 +1,78 @@
-# Phase 6 — 데이터 관리 (삭제 · 탈퇴)
+# Phase 6 — 데이터 관리 (삭제 · 연쇄 무효화 · 탈퇴)
 
-의존: Phase 2~5의 테이블이 전부 존재해야 삭제·연쇄 무효화가 의미 있다. 마지막에 붙여도 되지만, **F1-04·DELETE /api/account 라우트는 Phase 1에서 이미 등록해 둔 상태**다.
+> 목표: **사용자가 지운 것이 어디에도 남지 않는 상태**를 만든다.
+>
+> 의존: Phase 2~5의 테이블이 전부 존재해야 삭제 순서를 검증할 수 있다. `DELETE /api/account` 라우트는 Phase 1에 이미 등록돼 있다.
+>
+> 근거: `spec.md` F10-01~03, F1-04 · `api-contract.md` §2-3·§2-11 · `data-model.md` "삭제 순서"
 
-## 체크리스트
+> **제출 전에 반드시 있어야 한다.** 탈퇴(FR-003)는 P0이고, "유예 기간을 두지 않는 즉시 삭제"가 이 제품의 신뢰 주장 중 하나다(PRD §5.1).
 
-- [ ] `DELETE /api/sessions/{id}` — `turn_log`·`turn_tag` 삭제 → 연쇄 무효화(아래) → `user_baseline` 재계산(Phase 3의 F3-05 로직 재사용) — 근거: spec F10-01, api-contract §2-11
-- [ ] 관찰 연쇄 무효화 — 삭제된 turn을 evidence로 참조하던 관찰 조회 → **남은 근거가 3회 미만이면 관찰 삭제**, 이상이면 evidence 숫자 재계산 — 근거: spec F10-02
-- [ ] `DELETE /api/account` 실제 로직 — `account`, `account_profile`, `profile`, `voice_session`, `turn_log`, `turn_tag`, `user_baseline`, `observation`, `observation_evidence`, `crisis_event` **단일 트랜잭션** 삭제. `ops_error_log`는 제외 — 근거: spec F10-03, F1-04
-- [ ] 부분 삭제 실패 시 트랜잭션 롤백 (부분 삭제 상태를 만들지 않는다) — 근거: spec F1-04
+## 6-1. 세션 삭제 — `DELETE /api/sessions/{id}` (F10-01)
+
+**[`data-model.md`](data-model.md)의 "삭제 순서"를 그대로 구현한다.** 여기서는 순서만 다시 적는다.
+
+- [ ] ① **영향받는 관찰 ID를 먼저 수집** (턴을 지우기 전에)
+- [ ] ② `turn_tag` 삭제
+- [ ] ③ `observation_evidence` 삭제
+- [ ] ④ `turn_log` 삭제 → `deletedTurnCount`
+- [ ] ⑤ ①의 관찰별 **남은 근거 수 재집계** (6-2)
+- [ ] ⑥ `crisis_event` 삭제 (`session_id` 기준) ← **2026-09-04 결정**
+- [ ] ⑦ `voice_session` 삭제
+- [ ] ⑧ `user_baseline` 재계산 — Phase 3의 F3-05와 **같은 코드**
+- [ ] 전 과정 **단일 트랜잭션**
+- [ ] 응답 — 계약 §2-11
+
+```json
+{ "deletedSessionId", "deletedTurnCount",
+  "removedObservationIds", "recalculatedObservationIds" }
+```
+
+> **①을 ④보다 먼저 하지 않으면 안 된다.** 턴을 지우면 `observation_evidence` 연결이 사라져 "어느 관찰이 영향받았는지" 알 방법이 없어진다. 순서를 바꾸면 테스트가 통과하는데(삭제는 되니까) 관찰만 조용히 낡는다.
+
+> **⑥은 spec F10-01에 없던 항목이다.** `crisis_event`가 `session_id`를 FK로 갖고 있어(`ON DELETE NO ACTION`), 이걸 지우지 않으면 **⑦에서 제약 위반으로 실패**한다. spec을 개정했다 — `docs/00-context/spec.md` F10-01.
+
+## 6-2. 관찰 연쇄 무효화 (F10-02)
+
+- [ ] 삭제된 turn을 evidence로 참조하던 관찰을 조회
+- [ ] **남은 근거가 3회 미만 → 관찰 삭제** (`observation_evidence` 먼저, 그다음 `observation`)
+- [ ] **3회 이상 → `occurrences`·`tag_avg_gap`·`ratio` 재계산**
+- [ ] 각각의 ID를 응답에 담는다
+
+> **3회 미만 기준은 F7-03의 생성 조건과 같은 값**이다. 생성될 수 없었을 관찰이 삭제 후에 살아남으면 안 된다.
+> **evidence가 비어 있거나 숫자가 맞지 않는 관찰이 단 한 건도 남지 않아야 한다**(F10-02 수용 기준). 근거 대화가 삭제됐는데 관찰만 남으면 **그 관찰은 그 순간 "근거 없는 문장"이 된다** — §1.4 불일치 0건 지표와 직결.
+
+> **이 로직은 CASCADE로 표현할 수 없다.** "미만이면 삭제, 이상이면 재계산"은 조건부 분기라 DB 제약이 아니다. FK를 `NO ACTION`으로 둔 이유이기도 하다(`data-model.md`).
+
+## 6-3. 탈퇴 — `DELETE /api/account` (F10-03 · F1-04)
+
+- [ ] Phase 1에서 등록해 둔 라우트에 실제 로직을 채운다
+- [ ] **10개 테이블 단일 트랜잭션 삭제** — 자식부터 부모 순서 (`data-model.md`)
+
+```
+observation_evidence → observation → turn_tag → turn_log → crisis_event
+→ voice_session → user_baseline → account_profile → account → profile
+```
+
+- [ ] **`ops_error_log`는 삭제하지 않는다** — 사용자 데이터를 담지 않고 장애 분석에 필요(spec §6-1)
+- [ ] 부분 실패 시 **롤백**. "일부만 지워진 상태"를 만들지 않는다
+- [ ] 응답 **204**
+
+> **유예 기간을 두지 않는다.** 즉시 전량 삭제가 신뢰의 핵심이다(FR-003).
+> **수용 기준: 같은 카카오 계정으로 재가입하면 신규 사용자로 시작한다**(TC-13). `account.kakao_sub`가 지워졌으므로 새 `profile`이 생긴다.
+> FK가 `NO ACTION`이라 순서를 어기면 제약 위반으로 **즉시 실패하고 롤백**된다 — 순서 실수가 조용히 넘어가지 않는다는 뜻이라 오히려 안전하다.
 
 ## 완료 기준
 
-- TC-13 (탈퇴 후 재가입 → 신규 사용자로 시작, 이전 데이터 0건)
-- TC-19 (근거 대화 삭제 → 관찰 삭제 또는 숫자 재계산, 불일치 0건)
-- 삭제 후 해당 대화가 대화기록 목록·트렌드 집계 어디에도 남지 않는다
+- **TC-13** — 탈퇴 후 같은 카카오 계정으로 재가입 시 신규 사용자로 시작하고 이전 데이터가 0건이다
+- **TC-19** — 근거 대화를 삭제하면 관찰이 삭제되거나 숫자가 재계산되고, **불일치 0건**이다
+- 세션 삭제 후 그 대화가 S05 목록·트렌드 집계 어디에도 남지 않는다
+- 세션 삭제 응답의 `deletedTurnCount`·ID 목록이 실제 삭제 결과와 일치한다
+- 삭제 도중 강제로 예외를 던지면 **아무것도 지워지지 않는다** (롤백 확인)
+- `api-spec.md` 구현 현황 갱신 (`DELETE /api/sessions/{id}`·`DELETE /api/account`)
+
+## 이 Phase에서 하지 않는 것
+
+- **프라이버시 고지 문구** (F10-04) — 앱 화면 담당
+- **로그아웃** (F1-03) — 서버가 할 일이 없다
+- 삭제 이력·휴지통 — **유예 없이 즉시 삭제**가 사양이다

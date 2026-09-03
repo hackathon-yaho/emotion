@@ -1,10 +1,12 @@
 # 기능 명세서 — 감정 케어 보이스 저널
 
+> **수정 기록 (2026-09-04 ②, 백엔드)** — 백엔드 실행 문서를 쓰다 발견한 **§6-1 공백 3건**을 메웠다. ① **`turn_log`에 `role`·`occurred_at` 추가** — 계약 §2-10 응답과 §3-2 요청이 둘 다 요구하는데 컬럼 목록에 없었다(그대로 구현하면 §2-10 응답을 만들 수 없다) ② **`voice_session`에 `pattern_processed_at` 추가** — F7-01 배치 트리거를 스케줄러 방식으로 확정하면서 필요해졌다 ③ **F10-01 처리에 `crisis_event` 삭제 추가** — `crisis_event.session_id`가 FK인데 이 처리가 없어, 그대로 구현하면 **세션 삭제가 FK 위반으로 실패**한다. 아울러 F7-01 처리를 "큐 적재"에서 실제 방식으로 구체화했다. DDL은 `backend/docs/data-model.md`가 단일 출처다.
+>
 > **수정 기록 (2026-09-03 ①, 백엔드)** — api-contract v1.3(백엔드가 받은 요청 4건 회신) 반영. **F2-01**(`sessionId` UUID·`humeConfigId`·`livePollIntervalSec` 출력 추가) · **F2-03**(AI서버가 세션 컨텍스트로 경과 판단) · **F2-05**(요약 동기 생성, `timeout`은 미생성) · **F4-04**(앱이 `live` 폴링으로 감지 확인) · **F5-04**(재시도 1회→3회) · **F11-01**(비데모 계정은 `turns: []`) 개정, **§10 TC-26·TC-27 신설**, §9 추적 매트릭스 2곳 갱신. 이 이후 수정은 이 배너에 번호를 이어 붙인다(②③…).
 
 | 항목 | 내용 |
 | --- | --- |
-| 문서 버전 | v1.1 |
+| 문서 버전 | v1.2 |
 | 작성일 | 2026. 09. 03. |
 | 상위 문서 | [prd.md](prd.md) |
 | 서비스 | 감정 케어 보이스 저널 |
@@ -557,9 +559,11 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 설명 | 세션 종료 시 패턴 분석 배치를 큐에 넣는다 |
-| 처리 | 세션 종료(F2-05) → 큐 적재 → 비동기 실행 |
-| 수용 기준 | 배치 실패가 대화·조회 기능에 영향을 주지 않는다 |
+| 설명 | 세션이 종료되면 패턴 분석 배치가 그 세션을 처리한다 |
+| 처리 | 세션 종료(F2-05)로 `ended_at`이 기록되고 `pattern_processed_at`이 NULL이면 **미처리 상태**다. **스케줄러(F11-02·F2-06과 동일)가 미처리 세션을 훑어** 배치를 돌리고 성공 시 `pattern_processed_at`을 기록한다 (2026-09-04 확정) |
+| 예외 | 실패 시 시각을 기록하지 않아 **다음 주기에 자동 재시도**된다 |
+| 수용 기준 | 배치 실패가 대화·조회 기능에 영향을 주지 않는다. **서버 재시작·슬립 복귀 후에도 미처리 세션이 유실되지 않는다** |
+| 근거 | 인메모리 큐는 재배포·슬립에 증발해 그 세션의 관찰이 영영 생기지 않는다. F2-06이 "끊긴 세션"을 막으려 만든 장치와 같은 사고를 배치에서 반복하지 않기 위함 |
 
 ### F7-02 태그별 집계
 
@@ -720,7 +724,7 @@
 | --- | --- |
 | 설명 | 대화 1건과 그 턴 로그를 삭제한다 |
 | API | `DELETE /api/sessions/{id}` |
-| 처리 | ① `turn_log`·`turn_tag` 삭제 ② **F10-02 연쇄 무효화** ③ `user_baseline` 재계산(F3-05) |
+| 처리 | ① 영향받는 관찰 ID 수집(턴 삭제 **전에**) ② `turn_log`·`turn_tag`·`observation_evidence` 삭제 ③ **F10-02 연쇄 무효화** ④ **`crisis_event` 삭제**(같은 `session_id`) ⑤ `voice_session` 삭제 ⑥ `user_baseline` 재계산(F3-05). 전 과정 단일 트랜잭션 |
 | 수용 기준 | 삭제 후 해당 대화가 S05 목록·트렌드 집계 어디에도 남지 않는다 |
 
 ### F10-02 관찰 연쇄 무효화
@@ -920,8 +924,8 @@
 | `account` | `id`, `kakao_sub`, `created_at` | **있음 (분리 보관)** |
 | `account_profile` | `account_id`, `profile_id` | 연결자 |
 | `profile` | `id`, `created_at` | 없음 |
-| `voice_session` | `id`, `profile_id`, `started_at`, `ended_at`, `duration_sec`, `threshold_mode`, `end_reason`, `summary`, **`hume_chat_group_id`**(이어하기용) | 없음 |
-| `turn_log` | `id`, `session_id`, `turn_index`, `transcript_enc`, `text_valence`, `voice_valence`, `gap`, `gap_triggered`, `top_prosody`(jsonb), `created_at` | **발화 내용(암호화)** |
+| `voice_session` | `id`, `profile_id`, `started_at`, `ended_at`, `duration_sec`, `threshold_mode`, `end_reason`, `summary`, **`hume_chat_group_id`**(이어하기용), **`pattern_processed_at`**(F7-01 배치 처리 시각) | 없음 |
+| `turn_log` | `id`, `session_id`, `turn_index`, **`role`**, **`occurred_at`**, `transcript_enc`, `text_valence`, `voice_valence`, `gap`, `gap_triggered`, `top_prosody`(jsonb), `created_at` | **발화 내용(암호화)** |
 | `turn_tag` | `turn_id`, `tag` | 없음 |
 | `user_baseline` | `profile_id`, `session_count`, `avg_gap`, `stddev_gap`, `updated_at` | 없음 |
 | `observation` | `id`, `profile_id`, `sentence`, `tag`, `occurrences`, `tag_avg_gap`, `user_avg_gap`, `ratio`, `status`, **`feedback`**(`agree`/`disagree`/null), `created_at` | 없음 |
