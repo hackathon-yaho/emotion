@@ -1,6 +1,8 @@
 # 감정 케어 보이스 저널 — 문서
 
-> **수정 기록 (2026-09-03)** — 저장소 신설. `hackathon-yaho/idea`의 `emotion/` 폴더에 있던 PRD·기능명세서·API 계약서를 **내용 변경 없이** 해빙(2026-finance-ai-challenge) 문서 구조로 옮겼습니다. 폴더가 나뉘면서 끊어지는 상대 링크 7개만 보정했습니다(prd 2 · spec 4 · api-contract 1).
+> **수정 기록 (2026-09-03 ②)** — 루트에 `CLAUDE.md` 추가(에이전트 세션 시작 시 읽는 안내판 — 읽을 문서·절대 규칙·경계 감시·협업 규칙·현재 상태). `request/ai/clm-turn-pipeline-review.md` 신설 — PRD §9.1 실시간 턴 처리의 순환 의존·채널 독립성 문제 검토 요청(⏳). **회신 전에는 §9.1·FR-021 구현에 착수하지 않습니다.**
+>
+> **수정 기록 (2026-09-03 ①)** — 저장소 신설. `hackathon-yaho/idea`의 `emotion/` 폴더에 있던 PRD·기능명세서·API 계약서를 **내용 변경 없이** 해빙(2026-finance-ai-challenge) 문서 구조로 옮겼습니다. 폴더가 나뉘면서 끊어지는 상대 링크 7개만 보정했습니다(prd 2 · spec 4 · api-contract 1).
 > PRD가 참조하는 내부 문서 중 **`decisions.md`, `voice-emotion-stack-options.md`, `selected-topic.md` 3개는 아직 이 저장소에 없습니다.** 원본을 가진 사람이 `00-context/`에 올려 주세요 — PRD의 링크가 그 위치를 가리키고 있습니다.
 
 원티드 AI Championship 2026 제출 프로젝트. 앱 1 · 백엔드 1 · AI 개발자 1, 총 3인 협업 기준으로 구성된 문서입니다. 제출 마감 **2026-09-20**, 팀 실사용(도그푸딩) 시작 **2026-09-10**.
