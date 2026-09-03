@@ -1,7 +1,7 @@
 # 세션 컨텍스트 내부 조회 엔드포인트 요청 — AI서버가 임계값·모드를 알 경로가 없습니다
 
-> **상태: ⏳ 회신 대기** (요청 2026-09-03)
-> 회신은 `../../response/ai/session-context-lookup.md`에 들어옵니다.
+> **상태: ✅ 회신 완료** (2026-09-03)
+> 회신: [`../../response/ai/session-context-lookup.md`](../../response/ai/session-context-lookup.md) — 계약 v1.3 §3-4·§4 반영
 > **막고 있는 작업**: `/internal/turns`의 `thresholdMode`·`gapTriggered` 정확성, 5분 마무리 유도(F2-03 B측), CLM 인증. **회신 전에도 AI서버 개발은 진행합니다** — `.env` 고정 임계값으로 동작하게 만들어두고 필드가 생기면 교체합니다. 9/10 도그푸딩은 고정 임계값으로도 성립합니다.
 
 - 요청자: AI

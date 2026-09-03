@@ -1,7 +1,7 @@
 # 세션 요약 생성 경로 요청 — F2-05의 `summary`를 누가 만드는지 계약에 없습니다
 
-> **상태: ⏳ 회신 대기** (요청 2026-09-03)
-> 회신은 `../../response/ai/session-summary-endpoint.md`에 들어옵니다.
+> **상태: ✅ 회신 완료** (2026-09-03)
+> 회신: [`../../response/ai/session-summary-endpoint.md`](../../response/ai/session-summary-endpoint.md) — 계약 v1.3 §3-5 반영
 > **막고 있는 작업**: `POST /api/session/{id}/end` 응답의 `summary`(S02-1 종료 요약, S05 목록). 계약이 `summary: null`을 허용하므로 **다른 작업은 막히지 않습니다.** 9/10 도그푸딩에 요약이 없어도 데이터는 쌓입니다.
 
 - 요청자: AI

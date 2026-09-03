@@ -1,8 +1,10 @@
 # API 계약서 — 감정 케어 보이스 저널
 
+> **수정 기록 (2026-09-03 ①, 백엔드)** — 백엔드가 받은 요청 4건(`hume-config-id.md`·`live-turn-signal.md`·`session-context-lookup.md`·`session-summary-endpoint.md`)에 회신하며 **v1.3으로 개정**. 주요 변경 — ① `sessionId` 형식을 `sess_`+짧은 문자열에서 **UUIDv4(접두사 없음)로 교체**(전 예시 일괄 반영, CLM 인증에 쓰이므로 엔트로피 확보) ② `POST /api/session/start`·`resume` 응답에 **`humeConfigId`**(기동 시 fail-fast, null 불가)·**`livePollIntervalSec`** 추가 ③ **§2-13 `GET /api/session/{id}/live` 신설**(폴링, 비데모 계정은 `turns: []`) ④ **§3-4 `GET /internal/sessions/{id}` 신설**(CLM 인증 겸용, 캐시 미스 시 fail-closed) ⑤ **§3-5 `POST /internal/summaries` 신설**(동기 3초, `endReason: timeout`은 미호출) ⑥ §3-2 `/internal/turns` 재시도 1회 → **3회**(전 세션 동일 정책) ⑦ §4 CLM 인증을 `custom_session_id` 검증으로 확정. 상세 결정 근거는 각 요청 문서의 회신(`response/app/`·`response/ai/`) 참조. **이 이후 수정은 이 배너에 번호를 이어 붙인다 (②③…).**
+
 | 항목 | 내용 |
 | --- | --- |
-| 문서 버전 | v1.2 |
+| 문서 버전 | v1.3 |
 | 작성일 | 2026. 09. 03. |
 | 상위 문서 | [prd.md](../00-context/prd.md) · [spec.md](../00-context/spec.md) · AI 내부 설계 [ai-pipeline.md](ai-pipeline.md) |
 | 범위 | ① 앱 ↔ 백엔드 ② AI서버 ↔ 백엔드(내부) ③ Hume ↔ AI서버(외부·변경 불가) |
@@ -27,6 +29,7 @@
 | 시각 | **저장·전송은 UTC ISO 8601** (`2026-09-18T12:34:56Z`) |
 | 일자 집계 | **KST(Asia/Seoul) 기준** — 사용자가 체감하는 "하루"가 기준이어야 트렌드가 맞다 |
 | 소수 | valence·gap·ratio는 **소수 2자리 반올림**해서 응답한다 |
+| `sessionId` | **UUIDv4, 접두사 없음** (예: `550e8400-e29b-41d4-a716-446655440000`). §4 CLM 인증에 `custom_session_id`로 쓰이는 값이라 **로그에 남기지 않는다** — 비밀과 동급으로 취급 |
 
 ## 1-2. 오류 응답
 
@@ -126,7 +129,7 @@
   "thresholdMode": "personal",
   "demoMode": false,
   "openSession": {
-    "sessionId": "sess_9c1d4e",
+    "sessionId": "550e8400-e29b-41d4-a716-446655440000",
     "startedAt": "2026-09-18T12:30:00Z",
     "usedSec": 138,
     "remainingSec": 282,
@@ -162,13 +165,15 @@
 
 ```json
 {
-  "sessionId": "sess_9c1d4e",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
   "humeAccessToken": "hume_at_...",
   "humeTokenExpiresAt": "2026-09-18T12:44:56Z",
+  "humeConfigId": "cfg_8a12ff",
   "thresholdMode": "fixed",
   "gapThreshold": 0.85,
   "softWrapSec": 300,
   "hardCutSec": 420,
+  "livePollIntervalSec": 2,
   "demoMode": false
 }
 ```
@@ -176,9 +181,11 @@
 | 필드 | 설명 |
 | --- | --- |
 | `humeAccessToken` | **단기 토큰.** Hume API 키는 절대 내려보내지 않는다 (spec TC-03) |
+| `humeConfigId` | **v1.3 신설.** EVI handshake의 `config_id` 쿼리에 그대로 전달한다(저장하지 않는다). Hume 콘솔 Config는 AI서버가 생성·소유하고 CLM 엔드포인트를 등록한다 — 백엔드는 환경변수로 전달만 한다. **null 불가** — 값은 백엔드 기동 시 환경변수에서 읽고, 없으면 서버가 기동하지 않는다(런타임 실패가 아니라 배포 설정 오류) |
 | `thresholdMode` | `"fixed"` (세션 5회 미만) / `"personal"` (5회 이상) |
 | `gapThreshold` | 이번 세션에 적용되는 실제 임계값. 앱은 표시하지 않고 **데모 모드에서만** 참고. **예시의 `0.85`는 확정값이 아니다** — 초기 수치는 20쌍 세트 측정 후 결정(PRD §14-5) |
 | `softWrapSec` · `hardCutSec` | 300 / 420 고정. **서버가 내려주는 값을 쓰고 앱에 상수로 박지 않는다** — 정책 변경 시 배포 없이 바꾸기 위함 |
+| `livePollIntervalSec` | **v1.3 신설.** §2-13 폴링 간격(초). `softWrapSec`과 같은 이유로 서버가 내려주고 앱은 상수로 박지 않는다 |
 
 | 오류 | 조건 |
 | --- | --- |
@@ -200,7 +207,7 @@
 
 ```json
 {
-  "sessionId": "sess_9c1d4e",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
   "durationSec": 214,
   "turnCount": 12,
   "summary": "회의가 많았던 하루에 대해 이야기했습니다.",
@@ -215,6 +222,7 @@
 
 > 종료 처리는 **패턴 분석 배치 큐 적재**(spec F7-01)를 포함한다. 배치는 비동기이므로 이 응답에 관찰이 포함되지 않는다.
 > **`summary`는 null일 수 있다**(생성 실패). 대화 기록 자체는 남는다.
+> **요약 생성 (v1.3)** — `endReason`이 `user_end`·`soft_wrap`·`hard_cut`이면 백엔드가 §3-5 `POST /internal/summaries`를 **동기 호출**(타임아웃 3초)해 `summary`를 채운다. 실패·타임아웃이면 `null`. **`endReason: "timeout"`(F2-06 스케줄러)은 이 호출을 하지 않고 항상 `summary: null`** — 미종료 세션을 여러 건 정리할 때 건당 3초씩 대기하지 않기 위함이며, 어차피 아무도 보고 있지 않은 세션이다.
 
 ## 2-5-1. `POST /api/session/{sessionId}/resume` — 중단 세션 이어하기 (P1)
 
@@ -224,9 +232,10 @@
 
 ```json
 {
-  "sessionId": "sess_9c1d4e",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
   "humeAccessToken": "hume_at_...",
   "humeTokenExpiresAt": "2026-09-18T13:05:00Z",
+  "humeConfigId": "cfg_8a12ff",
   "resumedChatGroupId": "cg_2b7f11",
   "remainingSec": 282,
   "thresholdMode": "fixed",
@@ -237,6 +246,7 @@
 
 | 필드 | 설명 |
 | --- | --- |
+| `humeConfigId` | **v1.3 신설.** §2-4와 동일 값 — 재연결도 같은 Config로 붙어야 CLM이 이어진다 |
 | `resumedChatGroupId` | 앱이 EVI 핸드셰이크의 `resumed_chat_group_id` 쿼리 파라미터로 넘긴다. **이전 대화 맥락이 복원된다** — [Resuming Chats](https://dev.hume.ai/docs/speech-to-speech-evi/features/resume-chats) |
 | `remainingSec` | `hardCutSec − usedSec`. **새 7분을 주지 않는다** — 이어하기로 원가 상한이 뚫리면 안 된다 (PRD NFR-06) |
 
@@ -298,7 +308,7 @@
   "turns": [
     {
       "turnId": "turn_0031",
-      "sessionId": "sess_9c1d4e",
+      "sessionId": "550e8400-e29b-41d4-a716-446655440000",
       "occurredAt": "2026-09-12T13:20:11Z",
       "transcript": "오늘 회의가 세 개나 있었는데 다 괜찮았어요",
       "textValence": 0.62,
@@ -372,7 +382,7 @@
   "total": 12,
   "sessions": [
     {
-      "sessionId": "sess_9c1d4e",
+      "sessionId": "550e8400-e29b-41d4-a716-446655440000",
       "startedAt": "2026-09-18T12:30:00Z",
       "durationSec": 214,
       "turnCount": 12,
@@ -392,7 +402,7 @@
 
 ```json
 {
-  "sessionId": "sess_9c1d4e",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
   "startedAt": "2026-09-18T12:30:00Z",
   "endedAt": "2026-09-18T12:33:34Z",
   "durationSec": 214,
@@ -437,7 +447,7 @@
 
 ```json
 {
-  "deletedSessionId": "sess_9c1d4e",
+  "deletedSessionId": "550e8400-e29b-41d4-a716-446655440000",
   "deletedTurnCount": 12,
   "removedObservationIds": ["obs_014"],
   "recalculatedObservationIds": ["obs_009"]
@@ -464,6 +474,37 @@
 
 DB 연결 확인을 포함한다. **Supabase 유휴 일시정지 방지용 주기 호출**에도 사용한다.
 
+## 2-13. `GET /api/session/{sessionId}/live` — 대화 중 턴 신호 (v1.3 신설)
+
+**S02 화면에서만 호출한다.** 대화 종료·화면 이탈 시 폴링을 멈춘다. 간격은 §2-4 `livePollIntervalSec`를 따른다.
+
+**쿼리**: `sinceTurnIndex` (마지막으로 받은 `turnIndex`. 생략 시 세션 시작부터)
+
+**응답 200**
+
+```json
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "lastTurnIndex": 7,
+  "crisisDetected": true,
+  "turns": [
+    { "turnIndex": 7, "textValence": 0.70, "voiceValence": -0.62, "gap": 1.32, "gapTriggered": true }
+  ]
+}
+```
+
+| 필드 | 규칙 |
+| --- | --- |
+| `crisisDetected` | **세션 단위 boolean.** turn 단위로 묶지 않는다 — `crisis_event`에 `turn_id`를 두지 않은 것과 같은 이유(§6-1). 앱은 `false → true` 전이에서 **한 번만** S07을 띄운다 |
+| `turns` | `demoMode == true`일 때만 채운다. **`demoMode == false`면 항상 `turns: []`** — `crisisDetected`는 이 경우에도 정상 값을 내려준다. §1-3의 `null`(측정 못함)과 뜻이 섞이지 않도록 **`null`로 마스킹하지 않는다** |
+| `transcript` | **포함하지 않는다.** 앱은 EVI에서 이미 텍스트를 받고 있어 불필요하고, 노출면만 늘어난다 |
+| 소스 | `/internal/turns`(§3-2)로 이미 받은 값을 그대로 되돌려준다 — 새 계산·새 저장 없음 |
+
+| 오류 | 조건 |
+| --- | --- |
+| 404 `SESSION_NOT_FOUND` | — |
+| 403 `FORBIDDEN` | 타 사용자 세션 |
+
 ---
 
 # 3. AI서버 → 백엔드 (내부)
@@ -483,7 +524,7 @@ DB 연결 확인을 포함한다. **Supabase 유휴 일시정지 방지용 주�
 
 ```json
 {
-  "sessionId": "sess_9c1d4e",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
   "turnIndex": 3,
   "role": "user",
   "occurredAt": "2026-09-18T12:31:02Z",
@@ -512,7 +553,7 @@ DB 연결 확인을 포함한다. **Supabase 유휴 일시정지 방지용 주�
 | 오류 | AI서버 동작 |
 | --- | --- |
 | 4xx | 재시도하지 않는다. `ops_error_log` 적재 후 진행 |
-| 5xx · 타임아웃 | **1회만 재시도** 후 포기 |
+| 5xx · 타임아웃 | **3회 재시도**(백오프) 후 포기 — v1.3, 기존 1회에서 상향. **모든 세션에 동일하게 적용**(데모 계정 전용 분기를 두지 않는다) |
 
 > **이 호출은 fire-and-forget이다.** 실패해도 대화 응답을 막지 않는다 (spec F5-04). 백엔드가 내려가 있어도 사용자는 대화를 계속할 수 있어야 한다.
 
@@ -543,6 +584,74 @@ DB 연결 확인을 포함한다. **Supabase 유휴 일시정지 방지용 주�
 | 입력 | **숫자와 태그만.** 원본 대화를 보내지 않는다 |
 | 출력 | 한 문장. **주어진 숫자를 바꾸거나 없는 사실을 추가하지 않는다** (PRD §9.3 조항 7) |
 | 실패 | 관찰을 생성하지 않는다. **템플릿 문장으로 대체하지 않는다** — 표현이 어색한 것보다 근거 없는 문장이 나가는 쪽이 위험하다 |
+
+## 3-4. `GET /internal/sessions/{sessionId}` — 세션 컨텍스트 조회 (v1.3 신설)
+
+AI서버 → 백엔드. **CLM 인증을 겸한다** — §4 참조.
+
+**요청**: 헤더 `X-Internal-Secret`
+
+**응답 200**
+
+```json
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "open",
+  "startedAt": "2026-09-18T12:30:00Z",
+  "usedSec": 0,
+  "thresholdMode": "fixed",
+  "gapThreshold": 0.85,
+  "softWrapSec": 300,
+  "hardCutSec": 420,
+  "demoMode": false,
+  "recentObservations": [
+    { "observationId": "obs_014", "tag": "회의", "sentence": "회의 얘기를 하실 때만 목소리가 유독 무거워지시네요." }
+  ]
+}
+```
+
+| 필드 | 규칙 |
+| --- | --- |
+| `status` | `"open"` \| `"ended"` |
+| `usedSec` | 이어하기(§2-5-1) 세션이면 이미 쓴 시간. `startedAt`과 함께 5분 마무리 유도(spec F2-03) 판단에 쓴다 |
+| `recentObservations` | 최근 3개. F8(P1, 관찰 근거 기반 제안)에서 사용 |
+| `transcript`류 | **포함하지 않는다** |
+
+| 오류 | 조건 |
+| --- | --- |
+| 404 | 없는 `sessionId` |
+| — | `status: "ended"`도 200으로 반환한다. **401로 바꾸는 것은 AI서버의 몫**이다(§4) |
+
+> **호출 빈도는 세션당 1회.** AI서버가 `hardCutSec + 30분` TTL로 캐시한다 — 실시간 경로(Hume → AI서버)에 매 턴 홉을 더하지 않기 위함이다.
+> **조회 실패(캐시 미스 + 5xx·타임아웃) 시 AI서버는 fail-closed로 401을 Hume에 돌려준다.** 백엔드가 죽어 있으면 `POST /api/session/start`도 죽어 있어 애초에 새 세션이 생기지 않으므로, fail-closed로 잃는 가용성이 없다. 이미 검증된 세션은 캐시가 지킨다.
+
+## 3-5. `POST /internal/summaries` — 세션 요약 생성 (v1.3 신설)
+
+백엔드 → AI서버. §2-5 참조 — `endReason`이 `timeout`이 아닐 때만, **동기 호출·타임아웃 3초**.
+
+**백엔드 → AI서버 요청**
+
+```json
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "turns": [
+    { "role": "user", "transcript": "오늘 회의가 세 개나 있었는데 다 괜찮았어요" },
+    { "role": "assistant", "transcript": "괜찮다고 하시는데 목소리는 좀 다르네요. 무슨 일 있으셨어요?" }
+  ]
+}
+```
+
+**AI서버 응답 200**
+
+```json
+{ "summary": "회의가 많았던 하루에 대해 이야기했습니다." }
+```
+
+| 규칙 | 내용 |
+| --- | --- |
+| 입력 | 턴 텍스트만. valence·갭·태그는 보내지 않는다 — 요약에 수치가 섞이면 S02-1이 갭을 노출하는 셈이 된다(FR-031 취지) |
+| 출력 | 한 문장, 존댓말, **감정 단정 없음**("힘든 하루였네요" 금지). 진단·조언 없음 |
+| 실패 | AI서버가 `422 SUMMARY_REJECTED`(사후 검사 실패) 또는 5xx. 백엔드는 **재시도하지 않고** `summary: null`로 §2-5 응답 |
 
 ---
 
@@ -577,7 +686,7 @@ DB 연결 확인을 포함한다. **Supabase 유휴 일시정지 방지용 주�
 **응답 예시**
 
 ```
-data: {"choices":[{"delta":{"content":"괜찮다고 하시는데 "}}],"system_fingerprint":"sess_9c1d4e"}
+data: {"choices":[{"delta":{"content":"괜찮다고 하시는데 "}}],"system_fingerprint":"550e8400-e29b-41d4-a716-446655440000"}
 
 data: {"choices":[{"delta":{"content":"목소리는 좀 다르네요. 무슨 일 있으셨어요?"}}]}
 
@@ -585,7 +694,7 @@ data: [DONE]
 ```
 
 > **이 스트림에는 대화 텍스트만 실린다.** 텍스트 valence·태그·위기 판정은 응답 호출과 분리된 분석 호출에서 나오므로(spec F3-02, v1.2), 스트림에 메타 태그·JSON이 섞일 경로 자체가 없다. 섞여 나오면 즉시 결함이다 — 사용자에게 음성으로 읽힌다.
-> **CLM 인증**: `language_model_api_key`는 앱이 `session_settings`로 보내야 해서 웹 번들에 노출된다. AI서버는 대신 `custom_session_id`를 백엔드 세션 조회로 검증한다 — `request/backend/session-context-lookup.md` (회신 대기, 확정 시 이 절에 반영).
+> **CLM 인증 (v1.3 확정)**: `language_model_api_key`는 앱이 `session_settings`로 보내야 해서 웹 번들에 노출된다 — **미사용.** 대신 AI서버가 §3-4 `GET /internal/sessions/{sessionId}`로 `custom_session_id`를 검증한다. 모르는 ID·`ended` 상태·조회 실패(캐시 미스 시)는 전부 **AI서버가 Hume에 401**을 돌려준다. 세션당 1회 조회 후 `hardCutSec + 30분` TTL로 캐시한다.
 
 출처: [Hume Custom Language Model 가이드](https://dev.hume.ai/docs/speech-to-speech-evi/guides/custom-language-model)
 
@@ -597,7 +706,7 @@ data: [DONE]
 | --- | --- |
 | S00 진입·로그인 | `POST /api/auth/kakao` |
 | S01 홈 | `GET /api/me`(`openSession` 포함), `GET /api/observations?limit=3` |
-| S02 대화 | `POST /api/session/start` **또는** `POST /api/session/{id}/resume` → (Hume 직접 연결) → `POST /api/session/{id}/end` |
+| S02 대화 | `POST /api/session/start` **또는** `POST /api/session/{id}/resume` → (Hume 직접 연결) → **`GET /api/session/{id}/live` 폴링(§2-13, v1.3)** → `POST /api/session/{id}/end` |
 | S02-1 종료 요약 | 2-5 응답 재사용 (추가 호출 없음) |
 | S03 발견 | `GET /api/observations`, `POST /api/observations/{id}/feedback` |
 | S03-1 관찰 근거 | `GET /api/observations/{id}/evidence` |
@@ -605,7 +714,7 @@ data: [DONE]
 | S05 기록 | `GET /api/sessions` |
 | S05-1 대화 상세 | `GET /api/sessions/{id}`, `DELETE /api/sessions/{id}` |
 | S06 설정 | `GET /api/me`, `DELETE /api/account` |
-| S07 위기 안내 | 없음 — 앱 로컬 표시. 적재는 AI서버가 `/internal/turns`의 `crisis`로 처리 |
+| S07 위기 안내 | **`GET /api/session/{id}/live`의 `crisisDetected`(§2-13, v1.3)** — `false → true` 전이에서 1회 표시. 적재는 AI서버가 `/internal/turns`의 `crisis`로 처리 |
 
 ---
 
@@ -625,3 +734,4 @@ data: [DONE]
 | v1.0 | 2026-09-03 | 최초 작성. PRD §8·spec 기준으로 12개 공개 엔드포인트 + 2개 내부 엔드포인트 확정 |
 | v1.1 | 2026-09-03 | 문서 교차 검증 반영 — ① `POST /api/session/{id}/resume` 신설(중단 세션 이어하기) ② `POST /api/observations/{id}/feedback` 신설(측정 절차가 없던 §1.4 "맞아요" 지표를 실제로 수집 가능하게) ③ `GET /api/me`에 `openSession` 추가 ④ `endReason`에 `timeout`·`resumed` 추가 ⑤ 409 `SESSION_NOT_RESUMABLE` 추가 ⑥ JWT 만료 7일 명시 ⑦ `gapThreshold` 예시값 표기 |
 | v1.2 | 2026-09-03 | AI 파이프라인 개정 반영(`request/ai/clm-turn-pipeline-review.md` 회신) — ① §1-3 `textValence` null 사유를 "분석 호출 실패·타임아웃"으로 ② §4 마지막 경고를 "메타 태그 없음"으로, CLM 인증 방향 각주 ③ 상위 문서에 `ai-pipeline.md` 추가 ④ §1-3 `voiceValence` null 사유에 합계 질량 부족(중립만 찍힌 발화) 추가. **필드 변경 없음.** 계약 공백 2건은 별도 요청(`request/backend/session-context-lookup.md`, `session-summary-endpoint.md`)으로 다음 버전에서 |
+| **v1.3** | **2026-09-03** | 백엔드가 받은 요청 4건 회신 — ① `sessionId`를 `sess_`+짧은 문자열에서 **UUIDv4(접두사 없음)로 교체**(전 예시 반영, §1-1에 로깅 금지 규칙 추가) ② §2-4·§2-5-1에 **`humeConfigId`**(null 불가, 기동 시 fail-fast) 추가 — `hume-config-id.md` ③ §2-4에 **`livePollIntervalSec`** 추가, **§2-13 `GET /api/session/{id}/live` 신설**(비데모는 `turns: []`, `crisisDetected`는 세션 단위) — `live-turn-signal.md` ④ **§3-4 `GET /internal/sessions/{id}` 신설**(CLM 인증 겸용, 캐시 미스 시 fail-closed 401), §4 CLM 인증을 `custom_session_id` 검증으로 확정 — `session-context-lookup.md` ⑤ **§3-5 `POST /internal/summaries` 신설**(동기 3초, `endReason: timeout`은 미호출), §2-5에 각주 — `session-summary-endpoint.md` ⑥ §3-2 `/internal/turns` 재시도 1회 → **3회**(전 세션 동일) ⑦ §5 S02·S07 행 갱신 |

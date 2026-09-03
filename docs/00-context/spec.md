@@ -1,8 +1,10 @@
 # 기능 명세서 — 감정 케어 보이스 저널
 
+> **수정 기록 (2026-09-03 ①, 백엔드)** — api-contract v1.3(백엔드가 받은 요청 4건 회신) 반영. **F2-01**(`sessionId` UUID·`humeConfigId`·`livePollIntervalSec` 출력 추가) · **F2-03**(AI서버가 세션 컨텍스트로 경과 판단) · **F2-05**(요약 동기 생성, `timeout`은 미생성) · **F4-04**(앱이 `live` 폴링으로 감지 확인) · **F5-04**(재시도 1회→3회) · **F11-01**(비데모 계정은 `turns: []`) 개정, **§10 TC-26·TC-27 신설**, §9 추적 매트릭스 2곳 갱신. 이 이후 수정은 이 배너에 번호를 이어 붙인다(②③…).
+
 | 항목 | 내용 |
 | --- | --- |
-| 문서 버전 | v1.0 |
+| 문서 버전 | v1.1 |
 | 작성일 | 2026. 09. 03. |
 | 상위 문서 | [prd.md](prd.md) |
 | 서비스 | 감정 케어 보이스 저널 |
@@ -254,8 +256,8 @@
 | 설명 | 대화 시작 시 세션 레코드를 만들고 **Hume 단기 액세스 토큰**을 발급한다 |
 | 트리거 | S01 홈에서 `[오늘 이야기하기]` |
 | 입력 | JWT |
-| 처리 | ① `voice_session` 생성 ② `user_baseline.session_count` 조회 → **임계 모드 결정(F3-04)** ③ Hume 액세스 토큰 발급 ④ 반환 |
-| 출력 | `{ sessionId, humeAccessToken, humeTokenExpiresAt, thresholdMode, gapThreshold, softWrapSec, hardCutSec, demoMode }` — 전체 스키마는 [api-contract.md](../02-architecture/api-contract.md) §2-4 |
+| 처리 | ① `voice_session` 생성, `sessionId`는 **UUIDv4**(v1.3 — CLM 인증에 쓰이므로 128비트 미만 형식 금지) ② `user_baseline.session_count` 조회 → **임계 모드 결정(F3-04)** ③ Hume 액세스 토큰·`humeConfigId`(환경변수, AI서버가 소유) 확인 ④ 반환 |
+| 출력 | `{ sessionId, humeAccessToken, humeTokenExpiresAt, humeConfigId, thresholdMode, gapThreshold, softWrapSec, hardCutSec, livePollIntervalSec, demoMode }` — 전체 스키마는 [api-contract.md](../02-architecture/api-contract.md) §2-4 (v1.3) |
 | 예외 | Hume 토큰 발급 실패 → 대화 시작 차단 + 원인 안내 |
 | 수용 기준 | **Hume API 키가 앱 번들·네트워크 응답 어디에도 노출되지 않는다** |
 | 연관 | F2-02, F3-04, F11-01 |
@@ -278,7 +280,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 5분에 마무리를 유도하고 7분에 자동 종료한다 |
-| 처리 | ① 경과 5분 → AI 프롬프트에 **마무리 유도 지시** 주입 (예: "오늘은 여기까지 정리해볼까요?") ② 경과 7분 → 앱이 연결 종료 후 S02-1로 이동 |
+| 처리 | ① 경과 5분 → AI 프롬프트에 **마무리 유도 지시** 주입 (예: "오늘은 여기까지 정리해볼까요?") — **AI서버가 `GET /internal/sessions/{id}`(v1.3)로 받은 `startedAt`·`softWrapSec`로 경과를 판단**한다(Hume `messages[].time`은 이어하기로 chat group이 이어지면 기준점이 흔들려 쓰지 않는다) ② 경과 7분 → 앱이 연결 종료 후 S02-1로 이동 |
 | 출력 | 종료 사유 `soft_wrap` / `hard_cut` / `user_end` |
 | 예외 | 하드 컷 직전 사용자가 발화 중이면 **해당 발화가 끝난 뒤** 종료한다. 말하는 중간에 자르지 않는다 |
 | 수용 기준 | 7분 초과 세션이 생성되지 않는다. 세션당 원가 상한 $0.49가 지켜진다 |
@@ -301,9 +303,9 @@
 | --- | --- |
 | 설명 | 세션 종료 시 대화를 한 줄로 정리해 보여주고, 배치 큐에 적재한다 |
 | 트리거 | 사용자 종료 / 소프트 마무리 후 종료 / 하드 컷 |
-| 처리 | ① `POST /api/session/{id}/end` ② `voice_session` 종료 시각·길이 기록 ③ **F7-01 배치 큐 적재** ④ 요약 문장 생성 |
+| 처리 | ① `POST /api/session/{id}/end` ② `voice_session` 종료 시각·길이 기록 ③ **F7-01 배치 큐 적재** ④ 요약 문장 생성 — **`endReason`이 `user_end`·`soft_wrap`·`hard_cut`이면 AI서버 `POST /internal/summaries`(v1.3)를 동기 호출(타임아웃 3초), `timeout`(F2-06)이면 호출하지 않는다**(정리 건당 대기 없음, 아무도 보고 있지 않은 세션) |
 | 출력 | `{ sessionId, durationSec, turnCount, summary, gapAvg }` — 전체 스키마는 [api-contract.md](../02-architecture/api-contract.md) §2-5 |
-| 예외 | 요약 생성 실패 → `summary: null`로 종료. 대화 기록은 남는다 |
+| 예외 | 요약 생성 실패·타임아웃·`timeout` 종료 → `summary: null`로 종료. 대화 기록은 남는다 |
 | 수용 기준 | 종료 후 S02-1에 요약이 표시되고, 해당 세션이 S05 목록에 나타난다 |
 | 연관 | F2-06, F7-01, F9-04 |
 
@@ -445,7 +447,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 위기 감지 시 대화 톤을 전환하고 자살예방 상담전화 **109**를 안내한다 |
-| 처리 | ① AI가 톤 전환 ② S07 안내 시트 표시 ③ `crisis_event` 적재(발화 내용 미포함) |
+| 처리 | ① AI가 톤 전환 ② **앱이 `GET /api/session/{id}/live`(v1.3) 폴링으로 `crisisDetected: false → true` 전이를 확인해** S07 안내 시트를 1회 표시 ③ `crisis_event` 적재(발화 내용 미포함) |
 | 금지 | **서비스 중단·대화 차단·강제 종료를 하지 않는다.** 가장 필요한 순간에 사용자를 버리는 설계가 되기 때문 |
 | 수용 기준 | 감지 후에도 대화가 계속 이어진다 |
 | 출처 | 109는 2024-01-01부터 통합 운영되는 24시간 번호 — [보건복지부](https://www.mohw.go.kr/board.es?mid=a10503010100&bid=0027&act=view&list_no=1479607), [보건복지상담센터](https://www.129.go.kr/109) |
@@ -514,7 +516,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 로그 적재 실패가 대화를 막지 않는다 |
-| 처리 | 재시도 1회 후 포기. `ops_error_log` 적재 |
+| 처리 | **재시도 3회**(백오프) 후 포기(v1.3, 기존 1회에서 상향 — 데모 계정 전용 분기 없이 전 세션 동일). `ops_error_log` 적재 |
 | 수용 기준 | 백엔드가 내려가 있어도 대화는 정상 진행된다 |
 
 ---
@@ -757,9 +759,9 @@
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 대화 화면에 실시간 갭·valence를 노출한다 |
-| 처리 | 계정 단위 플래그. `POST /api/session/start` 응답의 `demoMode`로 앱에 전달 |
+| 처리 | 계정 단위 플래그. `POST /api/session/start` 응답의 `demoMode`로 앱에 전달. **수치는 `GET /api/session/{id}/live`(v1.3, §2-13)로 도달** — `demoMode == true`일 때만 `turns[]`가 채워지고, `false`면 항상 빈 배열(마스킹에 `null`을 쓰지 않는다 — §1-3 null 규칙과 충돌 방지) |
 | 표시 | 텍스트 valence / 음성 valence / 갭 / 트리거 여부 |
-| 수용 기준 | 일반 사용자 화면에는 노출되지 않는다 |
+| 수용 기준 | 일반 사용자 화면에는 노출되지 않는다. **서버 응답 단계에서도** `demoMode == false` 계정의 `turns`는 항상 빈 배열이다(TC-26) |
 | 근거 | PRD FR-090 · 대화 중 수치 노출은 실사용 경험을 해치지만 심사장에서는 필요하다. 플래그로 분리해 둘 다 만족 |
 
 ### F11-02 헬스체크
@@ -1002,7 +1004,7 @@
 | FR-022 | F3-03 | **TC-04** | PRD §1.4 핵심 지표 |
 | FR-023 | F3-04, F3-05 | TC-07 | — |
 | FR-030 · 031 | F4-01, F11-01 | TC-04, TC-14 | — |
-| FR-032~034 | F4-02~04 | **TC-08, TC-09** | [보건복지부 109](https://www.mohw.go.kr/board.es?mid=a10503010100&bid=0027&act=view&list_no=1479607) |
+| FR-032~034 | F4-02~04 | **TC-08, TC-09, TC-27** | [보건복지부 109](https://www.mohw.go.kr/board.es?mid=a10503010100&bid=0027&act=view&list_no=1479607) |
 | **FR-036** | **F4-06** | TC-08 | 갭 보조 가중치 (P1) |
 | FR-035 | F4-05, F8-03 | TC-10 | PRD §10 규제 리스크 |
 | FR-040~042 | F5-01~04 | TC-11 | — |
@@ -1014,7 +1016,7 @@
 | FR-070~073 | F9-01~05 | TC-18 | — |
 | FR-080·081 | F10-01, F10-02 | **TC-19** | — |
 | FR-082 | F10-04, F1-05 | 수동 확인 | — |
-| FR-090~093 | F11-01~04 | TC-14, TC-20 | — |
+| FR-090~093 | F11-01~04 | TC-14, TC-20, **TC-26** | — |
 | NFR-01 | F2-02, F3-02 | TC-12 | — |
 | NFR-02 | 데모 폴백 영상 | 리허설 | PRD §13 |
 | **NFR-03** | F3-01 (프로소디는 언어 비의존) | 데모 5장면 | PRD §13 확장성 시연 |
@@ -1053,6 +1055,8 @@
 | TC-23 | 관찰 카드 `아니에요` 선택 | 표시만 남고 **관찰·evidence는 유지됨** |
 | TC-24 | 분석·응답 LLM 요청 payload 검사 | `prosody` 원본 **0건** (FR-025) |
 | TC-25 | 갭 트리거 턴 | 되묻기가 **같은 턴** 응답에 포함됨 (한 턴 늦지 않음) |
+| **TC-26** | `demoMode == false` 계정에서 `GET /api/session/{id}/live` 호출 | `turns` **빈 배열.** `crisisDetected`는 정상 값 (v1.3) |
+| **TC-27** | 위기 감지 후 `GET /api/session/{id}/live` 연속 폴링 | S07 안내 시트가 `false → true` 전이에서 **1회만** 표시됨 (v1.3) |
 
 ---
 

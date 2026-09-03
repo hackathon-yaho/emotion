@@ -8,3 +8,7 @@
 - **로그·오류·`crisis_event`에 발화 내용을 남기지 않는다** (FR-092)
 
 이 폴더에 대한 요청은 `../docs/request/backend/`, 백엔드가 보낸 요청의 회신은 `../docs/response/backend/`.
+
+## 작업 시작 전
+
+**[`docs/README.md`](docs/README.md)를 먼저 읽으세요.** Phase별 실행 계획, API 구현 현황(`docs/api-spec.md`), 결정 로그, 회신 대기 현황이 있습니다.
