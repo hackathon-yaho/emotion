@@ -23,7 +23,7 @@ flutter run -d chrome
 
 ## 팀원이 웹으로 보는 방법
 
-**세 가지 중 하나입니다.** 아직 URL이 없으므로 지금은 ①만 가능합니다.
+**배포돼 있습니다 — https://hackathon-yaho.github.io/emotion/ 를 열면 됩니다.** Flutter가 없어도 보입니다. 아래는 그 외 방법입니다.
 
 ### ① 로컬 실행 (Flutter가 있는 사람)
 
@@ -42,17 +42,35 @@ flutter run -d chrome
 flutter run -d chrome --dart-define=API_BASE_URL=https://api.example.com
 ```
 
-### ② GitHub Pages (URL 하나로 보기) — 설정 한 번 필요
+### ② GitHub Pages — 이미 켜져 있습니다
 
-[`.github/workflows/app-web.yml`](../.github/workflows/app-web.yml)이 `app/` 변경 시 자동으로 빌드·배포합니다. `analyze`·`test`·`build`가 다 통과해야 배포됩니다.
+주소는 `https://hackathon-yaho.github.io/emotion/`이고, **제출용 링크도 이 주소를 그대로 씁니다.**
 
-**켜는 방법**: 저장소 **Settings → Pages → Source를 "GitHub Actions"로** 바꾸면 끝입니다. 주소는 `https://hackathon-yaho.github.io/emotion/`.
-
-> **이 저장소는 비공개입니다.** 비공개 저장소의 Pages는 **유료 플랜에서만** 동작합니다. 무료 플랜이면 ③을 쓰세요.
+[`.github/workflows/app-web.yml`](../.github/workflows/app-web.yml)이 `app/` 변경 시 자동으로 빌드·배포합니다. `analyze`·`test`·`build`가 다 통과해야 배포되므로, **셋 중 하나라도 깨지면 배포가 멈춥니다.**
 
 ### ③ 정적 호스팅 (Vercel 등)
 
-`flutter build web --release`의 `build/web`을 올리면 됩니다. 계정 연결이 필요해 앱 담당이 직접 합니다. 제출용 도메인은 제품 이름이 정해진 뒤에 붙입니다 (PRD §14-6).
+`flutter build web --release`의 `build/web`을 올리면 됩니다. **지금은 필요 없습니다** — Pages로 충분하고, 제출도 그 주소로 합니다. 커스텀 도메인은 제품 이름이 정해진 뒤에 붙입니다 (PRD §14-6).
+
+## 백엔드에 붙이기 (CORS 정리됨, 2026-09-04)
+
+`docs/response/app/cors-origin.md`로 정리된 것들입니다. **앱이 지킬 게 셋 있습니다.**
+
+| 항목 | 값 | 앱이 할 일 |
+| --- | --- | --- |
+| 허용 오리진 | `https://hackathon-yaho.github.io` · `http://localhost:*` | **로컬 포트를 고정하지 않습니다.** 와일드카드로 열려 있어 `--web-port`가 필요 없습니다 |
+| 프리플라이트 | `OPTIONS`는 인증 없이 통과 | 없음. 백엔드가 JWT 필터 예외에 넣었습니다 |
+| 자격증명 | **쓰지 않습니다** | **`withCredentials`를 켜지 않습니다** — 와일드카드 오리진과 함께 쓸 수 없습니다. 인증은 `Authorization` 헤더 하나입니다 |
+
+백엔드 주소는 빌드 인자로 줍니다. 터널 URL도 같은 방법입니다.
+
+```bash
+flutter run -d chrome --dart-define=API_BASE_URL=https://<터널>.ngrok.app
+```
+
+**CORS로 막히면 앱에는 그냥 네트워크 오류로 보입니다.** 배포 URL에서 모든 호출이 한꺼번에 실패하면 오프라인이 아니라 허용 오리진 목록(백엔드 환경변수 `CORS_ALLOWED_ORIGINS`)을 먼저 의심합니다 — `core/network/api_client.dart` 주석에 같은 메모를 남겨 뒀습니다.
+
+**Hume EVI는 CORS와 무관하지만 순서상 뒤입니다.** 앱이 `wss://api.hume.ai`로 직접 붙긴 하는데, 그 연결에 쓰는 단기 토큰을 `POST /api/session/start`로 받아야 하므로 **CORS가 막히면 EVI도 시작하지 못합니다.**
 
 ## 구조
 
@@ -104,9 +122,9 @@ lib/
 | --- | --- |
 | ~~`HUME_CONFIG_ID`~~ | ✅ 해결 — 계약 v1.3 §2-4의 `humeConfigId`로 옵니다. 백엔드가 기동 시 fail-fast로 검증하므로 **null이 될 수 없고 앱은 폴백을 두지 않습니다** |
 | ~~S07 트리거~~ | ✅ 해결 — 계약 v1.3 §2-13 `GET /api/session/{id}/live` 폴링. 간격은 `livePollIntervalSec`(기본 2초)를 따릅니다 |
-| F9-03 이야기별 갭 | 출력이 계약 어디에도 없습니다 — [`tag-gap-endpoint.md`](../docs/request/backend/tag-gap-endpoint.md) (⏳). S04의 두 선 그래프는 영향 없습니다 |
+| ~~F9-03 이야기별 갭~~ | ✅ 해결 — 계약 **v1.4** §2-8에서 `GET /api/trend`가 `tagGaps`·`userAvgGap`을 함께 줍니다(상위 7개, 3회 미만은 서버가 걸러냄, `range` 종속). **아직 앱 코드에 반영하지 않았습니다** |
 | 산세리프 서체 | 문서상 Pretendard지만 Google Fonts에 없어 **Noto Sans KR로 대체** 중입니다(캔버스와 동일). `fonts/`에 넣고 `pubspec.yaml`의 fonts 항목을 켠 뒤 `AppType.sans`만 바꾸면 전 화면에 적용됩니다 |
-| 제품 이름 | 미확정(PRD §14-6). Dart 패키지명 `voice_journal`, 번들 ID `com.hackathonyaho.voiceJournal`은 임시입니다. 확정되면 `main.dart`의 `title`과 `web/index.html`·`manifest.json`을 함께 고칩니다 |
+| 제품 이름 | 미확정(PRD §14-6). Dart 패키지명 `voice_journal`, 번들 ID `com.hackathonyaho.voiceJournal`은 임시입니다. 확정되면 `main.dart`의 `title`과 `web/index.html`·`manifest.json`을 함께 고칩니다. **커스텀 도메인이 정해지면 백엔드에 알립니다** — 허용 오리진이 환경변수 한 줄이라 재배포 없이 들어갑니다 |
 | 데이터 연결 | 화면은 `core/fixtures/sample_data.dart`의 **샘플로 그립니다.** API가 붙으면 프로바이더로 바꿉니다 — 샘플은 발표 근거로 쓰지 않습니다(PRD §12) |
 | EVI 음성 | `web_socket_channel`·`record`·`audioplayers`를 넣어두었고 서비스는 아직 없습니다. 다음 작업입니다 |
 

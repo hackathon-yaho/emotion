@@ -5,6 +5,18 @@ import '../storage/token_storage.dart';
 import 'api_exception.dart';
 
 /// 앱 ↔ 백엔드 클라이언트. 계약서 §2.
+///
+/// **웹에서 자격증명(쿠키)을 켜지 않는다** — `docs/response/app/cors-origin.md`.
+/// 백엔드는 로컬 개발용으로 `http://localhost:*` 와일드카드 오리진을 열어
+/// 두었고, `Access-Control-Allow-Credentials`는 와일드카드와 **함께 쓸 수
+/// 없다.** dio의 브라우저 어댑터는 기본이 `withCredentials = false`이므로
+/// 지금은 맞다 — 켜는 순간 로컬 개발이 전부 CORS로 막힌다. 인증은 쿠키가
+/// 아니라 아래 `Authorization` 헤더 하나로 한다.
+///
+/// **CORS 차단은 브라우저에서 그냥 네트워크 오류로 보인다.** 배포 URL에서
+/// 모든 호출이 한꺼번에 [ApiException.network]로 떨어지면 오프라인이 아니라
+/// **허용 오리진 목록**을 먼저 의심한다 (백엔드 환경변수
+/// `CORS_ALLOWED_ORIGINS`). 앱 코드로는 둘을 구분할 방법이 없다.
 class ApiClient {
   ApiClient({required this.tokens, Dio? dio}) : _dio = dio ?? Dio() {
     _dio.options
