@@ -15,6 +15,10 @@ spring:
     # 스키마는 db/migration.sql이 단일 출처다 (data-model.md). JPA가 만들지 않는다.
     hibernate:
       ddl-auto: none
+    # 응답을 직렬화하는 동안까지 커넥션을 쥐고 있지 않는다. 서비스가 트랜잭션 안에서
+    # DTO를 다 만들어 내보내므로 지연 로딩에 기대는 곳이 없다.
+    # Supabase Session pooler는 커넥션이 넉넉하지 않아 쥐는 시간이 곧 상한이 된다.
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
