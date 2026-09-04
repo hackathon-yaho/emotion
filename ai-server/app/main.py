@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator
 
@@ -23,13 +24,21 @@ from .clm import sse
 from .clm.request import ChatRequest
 from .config import settings
 from .llm import analyze as analyze_call
+from .llm import client as llm_client
 from .llm import batch as batch_call
 from .llm import respond as respond_call
 from .rules import crisis, gap as gap_rules, tags as tag_rules, valence
 from .session import SessionStore, SessionUnauthorized
-from .telemetry import configure, error_log, session_ref, turn_log
+from .telemetry import configure, error_log, log, session_ref, turn_log
 
-app = FastAPI(title="emotion ai-server", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await _warmup()
+    yield
+
+
+app = FastAPI(title="emotion ai-server", version="0.1.0", lifespan=lifespan)
 
 _cfg = settings()
 configure(_cfg.ai_log_level)
@@ -65,6 +74,43 @@ def _require_internal(secret: str | None) -> None:
         raise HTTPException(status_code=401, detail={"code": "INTERNAL_AUTH_FAILED"})
 
 
+async def _warmup() -> None:
+    """모델을 한 번씩 깨운다.
+
+    콜드 스타트가 **20초를 넘는다**(실측 2026-09-05). 그 상태로 첫 턴을 맞으면
+    분석은 타임아웃되고 응답은 지연 예산을 통째로 날린다. 사용자가 처음 말을 거는
+    순간이 가장 느리면 안 된다.
+
+    실패해도 무시한다 — 워밍업은 편의이지 기동 조건이 아니다.
+    """
+    if not _cfg.ai_warmup_on_start or not _cfg.google_api_key:
+        return
+
+    async def one(model: str) -> None:
+        try:
+            await llm_client.create(
+                [{"role": "user", "content": "hi"}],
+                llm_client.build_kwargs(model=model, max_tokens=8),
+                _cfg.google_api_key,
+                _cfg.ai_llm_base_url,
+            )
+            log("llm_warmed", model=model)
+        except Exception:
+            error_log("llm_warmup_failed", model=model)
+
+    models = {
+        _cfg.ai_model_analyze,
+        _cfg.ai_model_respond,
+        _cfg.ai_model_observe,
+        _cfg.ai_model_summary,
+    }
+
+    async def all_of_them() -> None:
+        await asyncio.gather(*(one(m) for m in models), return_exceptions=True)
+
+    _spawn(all_of_them())
+
+
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
@@ -81,8 +127,14 @@ async def chat_completions(
     if not custom_session_id:
         raise HTTPException(status_code=401, detail="missing custom_session_id")
 
-    raw = await request.json()
-    body = ChatRequest.model_validate(raw)
+    # 본문이 깨져 있으면 400으로 끝낸다. 500으로 두면 우리 서버 장애처럼 보이고,
+    # 실제 장애와 섞여서 로그를 읽을 수 없게 된다.
+    try:
+        raw = await request.json()
+        body = ChatRequest.model_validate(raw)
+    except (UnicodeDecodeError, ValueError) as exc:
+        error_log("clm_bad_body", sessionRef=session_ref(custom_session_id))
+        raise HTTPException(status_code=400, detail="malformed body") from exc
     transcript = body.transcript()
     prosody = body.prosody()
 

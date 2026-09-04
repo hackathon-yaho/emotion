@@ -86,11 +86,21 @@ def build_kwargs(
     return kwargs
 
 
-def _offending_param(message: str) -> str | None:
+def _offending_param(message: str, kwargs: dict[str, Any]) -> str | None:
+    """400 메시지에서 문제 파라미터를 찾는다.
+
+    **메시지가 이름을 알려주지 않는 경우가 있다.** Gemini는 `reasoning_effort`를
+    안 받는 모델에서도 "Request contains an invalid argument."만 준다(실측).
+    그때는 벤더마다 가장 많이 갈리는 것부터 순서대로 의심한다.
+    """
     lowered = message.lower()
     for name in _TUNABLE:
         if name in lowered:
             return name
+    # 이름을 못 찾았을 때 아무거나 빼면 원인이 가려진다. **reasoning_effort 하나만**
+    # 의심한다 — 벤더마다 지원이 가장 많이 갈리고, 빼도 결과가 달라지지 않는다.
+    if "reasoning_effort" in kwargs:
+        return "reasoning_effort"
     return None
 
 
@@ -100,7 +110,7 @@ def learn_unsupported(exc: BadRequestError, kwargs: dict[str, Any]) -> dict[str,
     모델 라인업이 바뀌어도 서버가 죽지 않게 하려는 장치다. 어떤 파라미터가 거부됐는지만
     로그에 남기고, 요청 본문은 남기지 않는다.
     """
-    name = _offending_param(str(exc))
+    name = _offending_param(str(exc), kwargs)
     if name is None or name not in kwargs:
         return None
     _unsupported.add(name)

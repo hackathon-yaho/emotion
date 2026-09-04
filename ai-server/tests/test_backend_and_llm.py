@@ -171,13 +171,26 @@ def test_base_url이_없으면_기본값을_쓴다():
 
 
 def test_모르는_400은_그대로_올린다():
-    """아무 파라미터나 빼면 원인을 못 찾는다."""
+    """아무 파라미터나 빼면 원인이 가려진다."""
     from openai import BadRequestError
 
     kwargs = llm.build_kwargs(model="m", max_tokens=300)
     exc = BadRequestError.__new__(BadRequestError)
     Exception.__init__(exc, "insufficient_quota")
     assert llm.learn_unsupported(exc, kwargs) is None
+
+
+def test_이름을_안_알려주는_400은_effort부터_의심한다():
+    """Gemini는 reasoning_effort를 안 받는 모델에서도 'invalid argument'만 준다(실측)."""
+    from openai import BadRequestError
+
+    kwargs = llm.build_kwargs(model="m", max_tokens=300, effort="none")
+    exc = BadRequestError.__new__(BadRequestError)
+    Exception.__init__(exc, "Request contains an invalid argument.")
+    retry = llm.learn_unsupported(exc, kwargs)
+    assert retry is not None and "reasoning_effort" not in retry
+    assert retry["max_completion_tokens"] == 300
+    llm._unsupported.discard("reasoning_effort")
 
 
 # ── 분석 결과 파싱 (§2.3) ─────────────────────────────────────────

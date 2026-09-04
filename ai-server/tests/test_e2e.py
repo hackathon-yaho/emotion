@@ -162,6 +162,32 @@ def test_백엔드가_턴_적재에_실패해도_대화는_끝난다():
     assert events(r.text)[-1] == "data: [DONE]"
 
 
+def test_깨진_본문은_400이다():
+    """500으로 두면 우리 서버 장애처럼 보이고 실제 장애와 섞인다."""
+    with TestClient(app) as c:
+        r = c.post(
+            f"/chat/completions?custom_session_id={SID}",
+            # UTF-8이 아닌 바이트. cp949 콘솔에서 보낸 한글이 이렇게 도착한다.
+            content=(
+                b'{"messages":[{"role":"user","content":"'
+                + bytes([0xBE, 0xC8])
+                + b'"}]}'
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+    assert r.status_code == 400
+
+
+def test_JSON이_아닌_본문도_400이다():
+    with TestClient(app) as c:
+        r = c.post(
+            f"/chat/completions?custom_session_id={SID}",
+            content=b"not json at all",
+            headers={"Content-Type": "application/json"},
+        )
+    assert r.status_code == 400
+
+
 def test_내부_API는_시크릿_없이는_401이다():
     with TestClient(app) as c:
         assert c.post("/internal/observations", json={}).status_code == 401

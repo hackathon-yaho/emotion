@@ -38,11 +38,16 @@ class Settings(BaseSettings):
     ai_llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     ai_model_analyze: str = "gemini-3.5-flash-lite"
     ai_model_respond: str = "gemini-3.8-flash"
-    ai_respond_effort: str = "low"
-    ai_model_observe: str = "gemini-2.5-pro"
-    ai_observe_effort: str = "medium"
+    # thinking을 끄지 않으면 사고 토큰이 출력 예산을 먹어 문장이 잘린다(실측).
+    ai_respond_effort: str = "none"
+    ai_model_observe: str = "gemini-3.8-flash"
+    ai_observe_effort: str = "none"
     ai_model_summary: str = "gemini-3.5-flash-lite"
-    ai_analyze_timeout_ms: int = 400
+    # 실측 p95 5473ms(2026-09-05, Gemini 무료 티어). 900ms로 두면 분석이 거의 항상
+    # 타임아웃되어 갭 기능이 통째로 죽는다 — 갭이 이 제품의 핵심이라 시간을 준다.
+    ai_analyze_timeout_ms: int = 6000
+    # 기동 시 모델을 한 번씩 깨운다. 콜드 스타트가 20초를 넘는다(실측).
+    ai_warmup_on_start: bool = True
     ai_summary_timeout_ms: int = 2500
     ai_speculative_respond: bool = False
 

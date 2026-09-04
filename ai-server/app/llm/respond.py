@@ -78,8 +78,12 @@ async def _iter(
     async for chunk in stream:
         if not chunk.choices:
             continue
-        delta = chunk.choices[0].delta
-        piece = getattr(delta, "content", None)
+        choice = chunk.choices[0]
+        # 사고 토큰이 출력 예산을 먹으면 문장 중간에서 끊긴다. 그 상태로 TTS에 가면
+        # 사용자는 말이 잘리는 걸 듣는다 — 원인을 알 수 있게 남긴다.
+        if getattr(choice, "finish_reason", None) == "length":
+            error_log("respond_truncated", model=kwargs.get("model"))
+        piece = getattr(choice.delta, "content", None)
         if piece:
             yield piece
 
@@ -101,7 +105,8 @@ async def stream(
         else llm.system_prompt("respond")
     )
     messages = build_messages(history, flags, system)
-    kwargs = llm.build_kwargs(model=model, max_tokens=300, effort=effort)
+    # 사고 토큰이 이 예산을 함께 쓰므로 넉넉히 준다. 길이는 프롬프트가 잡는다(1~3문장).
+    kwargs = llm.build_kwargs(model=model, max_tokens=1000, effort=effort)
 
     sent = False
     try:
