@@ -29,9 +29,11 @@
 
 > **결제 결정은 끝났다** — Creator 플랜. 490분 기준 Starter보다 싸다는 계산을 AI가 해왔다. **계정 가입만 남았다.**
 
-## ② `ANTHROPIC_API_KEY` — AI가 넣어야 한다
+## ② `GOOGLE_API_KEY` — AI가 넣어야 한다
 
-**막는 것: 2건.** AI가 "코드는 서 있지만 한 번도 진짜 모델을 부른 적이 없다"고 회신했다.
+**막는 것: 2건.**
+
+> **변수명이 두 번 바뀌었다** (2026-09-05). `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → **`GOOGLE_API_KEY`**(Gemini 무료 티어). AI 회신에는 `OPENAI_API_KEY`로 적혀 있지만 **그 뒤 커밋이 Gemini로 또 바꿨고**, `ai-server/app/config.py`가 실제로 읽는 이름은 `google_api_key`다 — **코드를 따랐다.** SDK 의존성이 `openai>=2.0`인 것은 Gemini의 OpenAI 호환 엔드포인트를 쓰기 때문이다.
 
 | 못 한 것 | 근거 | 지금 상태 |
 | --- | --- | --- |
