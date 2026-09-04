@@ -23,6 +23,7 @@
 | `rules/valence_mapping.json` | 48종 → ±1 매핑표 (PRD §14-1) | 20쌍 갭 방향 일치율 재측정 |
 | `rules/crisis_keywords.json` | 위기 키워드 Tier A(규칙)·Tier B(LLM 힌트) + 출처 (PRD §14-2) | 합성 세트 재현율 재측정 |
 | `rules/tag_stopwords.json` | 태그 불용어 | 태그 케이스 재실행 |
+| `rules/guard_terms.json` | 금칙어(진단·약물·치료) + 요약 감정 단정 표현 | `make test` 재실행 |
 | `eval/` | 20쌍 스냅샷 · 합성 세트 · 실행 스크립트 (F11-04) | — |
 
 ## 지켜야 하는 것 (경계 — `CLAUDE.md` 경계 감시와 동일)
@@ -55,9 +56,21 @@ ngrok http 8100
 Hume 콘솔 Config(`https://app.hume.ai/evi/configs`)는 AI 담당이 생성·소유한다. 언어 한국어, 언어 모델 "Custom language model", URL 위 값, 프롬프트는 비운다(시스템 프롬프트는 이 서버가 쓴다). 발급된 `config_id`는 백엔드 환경변수로 전달한다(`docs/request/backend/hume-config-id.md`).
 
 ```bash
-make test     # 단위 테스트 (rules/ 전부 + payload 경계 검사)
+make test     # 단위 테스트 (rules/ 전부 + 경계 검사)
+make lint     # ruff
 make eval     # 20쌍 · 위기 합성 세트 · 태그 · 관찰 문장 → eval/reports/
 ```
+
+`make help`가 전체 명령을 보여준다. **README의 명령과 `Makefile`이 다르면 `Makefile`이 맞다.**
+
+## 지금 있는 것 (2026-09-04)
+
+| 계층 | 상태 |
+| --- | --- |
+| `app/rules/` — valence · gap · crisis · tags · guard · observe_guard · summary_guard · turns · sentence | **구현 완료, 테스트 111건 통과** |
+| `app/config.py` — 환경변수 | 완료 |
+| `eval/fixtures/internal/` — 내부 API 고정 JSON 10건 | 완료 (백엔드와 공유) |
+| `app/clm/` · `app/llm/` · `app/session.py` · `app/backend_client.py` · `app/main.py` | 미착수 — 목표 9/6 |
 
 ## 구조
 
@@ -66,7 +79,7 @@ ai-server/
 ├─ app/
 │  ├─ main.py            FastAPI 엔트리
 │  ├─ clm/               Hume 요청 파싱 · SSE 청크
-│  ├─ rules/             ★ 순수 함수 (valence · gap · crisis · tags · guard · observe_guard)
+│  ├─ rules/             ★ 순수 함수 (valence · gap · crisis · tags · guard · observe_guard · summary_guard · turns)
 │  ├─ llm/               ★ analyze · respond · observe · summary — LLM 호출은 여기에만
 │  ├─ session.py         세션 컨텍스트 캐시 · 백엔드 조회
 │  ├─ backend_client.py  /internal/turns 적재

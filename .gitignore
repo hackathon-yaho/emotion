@@ -32,3 +32,12 @@ app/ios/Flutter/Flutter.framework
 app/ios/Flutter/Flutter.podspec
 app/android/.gradle/
 app/android/local.properties
+
+# Python (ai-server/)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+ai-server/eval/reports/
+ai-server/uv.lock
