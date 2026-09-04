@@ -32,6 +32,25 @@ app:
   scheduler:
     # F2-06 정리와 F7-01 배치가 같은 주기를 쓴다 (2026-09-04 확정, phase-1 1-7).
     fixed-delay-ms: 300000
+  hume:
+    # 단기 토큰 발급용. 앱에 내려보내지 않는다 (FR-013, TC-03).
+    api-key: ${HUME_API_KEY}
+    secret-key: ${HUME_SECRET_KEY}
+    # 계약 §2-4에서 null이 될 수 없다. 기본값을 주지 않으므로 없으면 기동에 실패한다 —
+    # 런타임 503으로 만들면 서버는 떠 있는데 모든 세션 시작이 실패한다.
+    config-id: ${HUME_CONFIG_ID}
+  internal:
+    # AI서버 → 백엔드 인증 (계약 §3-1). 저장소에 넣지 않는다.
+    shared-secret: ${INTERNAL_SHARED_SECRET}
+  session:
+    # 앱에 상수로 박지 않고 서버가 내려준다 (계약 §2-4) — 정책 변경에 재배포가 필요 없다.
+    soft-wrap-sec: 300
+    hard-cut-sec: 420
+    live-poll-interval-sec: 2
+    # 초기 수치는 20쌍 측정 후 확정한다 (PRD §14-5). 어느 값이든 세션에 스냅샷된다.
+    gap-threshold: ${GAP_THRESHOLD:0.85}
+    # 마지막 발화 후 이만큼 지나면 이어하기가 끝나고 스케줄러가 정리한다.
+    resume-window-min: 30
 
 cors:
   # 앱은 GitHub Pages에 있어 오리진이 다르다. 커스텀 도메인이 붙으면 값만 바꾼다.

@@ -11,6 +11,7 @@ import com.hackathonyaho.voicejournal.auth.repository.AccountRepository;
 import com.hackathonyaho.voicejournal.auth.repository.ProfileRepository;
 import com.hackathonyaho.voicejournal.auth.repository.UserBaselineRepository;
 import com.hackathonyaho.voicejournal.auth.security.JwtProvider;
+import com.hackathonyaho.voicejournal.session.service.SessionService;
 import com.hackathonyaho.voicejournal.common.global.ErrorCode;
 import com.hackathonyaho.voicejournal.common.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class AuthService {
     private final ProfileRepository profileRepository;
     private final AccountProfileRepository accountProfileRepository;
     private final UserBaselineRepository userBaselineRepository;
+    private final SessionService sessionService;
 
     /**
      * 재로그인 시 <b>동일한 profileId</b>가 나와야 한다 (TC-01) — 기존 데이터가
@@ -81,7 +83,7 @@ public class AuthService {
                 baseline.getSessionCount(),
                 baseline.isPersonalThresholdReady() ? "personal" : "fixed",
                 profile.isDemoMode(),
-                // Phase 2에서 채운다. 그때까지 앱은 항상 "이어할 대화 없음"으로 본다.
-                null);
+                // 비정상 중단으로 열려 있는 세션. 앱은 이게 있으면 "이어서 이야기할까요?"를 띄운다.
+                sessionService.openSession(profileId));
     }
 }

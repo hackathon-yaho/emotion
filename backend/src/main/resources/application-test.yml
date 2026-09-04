@@ -21,3 +21,17 @@ app:
     expiry-days: 7
   kakao:
     app-id: 999999
+  scheduler:
+    fixed-delay-ms: 300000
+  hume:
+    api-key: test-api-key
+    secret-key: test-secret-key
+    config-id: cfg_test
+  internal:
+    shared-secret: test-internal-secret
+  session:
+    soft-wrap-sec: 300
+    hard-cut-sec: 420
+    live-poll-interval-sec: 2
+    gap-threshold: 0.85
+    resume-window-min: 30

@@ -1,7 +1,7 @@
 package com.hackathonyaho.voicejournal.auth.security;
 
 import com.hackathonyaho.voicejournal.common.global.ErrorCode;
-import com.hackathonyaho.voicejournal.common.global.dto.ErrorResponse;
+import com.hackathonyaho.voicejournal.common.global.ErrorWriter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.FilterChain;
@@ -11,7 +11,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -44,7 +43,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         return HttpMethod.OPTIONS.matches(request.getMethod())
-                || PUBLIC_PATHS.contains(request.getRequestURI());
+                || PUBLIC_PATHS.contains(request.getRequestURI())
+                // AI서버는 JWT가 없다. 인증은 InternalAuthFilter가 공유 시크릿으로 한다(계약 §3-1).
+                || request.getRequestURI().startsWith("/internal/");
     }
 
     @Override
@@ -72,10 +73,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     /** 필터 단계라 GlobalExceptionHandler를 못 타므로 같은 모양을 직접 만든다 (계약 §1-2). */
     private void reject(HttpServletResponse response, ErrorCode code) throws IOException {
-        String traceId = UUID.randomUUID().toString().substring(0, 8);
-        response.setStatus(code.getStatus().value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding("UTF-8");
-        objectMapper.writeValue(response.getWriter(), ErrorResponse.of(code, traceId));
+        ErrorWriter.write(response, objectMapper, code);
     }
 }

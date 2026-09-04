@@ -18,9 +18,9 @@
 | `POST /api/auth/kakao` | F1-01 | 1 | **구현 완료 (v1.5 기준)** |
 | `GET /api/me` | F1-02, F2-07 | 1, 2 | **구현 완료 (v1.5 기준)** |
 | `DELETE /api/account` | F1-04, F10-03 | 6 | 라우트만 (삭제 로직은 Phase 6) |
-| `POST /api/session/start` | F2-01, F3-04 | 2 | 미구현 |
-| `POST /api/session/{sessionId}/end` | F2-05 | 2 | 미구현 |
-| `POST /api/session/{sessionId}/resume` (P1) | F2-07 | 2 | 미구현 |
+| `POST /api/session/start` | F2-01, F3-04 | 2 | **구현 완료** — Hume 키가 자리표시라 실발급만 미검증 |
+| `POST /api/session/{sessionId}/end` | F2-05 | 2 | **구현 완료** — `summary`는 항상 null (Phase 3) |
+| `POST /api/session/{sessionId}/resume` (P1) | F2-07 | 2 | **구현 완료** — `resumedChatGroupId`는 항상 null (아래 §2) |
 | `GET /api/session/{sessionId}/live` (v1.3) | F4-04, F11-01 | **3** | 미구현 |
 | `GET /api/observations` | F7-06 | 5 | 미구현 |
 | `GET /api/observations/{observationId}/evidence` | F7-07 | 5 | 미구현 |
@@ -32,8 +32,8 @@
 | `GET /api/health` | F11-02 | 1 | **구현 완료 (v1.5 기준)** |
 | `POST /internal/turns` (AI → 백엔드) | F5-01 | 3 | 미구현 |
 | `POST /internal/observations` (백엔드 → AI) | F7-04 | 4 | 미구현 |
-| `GET /internal/sessions/{sessionId}` (AI → 백엔드, v1.3 · `lastTurnIndex` v1.4) | F2-03, F3-04, F5-01 | 2 | 미구현 |
-| `POST /internal/summaries` (백엔드 → AI, v1.3) | F2-05 | 2 | 미구현 |
+| `GET /internal/sessions/{sessionId}` (AI → 백엔드, v1.3 · `lastTurnIndex` v1.4) | F2-03, F3-04, F5-01 | 2 | **구현 완료** — `recentObservations`는 빈 배열 (Phase 4) |
+| `POST /internal/summaries` (백엔드 → AI, v1.3) | F2-05 | 2 → **3** | 미구현 — 보낼 발화가 Phase 3에 생긴다 (아래 §2) |
 
 전체 요청·응답 스키마는 계약서를 그대로 따른다. 아래 절은 **구현 후, 계약과 다르게 동작하는 부분(추가 검증, 실제로 쓰는 에러 코드 등)이 생겼을 때만** 채운다 — 계약과 동일하면 표만 갱신하고 절은 비워 둔다.
 

@@ -96,7 +96,9 @@ create index idx_session_batch_pending   on voice_session (ended_at) where ended
 | `end_reason` | 앱은 `timeout`·`resumed`를 보내지 않는다(계약 §2-5). 서버 내부에서만 기록 |
 | `summary` | **NULL 가능** — 생성 실패·`endReason: timeout`(§2-5) |
 | `pattern_processed_at` | **NULL이면 배치 미처리.** 스케줄러가 이 조건으로 훑는다(F7-01) |
-| `resumableUntil` | **컬럼을 두지 않는다.** `ended_at + 30분`으로 계산한다 — 값이 하나면 규칙이 하나다 |
+| `resumableUntil` | **컬럼을 두지 않는다.** `coalesce(max(turn_log.occurred_at), started_at) + 30분`으로 계산한다 (2026-09-04 정정) — 아래 주의 |
+
+> **`resumableUntil`을 `ended_at`으로 계산할 수 없다** (2026-09-04, Phase 2 구현 중 발견). `openSession`은 **아직 열려 있는**(`ended_at IS NULL`) 세션이므로 `ended_at + 30분`은 계산 자체가 성립하지 않는다. 그렇다고 `started_at + 30분`으로 두면 **TC-22가 깨진다** — 2분 말하고 앱이 죽은 뒤 5분 지나 이어하기를 누르면 벽시계로는 7분이 흘러 잔여 시간이 0이 되고 409로 막힌다. 앱이 죽으면 종료 신호가 오지 않으므로 **서버가 아는 마지막 활동은 마지막 턴의 `occurred_at` 하나뿐**이고, 이어하기 창·`usedSec`·F2-06 정리가 전부 이 값에서 갈린다. 턴이 없으면 `started_at`이다(시작만 하고 말하지 않은 세션). 계약 §2-2의 정의("중단 후 30분")와도 이쪽이 맞는다.
 
 > **`gap_threshold`를 스냅샷하는 이유** — 초기 수치는 20쌍 세트 측정 후 확정된다(PRD §14-5). 현재 설정값으로 소급 판정하면 **수치를 확정하는 순간 과거 날짜의 음영이 통째로 달라져**, 그날 앱이 실제로 되물었던 근거(FR-022)와 화면이 어긋난다. 컬럼 하나로 그 경로를 막는다.
 > `idx_session_batch_pending`은 **부분 인덱스**다. 처리 끝난 세션은 인덱스에서 빠지므로, 도그푸딩이 길어져도 배치 스캔 비용이 늘지 않는다.

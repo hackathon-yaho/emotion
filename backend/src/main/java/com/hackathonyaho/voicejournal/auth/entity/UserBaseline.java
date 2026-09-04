@@ -53,4 +53,13 @@ public class UserBaseline {
     public boolean isPersonalThresholdReady() {
         return sessionCount >= 5 && avgGap != null;
     }
+
+    /**
+     * 세션 종료마다 1 증가한다. <b>F3-05(P1 통계 갱신)가 아니라 종료의 기본 동작이다</b> —
+     * 스코프 컷으로 F3-05를 잘라도 P0인 F3-04와 TC-07이 살아 있어야 한다.
+     */
+    public void countSession() {
+        this.sessionCount++;
+        this.updatedAt = Instant.now();
+    }
 }
