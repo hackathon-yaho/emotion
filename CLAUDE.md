@@ -88,6 +88,7 @@ git pull && grep -L "상태: ✅" docs/request/{내 역할}/*.md   # README.md�
 - **요청 현황은 위 grep이 단일 출처다.** 아래는 grep이 못 주는 "왜 중요한가"만 적는다 — **개수·완결 선언을 여기 쓰지 않는다**
   - `request/ai/integration-test-path.md` (백엔드 → AI) — 양쪽이 로컬이면 AI서버가 백엔드에 도달하지 못해 통합 검증이 성립하지 않는다. 임시 터널로 뚫을 시점·순서 협의. **단위 개발은 안 막는다**
   - `request/ai/turn-index-numbering.md` (백엔드 → AI, 2026-09-04) — 이어하기 재연결 후 `turnIndex` 채번. **유실 자체는 백엔드가 `occurred_at` 판별로 이미 막았고**, 남은 확인은 `occurredAt`이 발화 시각이며 재시도에서 불변인지다(그 가드의 유일한 전제)
-- **`ai-server/app/rules/` 순수 함수 계층 구현 완료(2026-09-04). 테스트 111건 통과** — valence·gap·crisis·tags·guard·observe_guard·summary_guard·turns. 나머지 계층(`clm/`·`llm/`·`session.py`·`main.py`)은 미착수
+- **`ai-server/` 엔드포인트 4종 구현 완료(2026-09-05). 테스트 161건 통과** — `/chat/completions`(Hume CLM, SSE) · `/internal/observations` · `/internal/summaries` · `/healthz`. 규칙 계층·세션 캐시·턴 적재·LLM 호출·로깅이 전부 서 있다
+- **다만 실제 연결은 셋 다 미검증이다** — Hume(Config 없음) · Anthropic(키 없음) · 백엔드(터널 전). 목으로만 확인돼 있다
 - `ai-server/`에는 프롬프트 4종(analyze·respond·observe·summary)·규칙 데이터 4종·내부 API 고정 JSON 10건(`eval/fixtures/internal/`)·`Makefile`이 있다
 - **AI서버 통합 준비 목표는 9/6**이다(`response/backend/integration-test-path.md`). 9/5 `app/rules/` 순수 함수 + 테스트 → 9/6 세션 조회·CLM SSE·턴 적재

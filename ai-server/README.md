@@ -63,14 +63,24 @@ make eval     # 20쌍 · 위기 합성 세트 · 태그 · 관찰 문장 → eva
 
 `make help`가 전체 명령을 보여준다. **README의 명령과 `Makefile`이 다르면 `Makefile`이 맞다.**
 
-## 지금 있는 것 (2026-09-04)
+## 지금 있는 것 (2026-09-05)
+
+**엔드포인트 4종이 전부 서 있다. 테스트 161건 통과.** 통합 테스트 준비 목표였던 9/6보다 하루 빠르다.
 
 | 계층 | 상태 |
 | --- | --- |
-| `app/rules/` — valence · gap · crisis · tags · guard · observe_guard · summary_guard · turns · sentence | **구현 완료, 테스트 111건 통과** |
-| `app/config.py` — 환경변수 | 완료 |
+| `app/rules/` — valence · gap · crisis · tags · guard · observe_guard · summary_guard · turns · sentence · loader | 완료 |
+| `app/clm/` — Hume 요청 파싱 · SSE 청크 | 완료 |
+| `app/session.py` — 세션 캐시 · CLM 인증(fail-closed) · 채번 · 발화 시각 | 완료 |
+| `app/backend_client.py` — `/internal/turns` 적재(재시도 3회, 4xx 제외) | 완료 |
+| `app/llm/` — analyze · respond(스트리밍) · observe · summary | 완료 (**실제 API 키로는 미검증** — 키가 들어오면 확인) |
+| `app/telemetry.py` — 필드 화이트리스트 로그 | 완료 |
+| `app/main.py` — `/chat/completions` · `/internal/observations` · `/internal/summaries` · `/healthz` | 완료 |
 | `eval/fixtures/internal/` — 내부 API 고정 JSON 10건 | 완료 (백엔드와 공유) |
-| `app/clm/` · `app/llm/` · `app/session.py` · `app/backend_client.py` · `app/main.py` | 미착수 — 목표 9/6 |
+| `eval/run_eval.py` — 평가 실행기 | 미착수 (20쌍 수집 후) |
+
+**아직 못 한 검증**: Hume 실제 연결(Config가 없다), Anthropic 실제 호출(키가 없다),
+백엔드 실제 연결(터널 전). 이 셋은 목으로만 검증돼 있다.
 
 ## 구조
 

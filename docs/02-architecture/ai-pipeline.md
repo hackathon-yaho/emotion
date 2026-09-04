@@ -442,13 +442,21 @@ ai-server/
 │  ├─ main.py               FastAPI — POST /chat/completions · POST /internal/observations · GET /healthz
 │  ├─ clm/                  요청 파싱(마지막 user 턴·이력·system 제거), SSE 청크 변환
 │  ├─ rules/                ★ 순수 함수 + 단위 테스트. 네트워크 호출 금지
+│  │  ├─ loader.py          rules/*.json 로딩 + 불변식 검사(48종·극성 겹침·Tiredness)
 │  │  ├─ valence.py         48종 → voice_valence
-│  │  ├─ gap.py             gap · gapTriggered
-│  │  ├─ crisis.py          Tier A 정규식
+│  │  ├─ gap.py             gap · gapTriggered · 임계값 우선순위
+│  │  ├─ crisis.py          Tier A 정규식 · 두 계층 합산
 │  │  ├─ tags.py            원문 대조 · 불용어
+│  │  ├─ sentence.py        숫자·문장 수·물음표 검사 (관찰·요약 공용)
 │  │  ├─ guard.py           금칙어(진단·약물·치료)
-│  │  └─ observe_guard.py   관찰 문장 검사
-│  ├─ llm/                  analyze · respond · observe · summary — LLM 호출은 여기에만
+│  │  ├─ observe_guard.py   관찰 문장 검사
+│  │  ├─ summary_guard.py   요약 검사 (갭 누출 차단)
+│  │  └─ turns.py           채번 · occurredAt · 재조회 판단
+│  ├─ llm/                  LLM 호출은 여기에만
+│  │  ├─ client.py          클라이언트 · 프롬프트 로딩 · 모델별 파라미터 · assert_no_prosody
+│  │  ├─ analyze.py         분석 호출 (전사만, 400ms, 실패는 빈 결과)
+│  │  ├─ respond.py         응답 스트리밍 (플래그만, 메타 태그 없음)
+│  │  └─ batch.py           observe · summary + 사후 검사 연결
 │  ├─ session.py            세션 컨텍스트 캐시 · 백엔드 조회
 │  ├─ backend_client.py     /internal/turns 적재 (fire-and-forget, 재시도)
 │  └─ telemetry.py          구조화 로그 (필드 화이트리스트)
