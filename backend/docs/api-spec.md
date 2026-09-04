@@ -2,6 +2,8 @@
 
 > **수정 기록 (2026-09-04 ⑤)** — **Phase 1 구현.** `POST /api/auth/kakao`·`GET /api/me`·`GET /api/health` 3건 구현 완료. `DELETE /api/account`는 계약대로 204를 주지만 **라우트와 인증만** 걸려 있고 삭제 로직은 Phase 6이다. 계약과 다르게 동작하는 부분은 없어 아래 절은 비워 둔다.
 >
+> **수정 기록 (2026-09-05 ⑦)** — **Phase 4 구현 완료.** 패턴 배치가 스케줄러에 올라갔다 — 태그별 집계(전체 기간, 갭 NULL 제외) → **코드 판정**(3회 이상 AND 1.5배 이상) → 통과한 것만 `POST /internal/observations`로 문장화 → `observation` + `observation_evidence`. **`/internal/sessions`의 `recentObservations`가 이제 실제 값이다.** AI서버가 없어 **지금은 관찰이 0건이고 그게 설계대로다**(템플릿 폴백 없음).
+
 > **수정 기록 (2026-09-05 ⑥)** — **Phase 3 구현 완료.** `POST /internal/turns`(암호화 저장·태그·위기·중복 판별) · `GET /api/session/{id}/live` · `POST /internal/summaries` 호출 · F3-05 baseline 재계산. **AI서버 고정 픽스처 3종을 그대로 `curl`로 보내 202·저장·암호화를 확인**했다. 적재 응답시간 **p95 20ms**(목표 200ms). **깨진 JSON을 500 → 400으로 고쳤다** — 계약 §3-2에서 AI가 5xx를 3회 재시도하는데, 본문이 깨진 요청은 몇 번을 보내도 같은 결과라 재시도만 세 배로 늘고 원인이 "백엔드가 죽었다"로 보인다.
 
 > **수정 기록 (2026-09-05 ⑤)** — 계약 **v1.6** 반영. **`POST /api/auth/kakao`가 액세스 토큰이 아니라 인가 코드를 받는다** — 웹에서는 앱이 토큰을 손에 쥘 수 없다(앱이 SDK 소스로 확인). `redirectUri`를 함께 받아 **등록 목록과 대조**하고, REST 키 + 클라이언트 시크릿으로 교환한다. **종전의 `app_id` 대조는 걷어냈다**(우리 키로 교환한 토큰은 정의상 우리 앱 것). `DELETE /api/account`에 **선택 본문**이 생겼다(탈퇴 시 카카오 unlink용) — 라우트는 받지만 처리는 Phase 6.
@@ -35,7 +37,7 @@
 | `DELETE /api/sessions/{sessionId}` | F10-01, F10-02 | 6 | 미구현 |
 | `GET /api/health` | F11-02 | 1 | **구현 완료 (v1.5 기준)** |
 | `POST /internal/turns` (AI → 백엔드) | F5-01 | 3 | **구현 완료** — 고정 픽스처 3종 검증 |
-| `POST /internal/observations` (백엔드 → AI) | F7-04 | 4 | 미구현 |
+| `POST /internal/observations` (백엔드 → AI) | F7-04 | 4 | **호출 구현 완료** — AI서버가 없어 지금은 관찰이 0건 |
 | `GET /internal/sessions/{sessionId}` (AI → 백엔드, v1.3 · `lastTurnIndex` v1.4) | F2-03, F3-04, F5-01 | 2 | **구현 완료** — `recentObservations`는 빈 배열 (Phase 4) |
 | `POST /internal/summaries` (백엔드 → AI, v1.3) | F2-05 | 3 | **호출 구현 완료** — AI서버가 없어 지금은 항상 `summary: null` |
 
@@ -48,6 +50,7 @@
 | 날짜 | 내용 |
 | --- | --- |
 | 2026-09-04 ⑤ | **Phase 1 구현** — auth/kakao · me · health 구현 완료, DELETE /api/account는 라우트만 |
+| 2026-09-05 ⑦ | Phase 4 — 패턴 배치·관찰 생성. `/internal/sessions`의 `recentObservations` 연결 |
 | 2026-09-05 ⑥ | Phase 3 — `/internal/turns`·`/live`·요약 호출·baseline 재계산. 깨진 본문을 400으로 정정 |
 | 2026-09-05 ⑤ | 계약 v1.6 — `/api/auth/kakao`가 인가 코드 방식으로. `redirectUri` 화이트리스트 검증 추가, `app_id` 대조 제거. `DELETE /api/account`에 unlink용 선택 본문 |
 | 2026-09-04 ④ | 계약 v1.5 — `/internal/turns`의 `occurredAt` 규칙 명시(발화 시각·밀리초·재시도 불변). 중복 판별 가드의 전제가 계약으로 확정 |

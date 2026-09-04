@@ -7,6 +7,8 @@ import com.hackathonyaho.voicejournal.auth.repository.ProfileRepository;
 import com.hackathonyaho.voicejournal.auth.repository.UserBaselineRepository;
 import com.hackathonyaho.voicejournal.common.global.ErrorCode;
 import com.hackathonyaho.voicejournal.common.global.exception.BusinessException;
+import com.hackathonyaho.voicejournal.observation.entity.Observation;
+import com.hackathonyaho.voicejournal.observation.repository.ObservationRepository;
 import com.hackathonyaho.voicejournal.session.config.SessionPolicy;
 import com.hackathonyaho.voicejournal.session.dto.response.InternalSessionResponse;
 import com.hackathonyaho.voicejournal.session.dto.response.SessionEndResponse;
@@ -39,6 +41,7 @@ public class SessionService {
     private final TurnStats turnStats;
     private final HumeTokenService humeTokenService;
     private final SummaryClient summaryClient;
+    private final ObservationRepository observationRepository;
     private final SessionPolicy policy;
 
     // ── 시작 (F2-01) ────────────────────────────────────────────────
@@ -154,8 +157,17 @@ public class SessionService {
                 policy.getSoftWrapSec(),
                 policy.getHardCutSec(),
                 demoMode(session.getProfileId()),
-                // Phase 4에서 채운다. 그전까지 빈 배열인 것이 정상이다.
-                List.of());
+                recentObservations(session.getProfileId()));
+    }
+
+    /** 최근 3개 (계약 §3-4). F8(P1, 관찰 근거 기반 제안)에서 AI서버가 쓴다. */
+    private List<InternalSessionResponse.Observation> recentObservations(UUID profileId) {
+        return observationRepository
+                .findTop3ByProfileIdAndStatusOrderByCreatedAtDesc(profileId, Observation.ACTIVE)
+                .stream()
+                .map(o -> new InternalSessionResponse.Observation(
+                        o.getId().toString(), o.getTag(), o.getSentence()))
+                .toList();
     }
 
     // ── GET /api/me의 openSession (F2-07 준비) ───────────────────────

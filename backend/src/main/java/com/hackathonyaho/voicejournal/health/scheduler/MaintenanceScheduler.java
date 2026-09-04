@@ -1,5 +1,6 @@
 package com.hackathonyaho.voicejournal.health.scheduler;
 
+import com.hackathonyaho.voicejournal.observation.service.ObservationBatchService;
 import com.hackathonyaho.voicejournal.session.service.SessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,13 +29,26 @@ import org.springframework.stereotype.Component;
 public class MaintenanceScheduler {
 
     private final SessionService sessionService;
+    private final ObservationBatchService observationBatchService;
 
     @Scheduled(fixedDelayString = "${app.scheduler.fixed-delay-ms}")
     public void tick() {
         // 각 작업은 예외를 스스로 삼킨다 — 하나가 실패해도 다음 작업과 다음 주기가
         // 영향을 받지 않아야 한다 (F7-01 수용 기준: 배치 실패가 대화·조회에 영향 없음).
         closeAbandonedSessions();
-        // Phase 4: ended_at IS NOT NULL AND pattern_processed_at IS NULL 스캔 → 배치
+        runPatternBatch();
+    }
+
+    /** F7-01. 배치 실패가 대화·조회에 영향을 주지 않아야 한다 — 여기서 삼킨다. */
+    private void runPatternBatch() {
+        try {
+            int created = observationBatchService.runPending();
+            if (created > 0) {
+                log.info("created {} observation(s)", created);
+            }
+        } catch (Exception e) {
+            log.warn("pattern batch failed ({})", e.getClass().getSimpleName());
+        }
     }
 
     /** F2-06. 세션 ID는 로그에 남기지 않는다 — 건수만 남긴다(FR-092, 계약 §1-1). */

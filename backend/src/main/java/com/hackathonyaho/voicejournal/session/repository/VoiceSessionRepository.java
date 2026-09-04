@@ -16,4 +16,12 @@ public interface VoiceSessionRepository extends JpaRepository<VoiceSession, UUID
 
     /** F2-06 스케줄러 — 열린 세션만 훑는다. 부분 인덱스 {@code idx_session_open}가 받는다. */
     List<VoiceSession> findByEndedAtIsNull();
+
+    /**
+     * F7-01 배치 대상. <b>별도 큐를 두지 않는다</b> — {@code ended_at}이 있고
+     * {@code pattern_processed_at}이 NULL인 것 자체가 "미처리"다. 인메모리 큐는
+     * Render 슬립·재배포에 증발하고 <b>그 세션은 관찰이 영영 안 생기는데 아무도 모른다.</b>
+     * 부분 인덱스 {@code idx_session_batch_pending}이 받는다.
+     */
+    List<VoiceSession> findByEndedAtIsNotNullAndPatternProcessedAtIsNull();
 }

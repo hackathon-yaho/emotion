@@ -51,6 +51,8 @@ app:
     base-url: ${AI_SERVER_BASE_URL:http://localhost:8000}
     # 요약은 종료 응답을 붙잡는 동기 호출이라 짧게 끊는다. 실패하면 summary: null이다.
     summary-timeout-ms: 3000
+    # 관찰 문장화는 배치라 사용자를 기다리게 하지 않는다 — 요약보다 넉넉히 준다.
+    observation-timeout-ms: 10000
   crypto:
     # 발화 암호화 키 (F5-02). base64(16/24/32바이트).
     # ⚠️ 잃으면 도그푸딩 발화 전체가 복호화 불가다 — 세 시크릿 중 이것만 오프라인 사본을 둔다.

@@ -82,6 +82,11 @@ public class VoiceSession {
         this.durationSec = durationSec;
     }
 
+    /** 성공했을 때만 찍는다 — NULL로 남으면 다음 주기에 자동 재시도된다 (F7-01). */
+    public void markPatternProcessed() {
+        this.patternProcessedAt = Instant.now();
+    }
+
     public void attachSummary(String summary) {
         this.summary = summary;
     }
