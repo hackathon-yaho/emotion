@@ -1,5 +1,7 @@
 package com.hackathonyaho.voicejournal.session.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hackathonyaho.voicejournal.common.global.ErrorCode;
 import com.hackathonyaho.voicejournal.common.global.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +15,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.Map;
 
 /**
  * Hume 단기 액세스 토큰 발급 (F1-13 · TC-03).
@@ -34,10 +35,12 @@ public class HumeTokenService {
 
     private final RestClient client;
     private final String basicAuth;
+    private final ObjectMapper mapper = new ObjectMapper();
 
-    public HumeTokenService(@Value("${app.hume.api-key}") String apiKey,
+    public HumeTokenService(RestClient.Builder builder,
+                            @Value("${app.hume.api-key}") String apiKey,
                             @Value("${app.hume.secret-key}") String secretKey) {
-        this.client = RestClient.create();
+        this.client = builder.build();
         this.basicAuth = "Basic " + Base64.getEncoder()
                 .encodeToString((apiKey + ":" + secretKey).getBytes(StandardCharsets.UTF_8));
     }
@@ -47,21 +50,27 @@ public class HumeTokenService {
 
     public Token issue() {
         try {
-            Map<?, ?> body = client.post()
+            // 본문을 String으로 받아 직접 파싱한다 — Hume은 200에 Content-Type을 안 싣는다(실측
+            // 2026-09-05). 타입이 없으면 Spring이 변환기를 못 골라 UnknownContentTypeException이
+            // 나고, 겉으로는 키가 틀린 것과 똑같이 503으로 보인다.
+            String raw = client.post()
                     .uri(TOKEN_URL)
                     .header(HttpHeaders.AUTHORIZATION, basicAuth)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body("grant_type=client_credentials")
                     .retrieve()
-                    .body(Map.class);
+                    .body(String.class);
 
-            Object token = body == null ? null : body.get("access_token");
-            if (token == null) {
+            JsonNode body = raw == null || raw.isBlank() ? null : mapper.readTree(raw);
+            JsonNode token = body == null ? null : body.get("access_token");
+            if (token == null || token.asText().isBlank()) {
                 throw new BusinessException(ErrorCode.HUME_TOKEN_ISSUE_FAILED, "no access_token in response");
             }
-            Object expiresIn = body.get("expires_in");
-            Duration ttl = expiresIn instanceof Number n ? Duration.ofSeconds(n.longValue()) : DEFAULT_TTL;
-            return new Token(String.valueOf(token), Instant.now().plus(ttl));
+            JsonNode expiresIn = body.get("expires_in");
+            Duration ttl = expiresIn != null && expiresIn.isNumber()
+                    ? Duration.ofSeconds(expiresIn.asLong())
+                    : DEFAULT_TTL;
+            return new Token(token.asText(), Instant.now().plus(ttl));
 
         } catch (BusinessException e) {
             throw e;

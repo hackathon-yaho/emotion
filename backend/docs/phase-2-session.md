@@ -110,7 +110,10 @@ AI서버 → 백엔드. **CLM 인증을 겸한다**(계약 §4).
 
 ## 완료 기준
 
-- ⏳ 앱이 `POST /api/session/start` 응답만으로 EVI에 연결된다 (`humeConfigId` 포함) — **응답은 나가지만 `humeAccessToken`이 실물이 아니다.** Hume 키 3개가 오면 끝난다
+- ⏳ 앱이 `POST /api/session/start` 응답만으로 EVI에 연결된다 (`humeConfigId` 포함)
+  - ✅ **실물 토큰이 나간다** (2026-09-05) — 키가 들어와 `201` + 실제 `humeAccessToken`(`expires_in` 1799초). **EVI 시간 0초**로 확인했다(소켓 미개방)
+  - 🐛 **그 과정에서 결함 1건** — Hume 토큰 엔드포인트가 **200에 `Content-Type`을 안 싣는다.** `Map`으로 받으면 `UnknownContentTypeException`이 나고 **키가 틀린 것과 똑같은 503**으로 보인다. `String` 파싱으로 고치고 회귀 테스트 추가
+  - ⏳ 남은 것은 **Config**다 — `language_model`이 `null`이라 **CLM이 안 붙어 있다**(`blocked.md` ①)
 - ✅ AI서버가 `GET /internal/sessions/{id}`로 세션을 검증하고 임계값을 받아간다 — 시크릿 없이 401, 없는 세션 404, `ended`도 200
 - ⏳ **TC-02** — 대화 시작 → 3분 → 종료 시 세션이 정상 기록되고 요약이 표시된다
   - ✅ **요약 성공 경로가 돌았다** (2026-09-05) — 대역 AI서버로 `POST /internal/summaries`를 받아 `summary`가 종료 응답에 실렸다. Phase 3에서 호출을 붙인 뒤 **성공 경로는 한 번도 안 돌아본 상태**였다(진짜 AI서버는 키가 없어 422)
