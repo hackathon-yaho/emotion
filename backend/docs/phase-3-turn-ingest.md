@@ -129,7 +129,7 @@ unique (session_id, turn_index) 위반:
 - ✅ **DB를 직접 조회해도 평문 발화가 보이지 않는다** (F5-02 수용 기준) — 실서버에서 `select transcript_enc`로 확인, 엔티티로 읽으면 평문
 - ✅ 같은 턴을 두 번 보내도 행이 하나만 생기고 202가 온다
 - ✅ **같은 `turnIndex`로 `occurredAt`이 다른 턴을 보내면 행이 둘 다 남고 `ops_error_log`에 `TURN_INDEX_COLLISION`이 찍힌다** — 실서버에서 `sessionRef=a3a9e1ed requested=40 stored=60` 확인(발화·sessionId 없음)
-- ⏳ **통합 테스트에서 재시도 경로를 일부러 만들어 본다** — 저장은 성공시키고 **202 응답만 버려서** AI가 재시도하게 하고, `occurredAt`이 같아 중복으로 판정되는지 확인한다. AI가 제안한 시나리오이며(`response/backend/integration-test-path.md`), **그 가드가 실제로 도는 걸 한 번은 봐야 한다**
+- ✅ **통합 테스트에서 재시도 경로를 일부러 만들어 본다** — 저장은 성공시키고 **202 응답만 버려서** AI가 재시도하게 하고, `occurredAt`이 같아 중복으로 판정되는지 확인한다. AI가 제안한 시나리오이며(`response/backend/integration-test-path.md`), **그 가드가 실제로 도는 걸 한 번은 봐야 한다**
 - ✅ 터널 붙이기 전에 **`ai-server/eval/fixtures/internal/`의 고정 JSON으로 `curl` 선검증**한다 — 3종 전부 202, 저장·암호화 확인(2026-09-05). 원문 그대로: — `turns.user.request.json`·`turns.assistant.request.json`·`turns.user.degraded.request.json`(분석 실패 턴). 양쪽이 같은 파일을 쓰므로 "제 쪽에선 되는데요"가 안 생긴다
 - ✅ **TC-06** — 분석 호출 실패 턴(valence null, tags 빈 배열)이 정상 수신·저장된다
 - ✅ **TC-11** — 서버·스토리지 어디에도 **오디오 파일 0건** (계약에 필드가 없고 코드에 저장 경로가 없다)

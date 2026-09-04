@@ -23,6 +23,11 @@ public class SessionHistoryRepository {
 
     private final JdbcTemplate jdbc;
 
+    /** 계약 §1-1 — 소수 2자리. {@code avg()}가 주는 큰 스케일을 그대로 내보내지 않는다. */
+    private static BigDecimal round(BigDecimal value) {
+        return value == null ? null : value.setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
     /** {@code = any(?)}는 드라이버가 UUID 배열 타입을 추론하지 못한다. 자리표시로 편다. */
     private static String placeholders(int count) {
         return String.join(", ", java.util.Collections.nCopies(count, "?"));
@@ -52,7 +57,7 @@ public class SessionHistoryRepository {
                         rs.getInt("duration_sec"),
                         rs.getInt("turn_count"),
                         rs.getString("summary"),
-                        rs.getBigDecimal("gap_avg")),
+                        round(rs.getBigDecimal("gap_avg"))),
                 profileId, paging.limit(), paging.offset());
     }
 

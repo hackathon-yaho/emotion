@@ -2,6 +2,8 @@
 
 > **수정 기록 (2026-09-04 ⑤)** — **Phase 1 구현.** `POST /api/auth/kakao`·`GET /api/me`·`GET /api/health` 3건 구현 완료. `DELETE /api/account`는 계약대로 204를 주지만 **라우트와 인증만** 걸려 있고 삭제 로직은 Phase 6이다. 계약과 다르게 동작하는 부분은 없어 아래 절은 비워 둔다.
 >
+> **수정 기록 (2026-09-05 ⑩)** — **`gapAvg`가 계약 §1-1(소수 2자리)을 어기고 있었다.** Postgres `avg()`의 큰 스케일이 그대로 나가 `0.80000000000000000000`이 응답에 실렸다 — `POST /api/session/{id}/end`와 `GET /api/sessions` 두 곳. **DB에서 값이 나오는 자리에서 반올림**하도록 고쳤다. 통합 실행 중에 발견했고 회귀 테스트를 넣었다.
+
 > **수정 기록 (2026-09-05 ⑨)** — **Phase 6 구현 완료.** `DELETE /api/sessions/{id}`(관찰 연쇄 무효화·baseline 재계산 포함) · `DELETE /api/account`(10테이블 + 카카오 unlink). **롤백까지 확인했다.** 문서 순서와 달리 **baseline 재계산(⑧)을 관찰 재계산(⑤)보다 먼저** 돌린다 — `ratio`의 분모가 그 값이라 나중에 갱신하면 비율이 옛 평균으로 매겨진 채 남는다.
 
 > **수정 기록 (2026-09-05 ⑧)** — **Phase 5 구현 완료.** 조회 6개 — 관찰 목록·근거·피드백 · 트렌드(`points`·`highlights`·`userAvgGap`·`tagGaps`) · 대화 기록 목록·상세. **`range`를 생략하면 `GET /api/trend`가 500이던 것을 고쳤다**(`Map.of().containsKey(null)`). **기록 목록은 끝난 세션만** 내려간다.
@@ -41,9 +43,9 @@
 | `DELETE /api/sessions/{sessionId}` | F10-01, F10-02 | 6 | **구현 완료** |
 | `GET /api/health` | F11-02 | 1 | **구현 완료 (v1.5 기준)** |
 | `POST /internal/turns` (AI → 백엔드) | F5-01 | 3 | **구현 완료** — 고정 픽스처 3종 검증 |
-| `POST /internal/observations` (백엔드 → AI) | F7-04 | 4 | **호출 구현 완료** — AI서버가 없어 지금은 관찰이 0건 |
+| `POST /internal/observations` (백엔드 → AI) | F7-04 | 4 | **구현 완료** — 대역 서버로 관찰 1건 실제 생성 확인 |
 | `GET /internal/sessions/{sessionId}` (AI → 백엔드, v1.3 · `lastTurnIndex` v1.4) | F2-03, F3-04, F5-01 | 2 | **구현 완료** — `recentObservations`는 빈 배열 (Phase 4) |
-| `POST /internal/summaries` (백엔드 → AI, v1.3) | F2-05 | 3 | **호출 구현 완료** — AI서버가 없어 지금은 항상 `summary: null` |
+| `POST /internal/summaries` (백엔드 → AI, v1.3) | F2-05 | 3 | **구현 완료** — 대역 서버로 성공 경로 확인. 진짜 문장은 AI 키 대기 |
 
 전체 요청·응답 스키마는 계약서를 그대로 따른다. 아래 절은 **구현 후, 계약과 다르게 동작하는 부분(추가 검증, 실제로 쓰는 에러 코드 등)이 생겼을 때만** 채운다 — 계약과 동일하면 표만 갱신하고 절은 비워 둔다.
 
@@ -54,6 +56,7 @@
 | 날짜 | 내용 |
 | --- | --- |
 | 2026-09-04 ⑤ | **Phase 1 구현** — auth/kakao · me · health 구현 완료, DELETE /api/account는 라우트만 |
+| 2026-09-05 ⑩ | `gapAvg` 반올림 누락 정정 (계약 §1-1). 요약·관찰의 성공 경로를 대역 서버로 확인 |
 | 2026-09-05 ⑨ | Phase 6 — 세션 삭제·연쇄 무효화·탈퇴. ⑧을 ⑤보다 먼저 돌리도록 순서 조정 |
 | 2026-09-05 ⑧ | Phase 5 — 조회 6개. trend의 range 생략 시 500 정정. 기록 목록은 끝난 세션만 |
 | 2026-09-05 ⑦ | Phase 4 — 패턴 배치·관찰 생성. `/internal/sessions`의 `recentObservations` 연결 |

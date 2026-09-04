@@ -294,6 +294,28 @@ class TurnApiTest {
         assertThat(baseline.getSessionCount()).isEqualTo(1);
     }
 
+    /**
+     * 계약 §1-1은 소수 2자리다. Postgres {@code avg()}는 스케일이 큰 numeric을 주는데
+     * 그대로 내보내면 응답에 <b>{@code 0.80000000000000000000}</b>이 실린다 —
+     * 통합 테스트에서 실제로 그렇게 나갔다.
+     */
+    @Test
+    @DisplayName("gapAvg는 소수 2자리로 나간다 — avg()의 긴 스케일이 그대로 새지 않는다")
+    void gapAvgIsRoundedToTwoDecimals() throws Exception {
+        ingest(1, "2026-09-18T12:31:02.417Z", "user", "하나", "0.5", "0.1", "1.50", false, List.of(), false);
+        ingest(2, "2026-09-18T12:32:02.417Z", "user", "둘", "0.5", "0.1", "0.10", false, List.of(), false);
+        em.flush();
+
+        String body = mvc.perform(post("/api/session/{id}/end", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"endReason\":\"user_end\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).contains("\"gapAvg\":0.80");
+    }
+
     // ── 도구 ────────────────────────────────────────────────────────
 
     private void ingest(int turnIndex, String occurredAt, String role, String transcript,
