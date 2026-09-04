@@ -1,5 +1,7 @@
 # 백엔드 작업 문서
 
+> **수정 기록 (2026-09-04 ⑧)** — **백엔드가 보낸 요청 2건에 회신이 왔다**(`../../docs/response/backend/`). ① **`turnIndex` 채번 ✅** — AI서버가 카운터를 세션 캐시 안에 두고 `lastTurnIndex`로 시드하므로 **0에서 시작하는 경로가 설계상 없다.** 이어하기는 유휴 60초로 감지해 재조회한다. 요청했던 `occurredAt` 확인은 **계약 v1.5 §3-2에 규칙으로 명시**됐다(발화 시각·밀리초·재시도 불변·세션 내 중복 없음) — **우리 중복 판별 가드의 전제가 계약으로 확정됐다.** 그래서 **`TURN_INDEX_COLLISION`은 이제 "정상 동작"이 아니라 "버그 신호"**다(한 건이라도 보이면 AI에 알린다). ② **통합 테스트 경로 ✅** — 터널 방식·순서 동의, **AI서버는 9/6 준비.** 터널 전에 쓸 고정 픽스처가 `ai-server/eval/fixtures/internal/`에 올라왔다. **그리고 새 블로커가 하나 왔다 — Hume Config를 만드는 계정과 결제하는 계정이 같아야 한다**(갈리면 결제한 쿼터가 적용되지 않는다). `roadmap.md` 착수 블로커 참조.
+>
 > **수정 기록 (2026-09-04 ⑦)** — 앞 회차에서 남긴 위험 두 개를 **기다리지 않고 닫았다.** ① **`/internal/turns` 중복 판별** — `unique` 위반 시 `occurred_at`을 비교해 재시도(무시)와 충돌(`max+1`로 저장 + `ops_error_log`)을 가른다. 종전에는 위반을 무조건 "이미 적재됨"으로 처리해, 이어하기 후 인덱스가 리셋되면 **새 발화가 오류 없이 사라졌다.** 이제 **AI 회신과 무관하게 유실이 0건이고 조용하지 않다** — 회신은 그 경로가 얼마나 자주 도느냐만 바꾼다. ② **미회신 요청을 놓친 원인을 지웠다** — 회신 현황에서 **개수와 완결 선언을 뺐다.** 손으로 베낀 숫자는 다음 요청이 오는 순간 틀리고, 그게 `tag-gap-endpoint.md`를 못 본 이유였다. **Phase 문서가 계약 스키마를 베껴 5곳이 어긋난 것과 같은 병이라 고치는 방향도 같다 — 규칙을 더하지 않고 베낀 것을 지운다.** 세는 방법은 `grep -L "✅" docs/request/backend/*.md` 하나로 두고 루트 `CLAUDE.md` 세션 시작 절에 넣었다.
 >
 > **수정 기록 (2026-09-04 ⑥)** — **계약 v1.4 개정 + 이 폴더 전면 대조.** 루트 스펙과 Phase 문서를 전수 대조해 **공백·결함 11건**을 찾아 고쳤다. 큰 것 넷 — ① **미회신 요청 1건을 놓치고 있었다**(`tag-gap-endpoint.md`, ⑤ 작성 이후 도착) → 회신 완료, `GET /api/trend`에 `tagGaps`·`userAvgGap` ② **`highlights`(F9-02)의 판정 임계값이 DB에 없었다** → `voice_session.gap_threshold` 신설 ③ **이어하기 + 3회 재시도가 만나면 턴이 조용히 유실된다** → 계약 §3-2 채번 규칙·§3-4 `lastTurnIndex`, AI에 확인 요청(⏳) ④ **F3-04가 `avg_gap` NULL을 안 본다** → 가드 추가, `session_count`를 F3-05에서 분리. 아울러 **Phase 문서의 응답 필드 나열을 전부 걷어내고 계약 §번호만 가리키게 했다**(부분 복제가 5곳에서 어긋나 있었다 — `api-spec.md`에 이미 적용한 규칙을 여기에도 적용). `/live`를 Phase 5 → Phase 3으로, 데모 플래그는 `profile.demo_mode` 컬럼으로. 결정 로그 6건 추가.
@@ -241,6 +243,8 @@ F3(측정)·F4(안전)·F7-04(문장화)·F8(제안)의 판정·생성 로직은
 | **F3-04 가드 · `session_count` 소유 (2026-09-04 ⑥)** | 조건을 **`session_count >= 5` AND `avg_gap IS NOT NULL`**로. **`session_count` 증가는 F3-05가 아니라 세션 종료의 기본 동작** | `spec.md` F3-04·F3-05 | 조건이 세션 수뿐이라, TC-06이 반복돼 5세션 내내 갭이 NULL이면 **평균 없이 `personal`로 전환**된다. 그리고 F3-05는 P1·스코프 컷 7번이라 **자르면 P0인 F3-04와 TC-07이 같이 죽는다** — 카운트를 종료로 옮기면 잘라도 가드가 `fixed`를 안전하게 유지한다 |
 | **데모 플래그 저장 위치 (2026-09-04 ⑥)** | **`profile.demo_mode` 컬럼.** 환경변수 목록 미채택 | `spec.md` §6-1·F11-01, `data-model.md`, `phase-1` | Phase 7이 환경변수를 택한 근거는 "컬럼은 마이그레이션이 한 번 더 필요"였는데, **Phase 1이 아직 `migration.sql`을 쓰는 중이라 성립하지 않는다.** 실제 차이는 심사 당일에 난다 — 환경변수는 재배포, 컬럼은 `UPDATE` 한 줄. `account`가 아니라 `profile`인 이유는 조회가 전부 `profileId` 기반이고 `account` 조인이 식별자 분리를 훼손하기 때문 |
 | **`/internal/turns` 중복 판별 (2026-09-04 ⑦)** | **`unique` 위반 시 `occurred_at`을 비교한다.** 같으면 재시도(무시), 다르면 충돌(`max+1`로 저장 + `ops_error_log`). 둘 다 202 | `phase-3-turn-ingest.md` 3-1, `data-model.md` | 위반을 무조건 "이미 적재됨"으로 보면 **이어하기 후 인덱스 리셋 시 새 발화가 조용히 사라진다.** 재시도는 같은 페이로드를, 충돌은 다른 발화를 보내므로 컬럼 하나로 갈린다. **AI 회신을 기다리지 않고 유실을 막고**, 원인이 이어하기가 아니어도 같이 막힌다. 전제는 `occurredAt`이 발화 시각이고 재시도에서 불변이라는 것 — AI에 확인 중(`request/ai/turn-index-numbering.md` 3번) |
+| **`occurredAt` 보장 (2026-09-04 ⑧, AI 회신)** | **발화 시각 · 밀리초 정밀도 · 재시도 시 동일 문자열 · 같은 세션에서 값 중복 없음.** AI서버가 값이 겹치면 1ms를 더한다 | `api-contract.md` §3-2 (**v1.5**), `response/backend/turn-index-numbering.md` | 우리 중복 판별 가드가 이 필드 하나에 걸려 있었는데 계약엔 예시만 있었다. 규칙이 명시되어 **가드가 오판할 경로가 사라졌다.** 다만 AI서버 시계로 찍혀 **실제 발성보다 수백 ms 뒤**이므로 발화 간격 분석에는 쓰지 않는다 |
+| **`TURN_INDEX_COLLISION`의 위상 (2026-09-04 ⑧)** | **정상 동작이 아니라 버그 신호.** 한 건이라도 나오면 AI에 알린다 | `phase-3-turn-ingest.md` 3-1, `response/backend/turn-index-numbering.md` | AI가 `lastTurnIndex` 시드 + 유휴 60초 재조회로 리셋 경로를 막았으므로 **이어하기에서도 이 로그가 안 나와야 한다.** 가드는 데이터를 지키는 그물이지 상시 경로가 아니다 |
 | **로그 상관 수단 (2026-09-04 ⑥)** | **`sessionRef = SHA-256(sessionId)[:8]`.** `ops_error_log.message` 앞머리·앱 로그·`traceId`에 같은 값 | `data-model.md`, 절대 원칙 6번 | 발화도 `sessionId`도 못 남기면 `/internal/turns` 실패를 추적할 수단이 0이다. 해시는 인증에 쓸 수 없어 원칙 6번(CLM 인증 수단 노출 금지)을 깨지 않는다. 컬럼도 안 늘어난다 |
 
 ### 회신한 요청 (이력 — 현황이 아니다)
@@ -265,10 +269,10 @@ F3(측정)·F4(안전)·F7-04(문장화)·F8(제안)의 판정·생성 로직은
 
 `../../docs/response/backend/`로 회신이 들어온다. **현황은 `grep -L "✅" docs/request/ai/*.md`로 센다** — 아래 표도 이력이다.
 
-| 요청 | 대상 | 막고 있는 것 |
+| 요청 | 회신 | 결과 |
 | --- | --- | --- |
-| [`request/ai/integration-test-path.md`](../../docs/request/ai/integration-test-path.md) ⏳ | AI | 내부 API 4종의 **실제 통합 검증**. 양쪽 단위 개발은 안 막는다 |
-| [`request/ai/turn-index-numbering.md`](../../docs/request/ai/turn-index-numbering.md) ⏳ (2026-09-04) | AI | 없음 — 계약 v1.4가 규칙을 정했고 확인만 남았다. **F2-07을 실제로 붙일 때 터진다** |
+| [`request/ai/integration-test-path.md`](../../docs/request/ai/integration-test-path.md) | [`response/backend/integration-test-path.md`](../../docs/response/backend/integration-test-path.md) ✅ | 터널 방식·순서 동의. **AI서버 9/6 준비**, 고정 픽스처 제공. **Hume 계정 일치 문제를 새로 알려왔다** |
+| [`request/ai/turn-index-numbering.md`](../../docs/request/ai/turn-index-numbering.md) | [`response/backend/turn-index-numbering.md`](../../docs/response/backend/turn-index-numbering.md) ✅ | 확인 3건 전부 확인. `occurredAt` 규칙을 **계약 v1.5**에 명시 |
 
 ## 스펙 문서에서 발견한 불일치
 

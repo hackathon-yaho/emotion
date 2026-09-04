@@ -130,7 +130,7 @@ create index idx_turn_tag_tag on turn_tag (tag);
 | --- | --- |
 | `transcript_enc` | **AES-GCM 암호문(base64).** JPA `AttributeConverter`가 변환하므로 애플리케이션 코드는 평문 `String`으로 다룬다(F5-02) |
 | `role` | **assistant 턴은 valence·gap이 전부 NULL, 태그 없음**(계약 §3-2). 측정 대상은 사용자 발화뿐 |
-| `occurred_at` / `created_at` | 발화 시각 / 적재 시각. `/internal/turns`가 재시도되면 갈린다 |
+| `occurred_at` / `created_at` | 발화 시각 / 적재 시각. `/internal/turns`가 재시도되면 갈린다. **`occurred_at`은 계약 §3-2(v1.5)가 밀리초 정밀도·재시도 불변을 보장**하므로 중복 판별의 기준으로 쓸 수 있다 — `timestamptz`는 마이크로초까지 담아 정밀도 손실이 없다 |
 | `unique (session_id, turn_index)` | 같은 턴이 두 번 적재되는 것을 DB가 막는다 — `/internal/turns`가 **3회 재시도**하므로(계약 §3-2 v1.3) 중복이 실제로 발생할 수 있다. **위반 시 `occurred_at`으로 재시도/충돌을 판별한다**(아래) |
 | `top_prosody` | 상위 5개까지. 디버깅·재현성 검증용 |
 | **음성 원본** | **컬럼이 없다.** 어떤 형태로도 저장하지 않는다(FR-041) |
@@ -138,6 +138,7 @@ create index idx_turn_tag_tag on turn_tag (tag);
 > `idx_turn_tag_tag`는 F7-02 태그별 집계가 전 기간을 훑기 때문에 필요하다.
 > **`unique (session_id, turn_index)` 위반을 무조건 "이미 적재됨"으로 해석하면 안 된다.** 이어하기(F2-07)는 같은 `sessionId`를 유지하므로, AI가 재연결 후 인덱스를 리셋하면 **다른 발화가 같은 인덱스로 들어와 조용히 버려진다.** 그래서 위반 시 **기존 행의 `occurred_at`과 비교한다** — 같으면 재시도(무시하고 202), 다르면 충돌(`max(turn_index)+1`로 저장 + `ops_error_log`의 `TURN_INDEX_COLLISION`, 역시 202). 재시도는 같은 페이로드를 다시 보내고 충돌은 다른 발화이므로 이 한 컬럼으로 갈린다. 상세는 `phase-3-turn-ingest.md` 3-1.
 > **`occurred_at`과 `created_at`을 나눠 둔 값어치가 여기서 나온다.** `created_at`은 재시도마다 달라져 판별자가 될 수 없다.
+> **⚠️ `occurred_at`은 정확한 발성 시각이 아니다.** AI서버가 자기 UTC 시계로 찍고(user 턴은 분석 직후, assistant 턴은 스트림 종료 시점) **실제 발성보다 수백 ms 뒤**다(계약 §3-2 v1.5). 중복 판별에는 영향이 없지만, **이 값으로 발화 간격·응답 지연을 분석하지 않는다.**
 
 ### 개인 baseline (F3-04 · F3-05)
 

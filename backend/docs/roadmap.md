@@ -1,5 +1,7 @@
 # 백엔드 착수 계획
 
+> **수정 기록 (2026-09-04 ④)** — AI 회신 2건 반영(`response/backend/`). ① **통합 시점이 잡혔다 — AI서버는 9/6 준비.** 터널 방식·붙이는 순서(`GET /internal/sessions` 먼저) 모두 동의를 받았고, 터널 전에 쓸 **고정 픽스처**(`ai-server/eval/fixtures/internal/`)가 올라왔다. ② **착수 블로커에 Hume 계정 문제를 추가했다** — Config를 만드는 계정과 결제하는 계정이 갈리면 **결제한 쿼터가 적용되지 않는다.** Free는 동시 접속 1이라 3인 도그푸딩은커녕 통합 테스트도 성립하지 않는다.
+>
 > **수정 기록 (2026-09-04 ③)** — 계약 v1.4 반영. **`GET /api/session/{id}/live`를 Phase 5에서 떼어 Phase 3 직후로 옮겼다** — 의존이 Phase 3의 `turn_log`·`crisis_event`뿐이고, 앱은 이게 없으면 S02를 끝낼 수 없다(S07 위기 시트·데모 오버레이가 둘 다 여기 걸린다). 종전에는 Phase 5 문서가 "Phase 4보다 먼저 붙여도 된다"고 적어놓고 이 문서의 착수 순서는 5번째에 두어 **두 문서가 같은 것을 다르게 말하고 있었다.**
 >
 > **수정 기록 (2026-09-04 ②)** — **조직 원리를 "9/10 역산"에서 "의존 순서"로 바꿔 재작성.** PRD §12 개정으로 9/10이 일정 상수에서 **팀 내부 목표**로 내려갔고, **배포는 세 파트 기능 확인 후**로 결정돼(2026-09-04) 종전 "Phase 7의 배포만 9/10 앞으로 당겨진다"가 성립하지 않게 됐다. 착수 블로커 표는 결정된 값으로 교체(스택 4건 확정), 통합 테스트 도달 문제를 신설.
@@ -62,7 +64,8 @@ Phase 문서(`phase-1~7`)가 **무엇을 만드는지**라면, 이 문서는 **�
 | 로컬 인프라 | ✅ 확정 | docker-compose Postgres 16 (개발) / Supabase (배포) |
 | 배포 플랫폼 | ✅ 확정 | Render Free + cron 10분 킵얼라이브. **AI서버와 별도 계정**(워크스페이스당 750시간) |
 | 발화 암호화 | ✅ 확정 | 앱 레벨 AES-GCM + JPA `AttributeConverter`, 키는 환경변수 |
-| **Hume 유료 플랜** | ⏳ **미결** | **Free는 월 5분이라 첫 EVI 테스트에 소진된다.** 배포 전이 아니라 **로컬에서 EVI를 처음 켜는 시점**에 필요하다 |
+| **Hume 유료 플랜** | ⏳ **미결 — 가장 급하다** | **Free는 월 5분 · 동시 접속 1.** 하드 컷이 7분이라 **세션 하나가 월 할당량보다 길다.** 배포 전이 아니라 **로컬에서 EVI를 처음 켜는 시점**에 필요하다 |
+| **Hume 계정 일치** | ⏳ **미결 — 결제 전에 정해야 한다** | **Config를 만드는 계정(AI)과 결제하는 계정(백엔드)이 같아야 한다.** `config_id`는 워크스페이스에 묶여서, 갈리면 **결제한 쿼터가 그 Config에 적용되지 않는다 — 대화는 붙고 5분 뒤 끊기며 원인이 코드로 안 보인다.** 팀 공용 계정 하나를 정하고 거기서 Config 생성·결제를 모두 한다 (`response/backend/integration-test-path.md`) |
 
 > 결정의 근거는 `README.md` 결정 로그에 있다. 이 표는 상태만 본다.
 
@@ -72,8 +75,19 @@ Phase 문서(`phase-1~7`)가 **무엇을 만드는지**라면, 이 문서는 **�
 
 - 반대 방향(백엔드 → AI서버)은 **AI서버가 Hume 때문에 이미 ngrok으로 열려 있어** 문제없다
 - 백엔드도 **통합 테스트 동안만 터널을 연다.** 배포가 아니라 임시 경로다
-- 시점·순서는 협의 중 — `../../docs/request/ai/integration-test-path.md` (⏳)
-- 붙이는 순서는 **`GET /internal/sessions/{id}`부터**. CLM 인증 경로라 이게 안 되면 나머지가 전부 401로 막혀 검증이 성립하지 않는다
+- **시점·순서 합의 완료** (2026-09-04, `../../docs/response/backend/integration-test-path.md` ✅)
+- **AI서버는 9/6에 준비된다** — `GET /internal/sessions` 호출부 + 세션 캐시 + CLM SSE + `/internal/turns` 적재까지. **백엔드 Phase 2·3이 그때까지 서면 바로 붙는다**
+- 붙이는 순서는 **`GET /internal/sessions/{id}`부터**. CLM 인증 경로라 이게 안 되면 나머지가 전부 401로 막혀 검증이 성립하지 않고, **`lastTurnIndex` 공급원이라 이게 없으면 `/internal/turns`의 번호가 맞는지도 검증할 수 없다**
+
+| 순서 | 대상 | 확인 |
+| --- | --- | --- |
+| 1 | `GET /internal/sessions/{id}` | 200 · 404 · 타임아웃 3종. **404가 AI 쪽에서 401로 바뀌는지**까지 |
+| 2 | `POST /internal/turns` | user·assistant 각 1건 + **같은 턴 재전송**으로 202 중복 판정. **응답만 버려 재시도를 유도**해 가드를 실제로 돌려 본다 |
+| 3 | `POST /internal/summaries` | 백엔드 → AI서버 (AI 터널) |
+| 4 | `POST /internal/observations` | 같은 방향 |
+
+- **터널을 열기 전에 `curl`로 먼저 검증한다** — AI가 `ai-server/eval/fixtures/internal/`에 요청·응답 고정 JSON을 올려 뒀다. 양쪽이 같은 파일을 쓰므로 "제 쪽에선 되는데요"가 안 생긴다
+- **통합 중 AI가 `AI_SESSION_LOOKUP_TIMEOUT_MS`를 800 → 2000으로 올린다**(터널 2개 왕복). 백엔드의 `GET /internal/sessions`가 그 안에 응답해야 하며, **fail-closed는 통합 중에도 끄지 않는다**
 
 ## 다른 역할이 백엔드를 기다리는 것
 
@@ -84,6 +98,6 @@ Phase 문서(`phase-1~7`)가 **무엇을 만드는지**라면, 이 문서는 **�
 | AI | `X-Internal-Secret` 값 | 통합 시작할 때. 저장소에 넣지 않는다 |
 | AI | `GET /internal/sessions/{id}` 실동작 | Phase 2 — **CLM 인증이라 AI 개발을 막는다** |
 | AI → 백엔드 | Hume Config 생성 후 `config_id` | AI가 생성·소유. 받으면 환경변수에 넣는다 |
-| AI → 백엔드 | `turnIndex` 채번 확인 (`request/ai/turn-index-numbering.md` ⏳) | **F2-07(이어하기)을 붙이기 전.** 리셋하면 이어하기 이후 턴이 조용히 유실된다 |
+| AI → 백엔드 | ~~`turnIndex` 채번 확인~~ ✅ (2026-09-04) | **회신 완료.** 카운터를 `lastTurnIndex`로 시드하므로 0에서 시작하는 경로가 없고, `occurredAt` 규칙은 **계약 v1.5**에 명시됐다 |
 | 앱 | `GET /api/session/{id}/live` | **Phase 3** — S02가 이걸로 완성된다 |
 | 앱 | `tagGaps`·`userAvgGap` (F9-03, P1) | Phase 5 — 계약 v1.4로 확정됨 |

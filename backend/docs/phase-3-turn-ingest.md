@@ -43,7 +43,9 @@ unique (session_id, turn_index) 위반:
 >
 > **`occurred_at`이 판별자인 이유** — **재시도는 같은 페이로드를 다시 보내고, 충돌은 다른 발화다.** 컬럼 하나 비교라 복호화도 해시도 필요 없고, 위반이 난 경로에서만 SELECT가 한 번 더 붙는다. `created_at`(적재 시각)은 재시도마다 달라지므로 쓸 수 없다 — 두 컬럼을 나눠 둔 이유가 여기서 쓰인다(`data-model.md`).
 >
-> **이 가드는 AI 회신을 기다리지 않는다.** AI가 무엇을 하든 **유실이 없고, 조용하지 않다.** 계약 v1.4 §3-2가 채번 규칙을 명시하고 §3-4가 `lastTurnIndex`를 주지만, 그건 이 경로가 **덜 자주 도는** 문제이지 데이터가 남느냐의 문제가 아니다 — `../../docs/request/ai/turn-index-numbering.md`.
+> **전제는 계약 v1.5로 확정됐다** (AI 회신, 2026-09-04). §3-2가 `occurredAt`을 **발화 시각 · 밀리초 정밀도 · 재시도 시 동일 문자열 · 같은 세션에서 값 중복 없음**으로 못 박았고, AI서버는 값이 겹치면 1ms를 더하는 방어까지 넣었다. **가드가 오판할 경로가 없다.**
+>
+> **⚠️ `TURN_INDEX_COLLISION`이 찍히면 그건 정상 동작이 아니라 버그 신호다.** AI서버가 `turnIndex`를 세션 캐시 안에서 `lastTurnIndex`로 시드하고 유휴 60초로 이어하기를 감지해 재조회하므로, **이어하기에서도 이 로그가 안 나와야 한다**(`response/backend/turn-index-numbering.md`). 한 건이라도 보이면 **AI에 알린다** — 유휴 감지가 안 걸린 경우다. 가드는 데이터를 지키는 그물이지 상시 경로가 아니다.
 >
 > **번호가 어긋나지 않는다.** 재번호를 매겨도 앱은 `/live` 응답의 `lastTurnIndex`를, AI는 `/internal/sessions`의 `lastTurnIndex`를 쓰는데 **둘 다 백엔드가 매긴 번호**다.
 >
@@ -122,6 +124,8 @@ unique (session_id, turn_index) 위반:
 - **DB를 직접 조회해도 평문 발화가 보이지 않는다** (F5-02 수용 기준)
 - 같은 턴을 두 번 보내도 행이 하나만 생기고 202가 온다
 - **같은 `turnIndex`로 `occurredAt`이 다른 턴을 보내면 행이 둘 다 남고 `ops_error_log`에 `TURN_INDEX_COLLISION`이 찍힌다** (유실 0건 · 조용하지 않음)
+- **통합 테스트에서 재시도 경로를 일부러 만들어 본다** — 저장은 성공시키고 **202 응답만 버려서** AI가 재시도하게 하고, `occurredAt`이 같아 중복으로 판정되는지 확인한다. AI가 제안한 시나리오이며(`response/backend/integration-test-path.md`), **그 가드가 실제로 도는 걸 한 번은 봐야 한다**
+- 터널 붙이기 전에 **`ai-server/eval/fixtures/internal/`의 고정 JSON으로 `curl` 선검증**한다 — `turns.user.request.json`·`turns.assistant.request.json`·`turns.user.degraded.request.json`(분석 실패 턴). 양쪽이 같은 파일을 쓰므로 "제 쪽에선 되는데요"가 안 생긴다
 - **TC-06** — 분석 호출 실패 턴(valence null, tags 빈 배열)이 정상 수신·저장된다
 - **TC-11** — 서버·스토리지 어디에도 **오디오 파일 0건**
 - **TC-15** — 원문에 없는 태그가 저장돼 있지 않다
