@@ -59,7 +59,7 @@ observation_evidence → observation → turn_tag → turn_log → crisis_event
 - [ ] 응답 **204**
 
 > **유예 기간을 두지 않는다.** 즉시 전량 삭제가 신뢰의 핵심이다(FR-003).
-> **수용 기준: 같은 카카오 계정으로 재가입하면 신규 사용자로 시작한다**(TC-13). `account.kakao_sub`가 지워졌으므로 새 `profile`이 생긴다.
+> **수용 기준: 같은 카카오 계정으로 재가입하면 신규 사용자로 시작한다**(TC-13). `account.kakao_id`가 지워졌으므로 새 `profile`이 생긴다.
 > FK가 `NO ACTION`이라 순서를 어기면 제약 위반으로 **즉시 실패하고 롤백**된다 — 순서 실수가 조용히 넘어가지 않는다는 뜻이라 오히려 안전하다.
 
 ## 완료 기준

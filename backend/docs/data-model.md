@@ -40,7 +40,7 @@
 ```sql
 create table account (
     id          uuid primary key default gen_random_uuid(),
-    kakao_sub   text        not null unique,
+    kakao_id    text        not null unique,
     created_at  timestamptz not null default now()
 );
 
@@ -55,6 +55,12 @@ create table account_profile (
     profile_id  uuid not null unique references profile(id)
 );
 ```
+
+| 컬럼 | 규칙 |
+| --- | --- |
+| `account.kakao_id` | **카카오 회원번호** — `GET /v2/user/me`의 `id`를 문자열로 저장한다(F1-01 ③). 카카오 회원번호는 64비트 정수라 `bigint`도 되지만, **식별자를 산술 대상으로 만들지 않으려고** `text`로 둔다 |
+
+> **`kakao_sub`이 아니라 `kakao_id`인 이유 (2026-09-04)** — `sub`은 OIDC ID 토큰의 클레임 이름이다. 우리 흐름은 **액세스 토큰을 받아 `/v2/user/me`를 부르는 방식**이라 실제로 저장되는 값은 `id`(회원번호)다. 이름과 값이 다르면 구현할 때 "OIDC를 써야 하나" 하고 한 번 멈춘다. 코드가 없는 지금이 고치는 비용이 0인 유일한 시점이다.
 
 > **감정 데이터는 `profile_id`만 참조한다.** `account`(카카오 식별자)와의 연결은 `account_profile` 한 곳에만 있다 — PRD §5.1 식별자 분리. 이 테이블을 조인하지 않으면 어떤 감정 데이터도 실명 계정에 닿지 않는다.
 > **`demo_mode`가 `account`가 아니라 `profile`에 있는 이유** — 조회 경로가 전부 `profileId` 기반이다. `account`에 두면 데모 여부를 볼 때마다 `account_profile` 조인이 붙는데, 그 조인은 식별자 분리가 막으려는 바로 그 경로다. **심사 당일에는 `UPDATE profile SET demo_mode = true WHERE id = ?` 한 줄로 켠다 — 재배포가 필요 없다.**

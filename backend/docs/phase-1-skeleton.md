@@ -64,7 +64,8 @@ com.hackathonyaho.voicejournal
 ## 1-6. 카카오 로그인 · JWT (F1-01 · F1-02)
 
 - [ ] `POST /api/auth/kakao` — **응답은 계약 §2-1 그대로**
-  - [ ] 앱이 보낸 카카오 액세스 토큰을 **카카오 API로 검증**
+  - [ ] **① `GET https://kapi.kakao.com/v1/user/access_token_info`** — 응답의 `app_id`가 **우리 앱 ID와 같은지 대조.** 다르면 401 `KAKAO_VERIFY_FAILED` — 아래 주의
+  - [ ] **② `GET https://kapi.kakao.com/v2/user/me`** — `id`(회원번호)를 얻어 `account.kakao_id`에 저장
   - [ ] 신규면 `account` + `profile` + `account_profile` 생성 (한 트랜잭션)
   - [ ] 자체 JWT 발급. **`expiresAt`은 JWT의 만료 시각과 같은 값**을 UTC ISO 8601로 내려준다 — 앱이 토큰을 파싱하지 않아도 되게
   - [ ] 검증 실패 → 401 `KAKAO_VERIFY_FAILED` / 카카오 API 장애 → 503 `INTERNAL_ERROR`
@@ -76,7 +77,11 @@ com.hackathonyaho.voicejournal
   - [ ] `sessionCount`는 `user_baseline.session_count`, `demoMode`는 `profile.demo_mode`, `thresholdMode`는 F3-04 규칙으로 그 자리에서 계산 (표시용이며 실제 적용 값은 세션 시작 시 다시 내려간다)
   - [ ] **`openSession`은 Phase 2에서 채운다**(지금은 항상 `null`)
 
-> **감정 데이터 API는 `profileId`로만 동작한다.** 컨트롤러·서비스 어디에도 `kakao_sub`가 흘러다니지 않게 한다 — 식별자 분리(PRD §5.1)는 테이블만 나눈다고 지켜지지 않고, 코드가 조인하면 무너진다.
+> **⚠️ ①을 빼면 아무 카카오 앱의 토큰이든 통과한다.** `/v2/user/me`는 "이 토큰이 어느 앱 것인지"를 묻지 않고 그냥 사용자 정보를 돌려준다. 카카오 앱은 누구나 만들 수 있으므로, 출처를 확인하지 않으면 **우리가 발급하지 않은 신원을 그대로 받아들이게 된다.** 호출 한 번이고, 빠뜨려도 정상 로그인은 멀쩡히 되기 때문에 **테스트로는 안 잡힌다** — 그래서 여기 적어둔다.
+
+> **카카오 회원번호는 앱마다 다르다.** 같은 사람이라도 다른 카카오 앱에서는 다른 번호를 받는다. 그래서 `kakao_id`는 **우리 앱 기준의 식별자**이고, ①의 대조가 그 전제를 지킨다.
+
+> **감정 데이터 API는 `profileId`로만 동작한다.** 컨트롤러·서비스 어디에도 `kakao_id`가 흘러다니지 않게 한다 — 식별자 분리(PRD §5.1)는 테이블만 나눈다고 지켜지지 않고, 코드가 조인하면 무너진다.
 
 ## 1-6-1. CORS (앱이 다른 오리진에서 붙는다)
 
@@ -113,6 +118,7 @@ com.hackathonyaho.voicejournal
 - **배포된 앱 오리진에서 `OPTIONS` 프리플라이트가 인증 없이 200/204로 통과한다** (브라우저 콘솔에 CORS 오류 0건)
 - 11테이블이 로컬 DB에 만들어져 있다
 - 카카오 로그인 → JWT 발급 → 그 JWT로 `GET /api/me` 호출이 통과한다
+- **다른 카카오 앱에서 발급된 액세스 토큰을 보내면 401이다** (`app_id` 대조가 실제로 도는지 — 정상 로그인만으로는 확인되지 않는다)
 - **JWT 없이 감정 데이터 API를 호출하면 전부 401** (spec F1-02 수용 기준)
 - **TC-01** — 로그인 → 로그아웃 → 재로그인 시 **동일 `profileId`**가 나오고 이전 데이터가 그대로 조회된다
 - [`api-spec.md`](api-spec.md) 구현 현황 표에서 `/api/auth/kakao`·`/api/me`·`/api/health`를 `구현 완료`로 갱신했다

@@ -201,9 +201,10 @@
 | 설명 | 카카오 소셜 로그인 1종으로 가입·로그인한다. 다른 인증 수단은 제공하지 않는다 |
 | 트리거 | S00에서 `[카카오로 시작하기]` |
 | 입력 | 카카오 SDK가 반환한 액세스 토큰 |
-| 처리 | ① 앱이 카카오 SDK로 로그인 ② 액세스 토큰을 `POST /api/auth/kakao`로 전송 ③ 백엔드가 카카오 API로 토큰 검증 ④ 신규면 `account` + `profile` + `account_profile` 생성 ⑤ 자체 JWT 발급 |
+| 처리 | ① 앱이 카카오 SDK로 로그인 ② 액세스 토큰을 `POST /api/auth/kakao`로 전송 ③ **백엔드가 `GET /v1/user/access_token_info`로 그 토큰이 우리 앱에서 발급된 것인지 `app_id`를 대조**하고, 통과하면 `GET /v2/user/me`로 회원번호(`id`)를 얻는다 ④ 신규면 `account` + `profile` + `account_profile` 생성 ⑤ 자체 JWT 발급 |
 | 출력 | `{ jwt, profileId, isNewUser }` |
-| 예외 | 토큰 검증 실패 → 401, 재로그인 유도 / 카카오 API 장애 → 안내 후 재시도 |
+| 예외 | 토큰 검증 실패 → 401, 재로그인 유도 / **`app_id` 불일치 → 401**(다른 앱에서 발급된 토큰) / 카카오 API 장애 → 안내 후 재시도 |
+| 근거 (`app_id` 대조) | **③에서 `/v2/user/me`만 부르면 아무 카카오 앱에서 발급된 토큰이든 통과한다.** 카카오 앱은 누구나 만들 수 있으므로, 토큰의 출처를 확인하지 않으면 우리가 발급하지 않은 신원을 그대로 받아들이게 된다. 호출 한 번으로 막는다 |
 | 수용 기준 | 재로그인 시 동일 `profileId`가 반환되어 이전 감정 로그가 그대로 조회된다 |
 | 연관 | F1-02, F1-04, F10-03 |
 
@@ -931,7 +932,7 @@
 
 | 테이블 | 주요 컬럼 | 개인정보 |
 | --- | --- | --- |
-| `account` | `id`, `kakao_sub`, `created_at` | **있음 (분리 보관)** |
+| `account` | `id`, **`kakao_id`**(카카오 회원번호 — `/v2/user/me`의 `id`), `created_at` | **있음 (분리 보관)** |
 | `account_profile` | `account_id`, `profile_id` | 연결자 |
 | `profile` | `id`, **`demo_mode`**(F11-01 플래그), `created_at` | 없음 |
 | `voice_session` | `id`, `profile_id`, `started_at`, `ended_at`, `duration_sec`, `threshold_mode`, **`gap_threshold`**(그 세션에 적용된 임계값 스냅샷 — F9-02 음영 판정), `end_reason`, `summary`, **`hume_chat_group_id`**(이어하기용), **`pattern_processed_at`**(F7-01 배치 처리 시각) | 없음 |
