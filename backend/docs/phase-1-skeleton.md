@@ -166,11 +166,12 @@ openssl rand -base64 32   # JWT_SECRET · TRANSCRIPT_ENC_KEY · INTERNAL_SHARED_
 - ✅ `GET /api/health`가 `{ "status": "ok", "db": "ok", ... }`를 반환한다
 - ✅ **배포된 앱 오리진에서 `OPTIONS` 프리플라이트가 인증 없이 200/204로 통과한다** (브라우저 콘솔에 CORS 오류 0건)
 - ✅ 11테이블이 로컬 DB에 만들어져 있다
-- ⏳ 카카오 로그인 → JWT 발급 → 그 JWT로 `GET /api/me` 호출이 통과한다
+- ✅ 카카오 로그인 → JWT 발급 → 그 JWT로 `GET /api/me` 호출이 통과한다 (2026-09-04 실계정 검증)
 - ⏳ **다른 카카오 앱에서 발급된 액세스 토큰을 보내면 401이다** (`app_id` 대조가 실제로 도는지 — 정상 로그인만으로는 확인되지 않는다)
+  - **다른 카카오 앱을 하나 더 만들어야 검증된다.** 정상 로그인은 통과하므로 이 항목만 남는다
 - ✅ **JWT 없이 감정 데이터 API를 호출하면 전부 401** (spec F1-02 수용 기준)
 - ✅ **테스트가 compose DB에 붙어 돌고, `migration.sql`이 그대로 적용된다**
-- ⏳ **TC-01** — 로그인 → 로그아웃 → 재로그인 시 **동일 `profileId`**가 나오고 이전 데이터가 그대로 조회된다
+- ✅ **TC-01** — 재로그인 시 **동일 `profileId`** · `isNewUser: false` · 계정 행이 늘지 않음 (2026-09-04 실계정 검증. 같은 토큰 재사용 1회 + 리프레시로 받은 새 토큰 1회, 둘 다 동일)
 - ✅ [`api-spec.md`](api-spec.md) 구현 현황 표에서 `/api/auth/kakao`·`/api/me`·`/api/health`를 `구현 완료`로 갱신했다
 
 ## 이 Phase에서 하지 않는 것
