@@ -58,7 +58,7 @@ flutter run -d chrome --dart-define=API_BASE_URL=https://api.example.com
 
 | 항목 | 값 | 앱이 할 일 |
 | --- | --- | --- |
-| 허용 오리진 | `https://hackathon-yaho.github.io` · `http://localhost:*` | **로컬 포트를 고정하지 않습니다.** 와일드카드로 열려 있어 `--web-port`가 필요 없습니다 |
+| 허용 오리진 | `https://hackathon-yaho.github.io` · `http://localhost:*` | **CORS 때문에 포트를 고정할 필요는 없습니다.** 다만 아래 카카오 때문에 로컬은 3000으로 띄웁니다 |
 | 프리플라이트 | `OPTIONS`는 인증 없이 통과 | 없음. 백엔드가 JWT 필터 예외에 넣었습니다 |
 | 자격증명 | **쓰지 않습니다** | **`withCredentials`를 켜지 않습니다** — 와일드카드 오리진과 함께 쓸 수 없습니다. 인증은 `Authorization` 헤더 하나입니다 |
 
@@ -71,6 +71,32 @@ flutter run -d chrome --dart-define=API_BASE_URL=https://<터널>.ngrok.app
 **CORS로 막히면 앱에는 그냥 네트워크 오류로 보입니다.** 배포 URL에서 모든 호출이 한꺼번에 실패하면 오프라인이 아니라 허용 오리진 목록(백엔드 환경변수 `CORS_ALLOWED_ORIGINS`)을 먼저 의심합니다 — `core/network/api_client.dart` 주석에 같은 메모를 남겨 뒀습니다.
 
 **Hume EVI는 CORS와 무관하지만 순서상 뒤입니다.** 앱이 `wss://api.hume.ai`로 직접 붙긴 하는데, 그 연결에 쓰는 단기 토큰을 `POST /api/session/start`로 받아야 하므로 **CORS가 막히면 EVI도 시작하지 못합니다.**
+
+## 카카오 로그인 — 로컬은 포트 3000입니다
+
+**`flutter run -d chrome --web-port=3000`으로 띄웁니다.** 카카오 콘솔에 등록된 Redirect URI가 두 개뿐입니다.
+
+```
+https://hackathon-yaho.github.io/emotion/
+http://localhost:3000/
+```
+
+**카카오 콘솔은 CORS와 달리 와일드카드를 받지 않습니다** — 문자열 완전 일치입니다. 포트가 다르면 **로그인만 실패하고 나머지 API는 멀쩡히 됩니다**(CORS가 `localhost:*`로 열려 있어서). 그래서 원인이 포트라는 걸 알아채기 어렵습니다.
+
+흐름은 **인가 코드 방식**입니다 — [`docs/response/backend/kakao-web-login.md`](../docs/response/backend/kakao-web-login.md)에서 SDK 소스로 확정했습니다.
+
+```
+① S00 "카카오로 시작하기" → 인가 URL로 페이지 이동
+② 동의 → 등록된 Redirect URI로 복귀 (?code=...)
+③ 앱 시작 시 Uri.base의 code를 읽어 POST /api/auth/kakao
+④ JWT 저장 → 게이트 통과 → 홈
+⑤ 주소창의 ?code= 를 지운다 (history.replaceState)
+```
+
+**⑤를 빼먹으면 새로고침 때 쓴 코드를 다시 보내 400이 됩니다** — 인가 코드는 1회용입니다.
+
+- **카카오 SDK를 넣지 않습니다.** `kakao_flutter_sdk` 2.0.1은 웹에서 `loginWithKakaoAccount()`·`issueAccessToken()`이 전부 예외를 던지고, `authorize()`도 `window.location.href`로 페이지를 넘긴 뒤 빈 문자열을 돌려줍니다. 웹에서 SDK가 하는 일은 URL 조립뿐입니다
+- **경로 전략은 해시 라우팅을 유지합니다.** path 전략으로 바꾸면 Redirect URI를 다시 등록해야 하고 `404.html` 폴백도 필요해집니다
 
 ## 구조
 
@@ -125,6 +151,7 @@ lib/
 | ~~F9-03 이야기별 갭~~ | ✅ 해결 — 계약 **v1.4** §2-8에서 `GET /api/trend`가 `tagGaps`·`userAvgGap`을 함께 줍니다(상위 7개, 3회 미만은 서버가 걸러냄, `range` 종속). **아직 앱 코드에 반영하지 않았습니다** |
 | 산세리프 서체 | 문서상 Pretendard지만 Google Fonts에 없어 **Noto Sans KR로 대체** 중입니다(캔버스와 동일). `fonts/`에 넣고 `pubspec.yaml`의 fonts 항목을 켠 뒤 `AppType.sans`만 바꾸면 전 화면에 적용됩니다 |
 | 제품 이름 | 미확정(PRD §14-6). Dart 패키지명 `voice_journal`, 번들 ID `com.hackathonyaho.voiceJournal`은 임시입니다. 확정되면 `main.dart`의 `title`과 `web/index.html`·`manifest.json`을 함께 고칩니다. **커스텀 도메인이 정해지면 백엔드에 알립니다** — 허용 오리진이 환경변수 한 줄이라 재배포 없이 들어갑니다 |
+| 카카오 로그인 | 흐름은 확정(인가 코드)이지만 **키가 없어 아직 구현하지 않았습니다.** `onboarding_screen.dart`는 여전히 TODO입니다. **변수명이 `KAKAO_JS_KEY`로 남을지 `KAKAO_REST_KEY`가 될지는 백엔드 확인 1건에 달려 있습니다** — 정해지면 `env.dart`와 `app-web.yml`을 같이 고칩니다 |
 | 데이터 연결 | 화면은 `core/fixtures/sample_data.dart`의 **샘플로 그립니다.** API가 붙으면 프로바이더로 바꿉니다 — 샘플은 발표 근거로 쓰지 않습니다(PRD §12) |
 | EVI 음성 | `web_socket_channel`·`record`·`audioplayers`를 넣어두었고 서비스는 아직 없습니다. 다음 작업입니다 |
 
