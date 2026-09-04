@@ -57,21 +57,55 @@ class AppFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final target = frameWidthFor(uri);
 
-    return Material(
-      color: context.tokens.bg,
-      child: LayoutBuilder(
-        builder: (context, c) {
-          if (c.maxWidth < breakpoint) return child;
-          // 예외 화면은 남는 폭까지만 늘린다. 셸 폭보다 좁아지지는 않는다.
-          final width = math.max(
-            shellWidth,
-            math.min(target, c.maxWidth - gutter * 2),
-          );
-          return Center(child: SizedBox(width: width, child: child));
-        },
-      ),
+    return LayoutBuilder(
+      builder: (context, c) {
+        // 좁은 화면은 컨텐츠가 화면 전체다 — 바깥이 없다.
+        if (c.maxWidth < breakpoint) {
+          return Material(color: t.bg, child: child);
+        }
+
+        // 예외 화면은 남는 폭까지만 늘린다. 셸 폭보다 좁아지지는 않는다.
+        final width = math.max(
+          shellWidth,
+          math.min(target, c.maxWidth - gutter * 2),
+        );
+
+        // 바깥은 `desk`, 컨텐츠는 `bg`. 두 색을 나누고 경계에 헤어라인을 둬야
+        // 컨텐츠가 "책상 위에 놓인 한 장"으로 읽힌다 — 같은 색이면 화면
+        // 전체가 한 덩어리가 되어 near-black이 검정으로 보인다.
+        // 헤어라인은 컨텐츠 폭 **바깥**에 둔다. 안쪽 테두리로 넣으면 셸
+        // 폭이 418로 줄어 화면마다 폭이 달라진다.
+        return Material(
+          color: t.desk,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Edge(color: t.line),
+                SizedBox(
+                  width: width,
+                  child: ColoredBox(color: t.bg, child: child),
+                ),
+                _Edge(color: t.line),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
+}
+
+/// 컨텐츠 영역 경계의 1px 세로선.
+class _Edge extends StatelessWidget {
+  const _Edge({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(width: 1, child: ColoredBox(color: color));
 }

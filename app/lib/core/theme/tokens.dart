@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 class AppTokens extends ThemeExtension<AppTokens> {
   const AppTokens({
     required this.bg,
+    required this.desk,
     required this.lift,
     required this.paper,
     required this.muted,
@@ -22,8 +23,15 @@ class AppTokens extends ThemeExtension<AppTokens> {
     required this.dblShadow,
   });
 
-  /// 배경.
+  /// 배경 — 모바일 폭 컨텐츠 영역.
   final Color bg;
+
+  /// 컨텐츠 영역 **바깥**. `>= 600`에서만 보인다 (§2).
+  ///
+  /// 데스크톱에서 바깥과 컨텐츠가 같은 색이면 근처 1280px이 전부 한 덩어리로
+  /// 보여 **near-black이 그냥 검정으로 읽힌다.** 시안에서는 390 폭 아트보드가
+  /// 캔버스 회색 위에 얹혀 있어서 같은 `bg`가 "짙은 회색"으로 읽혔다.
+  final Color desk;
 
   /// 시트·오버레이 **전용**. 카드 배경으로 쓰면 「카드를 쓰지 않는다」가 무너진다.
   final Color lift;
@@ -63,6 +71,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
 
   static const dark = AppTokens(
     bg: Color(0xFF0D0D0C),
+    desk: Color(0xFF050504),
     lift: Color(0xFF161614),
     paper: Color(0xFFF2EFE9),
     muted: Color(0xFF8A8781),
@@ -79,6 +88,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
 
   static const light = AppTokens(
     bg: Color(0xFFF5F2EC),
+    desk: Color(0xFFE7E3DA),
     lift: Color(0xFFFFFFFF),
     paper: Color(0xFF1A1815),
     muted: Color(0xFF6B675F),
@@ -96,6 +106,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
   @override
   AppTokens copyWith({
     Color? bg,
+    Color? desk,
     Color? lift,
     Color? paper,
     Color? muted,
@@ -111,6 +122,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
   }) {
     return AppTokens(
       bg: bg ?? this.bg,
+      desk: desk ?? this.desk,
       lift: lift ?? this.lift,
       paper: paper ?? this.paper,
       muted: muted ?? this.muted,
@@ -131,6 +143,7 @@ class AppTokens extends ThemeExtension<AppTokens> {
     if (other == null) return this;
     return AppTokens(
       bg: Color.lerp(bg, other.bg, t)!,
+      desk: Color.lerp(desk, other.desk, t)!,
       lift: Color.lerp(lift, other.lift, t)!,
       paper: Color.lerp(paper, other.paper, t)!,
       muted: Color.lerp(muted, other.muted, t)!,
