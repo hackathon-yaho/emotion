@@ -39,6 +39,23 @@ class ChartAxis {
 
   int indexOfDate(String date) => points.indexWhere((p) => p.date == date);
 
+  /// 점이 촘촘할 때도 마커를 남길 날인지 — **양 끝과 음영 구간의 경계·내부**.
+  ///
+  /// "언제 벌어졌는지"가 점으로 보여야 한다는 게 이 화면의 목적이므로,
+  /// 지울 수 없는 것은 그 구간과 기간의 시작·끝이다.
+  bool isKeyPoint(int i, List<TrendHighlight> highlights) {
+    if (points.isEmpty) return false;
+    if (i == 0 || i == points.length - 1) return true;
+    final day = _days[i];
+    for (final h in highlights) {
+      final from = indexOfDate(h.from);
+      final to = indexOfDate(h.to);
+      if (from < 0 || to < 0) continue;
+      if (day >= _days[from] && day <= _days[to]) return true;
+    }
+    return false;
+  }
+
   static int _dayIndex(TrendPoint p) {
     final d = DateTime.tryParse(p.date);
     if (d == null) return 0;
@@ -68,6 +85,13 @@ class TwoLineChart extends StatelessWidget {
   final VoidCallback? onHighlightTap;
 
   /// 마커를 그릴 최소 점 간격.
+  /// 하루당 폭이 이보다 좁으면 **모든 날에** 점을 찍지 않는다 — 점이 붙어
+  /// 뭉개지면 선이 오히려 안 보인다.
+  ///
+  /// 좁을 때 점을 통째로 없애지는 않는다. 아래 [ChartAxis.isKeyPoint]가 고른
+  /// **양 끝과 음영 구간의 날**에만 찍는다. 30일·90일은 **어느 폭에서도**
+  /// 이 임계를 못 넘기고(폰 390에서 30일이 11px), 모바일은 넓힐 수가 없다 —
+  /// 그래서 밀도는 폭이 아니라 여기서 푼다 (design-system §2-1).
   static const markerMinStep = 14.0;
 
   @override
@@ -166,8 +190,9 @@ class _ChartPainter extends CustomPainter {
     );
 
     // 계열 — null인 날에서 선을 끊는다
-    _drawSeries(canvas, (p) => p.textValence, x, y, cool, dayW);
-    _drawSeries(canvas, (p) => p.voiceValence, x, y, warm, dayW);
+    final dense = dayW < TwoLineChart.markerMinStep;
+    _drawSeries(canvas, (p) => p.textValence, x, y, cool, dense);
+    _drawSeries(canvas, (p) => p.voiceValence, x, y, warm, dense);
 
     // 축 라벨
     _label(canvas, '+1', Offset(0, y(1) - 6));
@@ -181,7 +206,7 @@ class _ChartPainter extends CustomPainter {
     double Function(int) x,
     double Function(double) y,
     Color color,
-    double step,
+    bool dense,
   ) {
     final stroke = Paint()
       ..color = color
@@ -190,7 +215,8 @@ class _ChartPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
     final dot = Paint()..color = color;
-    final drawMarkers = step >= TwoLineChart.markerMinStep;
+    // 촘촘하면 점을 다 찍지 않고 골라 찍는다. 반지름도 한 단계 줄인다.
+    final radius = dense ? 3.0 : 4.0;
 
     var run = <Offset>[];
     void flush() {
@@ -216,7 +242,9 @@ class _ChartPainter extends CustomPainter {
       run.add(o);
       // 조각이 1점이라 선이 안 그려지더라도 마커는 남긴다 — 하루만 있는 날이
       // 통째로 사라지지 않게.
-      if (drawMarkers) canvas.drawCircle(o, 4, dot);
+      if (!dense || axis.isKeyPoint(i, highlights)) {
+        canvas.drawCircle(o, radius, dot);
+      }
     }
     flush();
   }

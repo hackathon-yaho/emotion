@@ -172,6 +172,23 @@ abstract final class Sample {
     range: TrendRange.d30,
     timezone: 'Asia/Seoul',
     points: const [
+      // 범위가 30일이면 표본도 30일이어야 밀도를 실제로 확인할 수 있다.
+      // 8/16~8/31 구간은 하루당 폭이 임계(14px) 아래로 떨어지는 상황을
+      // 만들기 위해 있다 — 8/22·8/27은 기록 없는 날(선이 끊긴다).
+      TrendPoint(date: '2026-08-16', textValence: 0.22, voiceValence: 0.14, gap: 0.08, sessionCount: 1),
+      TrendPoint(date: '2026-08-17', textValence: 0.30, voiceValence: 0.19, gap: 0.11, sessionCount: 1),
+      TrendPoint(date: '2026-08-18', textValence: 0.18, voiceValence: -0.02, gap: 0.20, sessionCount: 1),
+      TrendPoint(date: '2026-08-19', textValence: 0.26, voiceValence: 0.08, gap: 0.18, sessionCount: 1),
+      TrendPoint(date: '2026-08-20', textValence: 0.34, voiceValence: 0.12, gap: 0.22, sessionCount: 2),
+      TrendPoint(date: '2026-08-21', textValence: 0.28, voiceValence: -0.06, gap: 0.34, sessionCount: 1),
+      TrendPoint(date: '2026-08-23', textValence: 0.40, voiceValence: 0.05, gap: 0.35, sessionCount: 1),
+      TrendPoint(date: '2026-08-24', textValence: 0.33, voiceValence: -0.10, gap: 0.43, sessionCount: 1),
+      TrendPoint(date: '2026-08-25', textValence: 0.21, voiceValence: -0.14, gap: 0.35, sessionCount: 1),
+      TrendPoint(date: '2026-08-26', textValence: 0.29, voiceValence: 0.02, gap: 0.27, sessionCount: 1),
+      TrendPoint(date: '2026-08-28', textValence: 0.37, voiceValence: 0.16, gap: 0.21, sessionCount: 1),
+      TrendPoint(date: '2026-08-29', textValence: 0.24, voiceValence: 0.09, gap: 0.15, sessionCount: 1),
+      TrendPoint(date: '2026-08-30', textValence: 0.31, voiceValence: 0.21, gap: 0.10, sessionCount: 1),
+      TrendPoint(date: '2026-08-31', textValence: 0.27, voiceValence: 0.17, gap: 0.10, sessionCount: 2),
       TrendPoint(date: '2026-09-01', textValence: 0.35, voiceValence: 0.20, gap: 0.15, sessionCount: 1),
       TrendPoint(date: '2026-09-02', textValence: 0.42, voiceValence: 0.10, gap: 0.32, sessionCount: 1),
       TrendPoint(date: '2026-09-03', textValence: 0.30, voiceValence: -0.05, gap: 0.35, sessionCount: 2),

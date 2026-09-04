@@ -18,7 +18,7 @@ import '../../core/theme/tokens.dart';
 class AppFrame extends StatelessWidget {
   const AppFrame({super.key, required this.uri, required this.child});
 
-  /// 현재 라우트. §2-1 예외 두 곳을 판정하는 데만 쓴다.
+  /// 현재 라우트. §2-1 예외 한 곳(데모 모드)을 판정하는 데만 쓴다.
   final Uri uri;
   final Widget child;
 
@@ -28,11 +28,7 @@ class AppFrame extends StatelessWidget {
   /// 분기점 하나. `< 600` 전폭 / `>= 600` 중앙 고정 + 배경 (§2).
   static const breakpoint = 600.0;
 
-  /// §2-1 예외 1 — S04 트렌드의 최대 폭. 심사장 프로젝터에서 두 선이
-  /// 갈라진 것이 뒷줄까지 보여야 한다.
-  static const trendWidth = 900.0;
-
-  /// §2-1 예외 2 — 데모 모드 오른쪽 패널 폭 (`>= 600`).
+  /// §2-1 예외 — 데모 모드 오른쪽 패널 폭 (`>= 600`).
   static const demoPanelWidth = 240.0;
 
   /// 중앙 고정일 때 프레임 바깥에 남기는 최소 여백.
@@ -40,10 +36,15 @@ class AppFrame extends StatelessWidget {
 
   /// 이 라우트가 셸 폭을 넘겨도 되는가 (§2-1).
   ///
-  /// 예외는 **문서에 적힌 두 곳뿐이다.** 늘리고 싶으면 design-system §2-1을
-  /// 먼저 고친다.
+  /// 예외는 **문서에 적힌 한 곳뿐이다** — 데모 모드. 늘리고 싶으면
+  /// design-system §2-1을 먼저 고친다.
+  ///
+  /// **S04 트렌드는 예외가 아니다.** 한때 그래프를 900까지 넓혔는데, 그
+  /// 근거(30일에서 점 마커가 살아남는 폭)가 **모바일에서는 성립하지
+  /// 않았다** — `< 600`은 전폭이라 넓힐 여지가 없고, 매일 쓰는 환경이
+  /// 그쪽이다. 밀도 문제는 폭이 아니라 차트가 푼다
+  /// ([TwoLineChart]의 선택적 마커).
   static double frameWidthFor(Uri uri) {
-    if (uri.path == Routes.trend) return trendWidth;
     if (uri.path == Routes.conversation &&
         uri.queryParameters['demo'] == '1') {
       return shellWidth + Space.xl + demoPanelWidth;

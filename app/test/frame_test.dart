@@ -51,10 +51,12 @@ void main() {
       expect(evidence, tab);
     });
 
-    testWidgets('§2-1 예외 — S04 추세는 넓은 화면에서 셸 폭을 넘긴다', (tester) async {
+    testWidgets('S04 추세도 셸 폭이다 — 넓히지 않는다', (tester) async {
+      // 한때 900까지 넓혔다. 근거가 "30일에서 점 마커가 살아남는 폭"이었는데
+      // 모바일은 전폭이라 넓힐 수가 없어 그쪽에서 성립하지 않았다. 밀도는
+      // 차트가 푼다 (TwoLineChart의 선택적 마커).
       final w = await measure(tester, Routes.trend, const Size(1280, 800));
-      expect(w, greaterThan(AppFrame.shellWidth));
-      expect(w, lessThanOrEqualTo(AppFrame.trendWidth));
+      expect(w, AppFrame.shellWidth);
     });
 
     testWidgets('§2-1 예외 — 데모 모드는 오른쪽 패널만큼만 넓어진다', (tester) async {
@@ -70,7 +72,11 @@ void main() {
     });
 
     testWidgets('예외 화면도 남는 폭이 좁으면 셸 폭 아래로 내려가지 않는다', (tester) async {
-      final w = await measure(tester, Routes.trend, const Size(620, 800));
+      final w = await measure(
+        tester,
+        '${Routes.conversation}?demo=1',
+        const Size(620, 800),
+      );
       expect(w, greaterThanOrEqualTo(AppFrame.shellWidth));
       expect(w, lessThanOrEqualTo(620));
     });
