@@ -35,7 +35,11 @@ class RecordsScreen extends StatelessWidget {
           const SmallLabel('기록'),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.only(top: 36, bottom: Space.xl),
+              padding: EdgeInsets.only(
+                top: 36,
+                // 떠 있는 탭 칩 높이만큼 안쪽에 남긴다 (TabPill.reserve).
+                bottom: Space.xl + MediaQuery.paddingOf(context).bottom,
+              ),
               child: _body(context),
             ),
           ),

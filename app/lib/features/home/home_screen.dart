@@ -131,7 +131,9 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: Space.xs),
+          // 홈은 아래가 스크롤이 아니라 CTA라 실제로 여백을 준다 — 칩이
+          // 버튼을 덮으면 시작을 못 한다.
+          SizedBox(height: Space.xs + MediaQuery.paddingOf(context).bottom),
         ],
       ),
     );
