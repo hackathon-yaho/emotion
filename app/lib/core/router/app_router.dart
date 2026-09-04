@@ -81,7 +81,12 @@ GoRouter createRouter(AppSession session) {
 
       GoRoute(
         path: Routes.conversation,
-        builder: (context, state) => const ConversationScreen(),
+        builder: (context, state) => ConversationScreen(
+          // 프로토타입 전환·데모 모드는 쿼리로만 켠다. 실제 화면에는 없다.
+          showStatePicker: state.uri.queryParameters['picker'] == '1',
+          demoMode: state.uri.queryParameters['demo'] == '1',
+          openCrisis: state.uri.queryParameters['crisis'] == '1',
+        ),
         routes: [
           GoRoute(
             path: 'summary',

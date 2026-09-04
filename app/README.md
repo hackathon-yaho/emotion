@@ -37,8 +37,16 @@ lib/
 │  ├─ storage/token_storage.dart JWT · 온보딩 플래그 (secure storage)
 │  ├─ models/               계약서 §2 응답 타입 (null 규칙 포함)
 │  └─ providers.dart        Riverpod 프로바이더
-├─ features/                화면 11개 (S00~S07)
-└─ shared/widgets/          헤어라인 · 빈 상태 · 스켈레톤 · 앱 셸
+│  └─ fixtures/            화면용 샘플 데이터 (발표 근거로 쓰지 않는다)
+├─ features/                화면 11개 (S00~S07) — 전부 구현됨
+└─ shared/widgets/
+   ├─ two_line_chart.dart   두 선 그래프 · 날짜 축 · 범례 (F9-01·02)
+   ├─ tag_gap_bars.dart     이야기별 갭 막대 (F9-03)
+   ├─ ring_pair.dart        S02의 어긋난 두 링
+   ├─ doubled_text.dart     「두 겹」 — 그림자 한 겹으로
+   ├─ kakao_button.dart     카카오 규격 (우리 규칙의 예외)
+   ├─ confirm_sheet.dart    파괴적 동작 확인 (care 색 금지)
+   └─ 헤어라인 · 빈 상태 · 스켈레톤 · 앱 셸 · 메타 행 · 버튼
 ```
 
 ## 지켜야 하는 것
@@ -65,7 +73,8 @@ lib/
 | F9-03 이야기별 갭 | 출력이 계약 어디에도 없습니다 — [`tag-gap-endpoint.md`](../docs/request/backend/tag-gap-endpoint.md) (⏳). S04의 두 선 그래프는 영향 없습니다 |
 | 산세리프 서체 | 문서상 Pretendard지만 Google Fonts에 없어 **Noto Sans KR로 대체** 중입니다(캔버스와 동일). `fonts/`에 넣고 `pubspec.yaml`의 fonts 항목을 켠 뒤 `AppType.sans`만 바꾸면 전 화면에 적용됩니다 |
 | 제품 이름 | 미확정(PRD §14-6). Dart 패키지명 `voice_journal`, 번들 ID `com.hackathonyaho.voiceJournal`은 임시입니다. 확정되면 `main.dart`의 `title`과 `web/index.html`·`manifest.json`을 함께 고칩니다 |
-| 화면 구현 | 라우팅·테마·API 계층까지가 골격입니다. 확정된 디자인은 `design/`에 있고 위젯으로 옮기는 것이 다음 작업입니다 |
+| 데이터 연결 | 화면은 `core/fixtures/sample_data.dart`의 **샘플로 그립니다.** API가 붙으면 프로바이더로 바꿉니다 — 샘플은 발표 근거로 쓰지 않습니다(PRD §12) |
+| EVI 음성 | `web_socket_channel`·`record`·`audioplayers`를 넣어두었고 서비스는 아직 없습니다. 다음 작업입니다 |
 
 ## 디자인 캔버스
 
