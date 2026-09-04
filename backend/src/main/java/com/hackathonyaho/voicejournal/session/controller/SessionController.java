@@ -4,6 +4,7 @@ import com.hackathonyaho.voicejournal.auth.security.ProfileContext;
 import com.hackathonyaho.voicejournal.session.dto.request.ChatGroupRequest;
 import com.hackathonyaho.voicejournal.session.dto.request.SessionEndRequest;
 import com.hackathonyaho.voicejournal.session.dto.response.SessionEndResponse;
+import com.hackathonyaho.voicejournal.session.dto.response.SessionQueueResponse;
 import com.hackathonyaho.voicejournal.session.dto.response.SessionResumeResponse;
 import com.hackathonyaho.voicejournal.session.dto.response.SessionStartResponse;
 import com.hackathonyaho.voicejournal.session.service.SessionService;
@@ -26,11 +27,31 @@ public class SessionController {
     private final SessionService sessionService;
     private final TurnService turnService;
 
-    /** 계약 §2-4. 요청 본문 없음. */
+    /**
+     * 계약 §2-4. 요청 본문 없음.
+     *
+     * <p><b>정원이 찼으면 201이 아니라 202 + 대기 순번</b>이다(§2-14). 큐가 꺼져 있으면
+     * 202가 나갈 일이 없다 — 앱은 상태 코드로 갈라 보면 된다.
+     */
     @PostMapping("/start")
-    public ResponseEntity<SessionStartResponse> start() {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(sessionService.start(ProfileContext.require()));
+    public ResponseEntity<?> start() {
+        SessionService.StartResult result = sessionService.startOrEnqueue(ProfileContext.require());
+        return result.queued() != null
+                ? ResponseEntity.status(HttpStatus.ACCEPTED).body(result.queued())
+                : ResponseEntity.status(HttpStatus.CREATED).body(result.session());
+    }
+
+    /** 계약 §2-14. <b>position이 0인 응답에 세션이 실려 온다 — 그게 입장권이다.</b> */
+    @GetMapping("/queue/{ticketId}")
+    public ResponseEntity<SessionQueueResponse> queue(@PathVariable UUID ticketId) {
+        return ResponseEntity.ok(sessionService.pollQueue(ProfileContext.require(), ticketId));
+    }
+
+    /** 계약 §2-14. 사용자가 기다리기를 그만둔다. 없는 티켓이어도 204다. */
+    @DeleteMapping("/queue/{ticketId}")
+    public ResponseEntity<Void> leaveQueue(@PathVariable UUID ticketId) {
+        sessionService.leaveQueue(ticketId);
+        return ResponseEntity.noContent().build();
     }
 
     /** 계약 §2-5. */

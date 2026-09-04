@@ -8,6 +8,7 @@ import com.hackathonyaho.voicejournal.auth.security.JwtProvider;
 import com.hackathonyaho.voicejournal.common.global.ErrorCode;
 import com.hackathonyaho.voicejournal.common.global.exception.BusinessException;
 import com.hackathonyaho.voicejournal.session.repository.VoiceSessionRepository;
+import com.hackathonyaho.voicejournal.session.service.HumeChatClient;
 import com.hackathonyaho.voicejournal.session.service.HumeTokenService;
 import com.hackathonyaho.voicejournal.session.service.SessionService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -32,6 +33,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -63,6 +65,8 @@ class SessionApiTest {
     @Autowired EntityManager em;
 
     @MockitoBean HumeTokenService humeTokenService;
+    /** 대역이 없으면 세션 시작마다 실제 api.hume.ai로 나간다. */
+    @MockitoBean HumeChatClient humeChatClient;
 
     private UUID profileId;
     private String jwt;
@@ -71,6 +75,8 @@ class SessionApiTest {
     void setUp() {
         given(humeTokenService.issue())
                 .willReturn(new HumeTokenService.Token("hume_at_test", Instant.now().plusSeconds(1800)));
+        // 기본은 자리가 있는 상태다 — 정원이 찬 경우는 그 테스트에서 따로 준다.
+        given(humeChatClient.activeCount(anyInt())).willReturn(java.util.OptionalInt.of(0));
 
         profileId = profileRepository.save(Profile.create()).getId();
         baselineRepository.save(new UserBaseline(profileId));

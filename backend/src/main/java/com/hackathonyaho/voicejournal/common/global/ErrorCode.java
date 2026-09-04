@@ -24,6 +24,7 @@ public enum ErrorCode {
     NOT_FOUND(HttpStatus.NOT_FOUND, "찾을 수 없습니다."),
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "대화를 찾을 수 없습니다."),
     OBSERVATION_NOT_FOUND(HttpStatus.NOT_FOUND, "발견을 찾을 수 없습니다."),
+    QUEUE_TICKET_NOT_FOUND(HttpStatus.NOT_FOUND, "대기 순번이 만료되었습니다. 다시 시도해 주세요."),
     SESSION_NOT_RESUMABLE(HttpStatus.CONFLICT, "이어서 이야기할 수 있는 시간이 지났습니다."),
     HUME_TOKEN_ISSUE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "지금은 대화를 시작할 수 없습니다. 잠시 후 다시 시도해 주세요."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "일시적인 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.");

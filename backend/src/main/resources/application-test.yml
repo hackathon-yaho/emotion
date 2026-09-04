@@ -40,6 +40,11 @@ app:
     # 테스트 전용 고정 키. 배포 키와 다르다.
     transcript-key: dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1leGFjdGx5ISE=
   session:
+    queue:
+      # 테스트는 큐를 켠 채 돈다 — 꺼진 경로는 SessionApiTest가 따로 확인한다.
+      enabled: true
+      capacity: 5
+      ticket-ttl-sec: 10
     soft-wrap-sec: 300
     hard-cut-sec: 420
     live-poll-interval-sec: 2

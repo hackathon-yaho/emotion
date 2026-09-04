@@ -12,6 +12,7 @@ import com.hackathonyaho.voicejournal.observation.repository.ObservationReposito
 import com.hackathonyaho.voicejournal.session.config.SessionPolicy;
 import com.hackathonyaho.voicejournal.session.dto.response.InternalSessionResponse;
 import com.hackathonyaho.voicejournal.session.dto.response.SessionEndResponse;
+import com.hackathonyaho.voicejournal.session.dto.response.SessionQueueResponse;
 import com.hackathonyaho.voicejournal.session.dto.response.SessionResumeResponse;
 import com.hackathonyaho.voicejournal.session.dto.response.SessionStartResponse;
 import com.hackathonyaho.voicejournal.session.entity.VoiceSession;
@@ -25,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 /** F2 세션 수명주기. 응답 필드의 단일 출처는 계약 §2-4·§2-5·§2-5-1·§3-4다. */
@@ -43,8 +46,57 @@ public class SessionService {
     private final SummaryClient summaryClient;
     private final ObservationRepository observationRepository;
     private final SessionPolicy policy;
+    private final SessionQueue queue;
+    private final HumeChatClient humeChatClient;
 
     // ── 시작 (F2-01) ────────────────────────────────────────────────
+
+    /**
+     * 계약 §2-4·§2-14. 정원이 찼으면 세션 대신 <b>대기 순번</b>을 돌려준다.
+     *
+     * @param session 정원에 여유가 있어 바로 시작한 경우
+     * @param queued  정원이 차서 줄을 선 경우. <b>둘 중 하나만 값이 있다</b>
+     */
+    public record StartResult(SessionStartResponse session, SessionQueueResponse queued) {
+    }
+
+    /** 큐가 꺼져 있으면 정원을 보지 않는다 — 코드 경로가 큐 도입 전과 같다. */
+    public StartResult startOrEnqueue(UUID profileId) {
+        if (!queue.isEnabled() || hasRoom()) {
+            return new StartResult(start(profileId), null);
+        }
+        UUID ticketId = queue.enqueue(profileId);
+        int position = queue.poll(ticketId, profileId).orElse(1);
+        return new StartResult(null,
+                SessionQueueResponse.waiting(ticketId, position, policy.getLivePollIntervalSec()));
+    }
+
+    /**
+     * 계약 §2-14 폴링. <b>이 응답 자체가 입장권이다</b> — 자리를 예약해 두지 않으므로
+     * 만료 타이머가 필요 없고, 줄 맨 앞 한 명만 받아 갈 수 있다.
+     */
+    public SessionQueueResponse pollQueue(UUID profileId, UUID ticketId) {
+        Optional<Integer> position = queue.poll(ticketId, profileId);
+        if (position.isEmpty()) {
+            throw new BusinessException(ErrorCode.QUEUE_TICKET_NOT_FOUND, "unknown or expired ticket");
+        }
+        // 맨 앞이 아니면 Hume에 묻지 않는다 — 대기자가 늘어도 조회는 폴링 간격당 한 번이다.
+        if (position.get() > 1 || !hasRoom()) {
+            return SessionQueueResponse.waiting(ticketId, position.get(), policy.getLivePollIntervalSec());
+        }
+        queue.remove(ticketId);
+        return SessionQueueResponse.admitted(ticketId, policy.getLivePollIntervalSec(), start(profileId));
+    }
+
+    public void leaveQueue(UUID ticketId) {
+        queue.remove(ticketId);
+    }
+
+    /** 조회에 실패하면 여유가 있다고 본다 — 조회가 죽었다고 대화를 막지 않는다. */
+    private boolean hasRoom() {
+        OptionalInt active = humeChatClient.activeCount(queue.getCapacity());
+        return active.isEmpty() || active.getAsInt() < queue.getCapacity();
+    }
 
     @Transactional
     public SessionStartResponse start(UUID profileId) {

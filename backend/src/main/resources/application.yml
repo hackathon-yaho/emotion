@@ -64,6 +64,15 @@ app:
     # ⚠️ 잃으면 도그푸딩 발화 전체가 복호화 불가다 — 세 시크릿 중 이것만 오프라인 사본을 둔다.
     transcript-key: ${TRANSCRIPT_ENC_KEY}
   session:
+    queue:
+      # 계약 §2-14. 기본은 꺼짐 — 꺼져 있으면 Hume 조회도 대기열도 없고 큐 도입 전과
+      # 코드 경로가 같다. 심사·도그푸딩 직전에 켠다.
+      enabled: ${SESSION_QUEUE_ENABLED:false}
+      # Hume 플랜의 동시 접속 수와 같은 값이어야 한다 — Free 1, Starter·Creator 5, Pro 10
+      # (2026-09-05 요금표 실측). 무료 상태로 5를 넣으면 두 번째 사람이 E0700을 맞는다.
+      capacity: ${SESSION_QUEUE_CAPACITY:5}
+      # 폴링이 이만큼 끊기면 티켓을 버린다. 브라우저를 닫은 사람이 줄을 막지 않게.
+      ticket-ttl-sec: 10
     # 앱에 상수로 박지 않고 서버가 내려준다 (계약 §2-4) — 정책 변경에 재배포가 필요 없다.
     soft-wrap-sec: 300
     hard-cut-sec: 420

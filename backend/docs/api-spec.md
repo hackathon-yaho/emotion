@@ -34,6 +34,8 @@
 | `POST /api/session/{sessionId}/end` | F2-05 | 2 | **구현 완료** — `summary`는 항상 null (Phase 3) |
 | `POST /api/session/{sessionId}/resume` (P1) | F2-07 | 2 | **구현 완료.** `resumedChatGroupId`는 앱이 `/chat-group`으로 올린 값이고, 안 올린 세션은 `null`이다 |
 | `POST /api/session/{sessionId}/chat-group` | F2-07 | 2 | **구현 완료** (계약 §2-5-2, v1.8). 멱등·204. 종료된 세션에도 받는다 |
+| `GET /api/session/queue/{ticketId}` | — | 2 | **구현 완료** (계약 §2-14, v1.9). `position: 0` 응답에 세션이 동봉되고 **그게 입장권**이다 |
+| `DELETE /api/session/queue/{ticketId}` | — | 2 | **구현 완료** (계약 §2-14, v1.9). 없는 티켓도 204 |
 | `GET /api/session/{sessionId}/live` (v1.3) | F4-04, F11-01 | **3** | **구현 완료** |
 | `GET /api/observations` | F7-06 | 5 | **구현 완료** |
 | `GET /api/observations/{observationId}/evidence` | F7-07 | 5 | **구현 완료** |
