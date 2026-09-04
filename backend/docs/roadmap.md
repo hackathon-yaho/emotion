@@ -64,8 +64,8 @@ Phase 문서(`phase-1~7`)가 **무엇을 만드는지**라면, 이 문서는 **�
 | 로컬 인프라 | ✅ 확정 | docker-compose Postgres 16 (개발) / Supabase (배포) |
 | 배포 플랫폼 | ✅ 확정 | Render Free + cron 10분 킵얼라이브. **AI서버와 별도 계정**(워크스페이스당 750시간) |
 | 발화 암호화 | ✅ 확정 | 앱 레벨 AES-GCM + JPA `AttributeConverter`, 키는 환경변수 |
-| **Hume 유료 플랜** | ⏳ **미결 — 가장 급하다** | **Free는 월 5분 · 동시 접속 1.** 하드 컷이 7분이라 **세션 하나가 월 할당량보다 길다.** 배포 전이 아니라 **로컬에서 EVI를 처음 켜는 시점**에 필요하다 |
-| **Hume 계정 일치** | ⏳ **미결 — 결제 전에 정해야 한다** | **Config를 만드는 계정(AI)과 결제하는 계정(백엔드)이 같아야 한다.** `config_id`는 워크스페이스에 묶여서, 갈리면 **결제한 쿼터가 그 Config에 적용되지 않는다 — 대화는 붙고 5분 뒤 끊기며 원인이 코드로 안 보인다.** 팀 공용 계정 하나를 정하고 거기서 Config 생성·결제를 모두 한다 (`response/backend/integration-test-path.md`) |
+| **Hume 플랜 결제** | ⏳ **미결 — 가장 급하다.** 확인·결제는 **AI**, 예산은 백엔드 | **Free는 월 5분 · 동시 접속 1.** 하드 컷이 7분이라 **세션 하나가 월 할당량보다 길다.** 배포 전이 아니라 **로컬에서 EVI를 처음 켜는 시점**에 필요하다. **예산 상한 Creator 플랜**, 콘솔 확인 4항목은 `../../docs/request/ai/hume-account-setup.md` (⏳) |
+| **Hume 계정 소유** | ✅ **확정 (2026-09-04)** | **AI가 만들어 소유하고 결제도 그 계정 위에서 한다.** 테스트·대시보드가 전부 AI 쪽이고, `config_id`가 워크스페이스에 묶여 계정이 갈리면 쿼터가 적용되지 않는다. 백엔드는 **API 키와 `config_id`만** 받는다 |
 
 > 결정의 근거는 `README.md` 결정 로그에 있다. 이 표는 상태만 본다.
 
@@ -97,7 +97,7 @@ Phase 문서(`phase-1~7`)가 **무엇을 만드는지**라면, 이 문서는 **�
 | 앱 | 백엔드 주소 (`API_BASE_URL`) | 통합 시 터널 URL → 배포 후 정식 도메인 |
 | AI | `X-Internal-Secret` 값 | 통합 시작할 때. 저장소에 넣지 않는다 |
 | AI | `GET /internal/sessions/{id}` 실동작 | Phase 2 — **CLM 인증이라 AI 개발을 막는다** |
-| AI → 백엔드 | Hume Config 생성 후 `config_id` | AI가 생성·소유. 받으면 환경변수에 넣는다 |
+| AI → 백엔드 | **Hume API 키 + `config_id`** | **계정을 AI가 소유하므로 둘 다 AI가 준다.** 받으면 환경변수(`HUME_API_KEY`·`HUME_CONFIG_ID`)에 넣는다. 저장소에 넣지 않는다 |
 | AI → 백엔드 | ~~`turnIndex` 채번 확인~~ ✅ (2026-09-04) | **회신 완료.** 카운터를 `lastTurnIndex`로 시드하므로 0에서 시작하는 경로가 없고, `occurredAt` 규칙은 **계약 v1.5**에 명시됐다 |
 | 앱 | `GET /api/session/{id}/live` | **Phase 3** — S02가 이걸로 완성된다 |
 | 앱 | `tagGaps`·`userAvgGap` (F9-03, P1) | Phase 5 — 계약 v1.4로 확정됨 |

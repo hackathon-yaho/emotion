@@ -46,7 +46,8 @@
 
 - [ ] Render Web Service 생성 — **AI서버와 별도 계정**(무료 750시간은 워크스페이스당)
 - [ ] `Dockerfile`로 빌드 (Phase 1에서 이미 만들어 뒀다)
-- [ ] 환경변수 등록 — `SPRING_DATASOURCE_*`(Supabase) · `HUME_API_KEY` · `HUME_CONFIG_ID` · `INTERNAL_SHARED_SECRET` · `TRANSCRIPT_ENC_KEY` · `JWT_SECRET` · 카카오 앱 시크릿
+- [ ] 환경변수 등록 — `SPRING_DATASOURCE_*`(Supabase) · `HUME_API_KEY` · `HUME_CONFIG_ID` · `INTERNAL_SHARED_SECRET` · `TRANSCRIPT_ENC_KEY` · `JWT_SECRET` · 카카오 앱 시크릿 · **`CORS_ALLOWED_ORIGINS`**
+- [ ] **`HUME_API_KEY`·`HUME_CONFIG_ID`는 AI에게서 받는다** — 계정을 AI가 소유한다(2026-09-04 결정, `roadmap.md`)
 - [ ] `db/migration.sql`을 **Supabase에 적용** (로컬과 같은 파일)
 - [ ] cron-job.org에 **10분 간격** `GET /api/health` 등록
 - [ ] 앱·AI에 배포 도메인 전달
@@ -57,6 +58,7 @@
 | 첫 요청이 1분 걸리는지 | 슬립 상태면 복귀에 약 1분. cron이 돌기 시작하면 사라진다 |
 | **`TRANSCRIPT_ENC_KEY`를 별도 보관했는지** | **잃으면 도그푸딩 발화 전체가 복호화 불가** (Phase 3) |
 | 750시간 잔량 | 24시간 킵얼라이브면 30일에 약 720시간. **다른 무료 서비스를 같은 계정에 두면 둘 다 정지된다** |
+| **배포 오리진에서 CORS가 통과하는지** | 앱은 `https://hackathon-yaho.github.io`에 있다. **커스텀 도메인이 붙으면 `CORS_ALLOWED_ORIGINS`에 추가**하면 되고 재배포는 필요 없다 |
 
 > **환경변수를 코드에 하드코딩하지 않는다.** 특히 `TRANSCRIPT_ENC_KEY`·`INTERNAL_SHARED_SECRET`은 저장소에 절대 넣지 않는다.
 

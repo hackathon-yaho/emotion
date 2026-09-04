@@ -70,12 +70,28 @@ com.hackathonyaho.voicejournal
   - [ ] 검증 실패 → 401 `KAKAO_VERIFY_FAILED` / 카카오 API 장애 → 503 `INTERNAL_ERROR`
 - [ ] JWT 인증 필터 — `Authorization: Bearer <JWT>`, **만료 7일**(계약 §1-1)
   - [ ] `/api/auth/kakao`·`/api/health` 제외 **전 엔드포인트 필수**
+  - [ ] **`OPTIONS` 요청은 메서드 전체를 예외로 둔다** — CORS 프리플라이트에는 `Authorization`이 실리지 않아 401로 막힌다. 아래 1-6-1 참조
   - [ ] 만료 시 401 `TOKEN_EXPIRED` — 앱이 카카오 재로그인으로 갱신한다
 - [ ] `GET /api/me` — **응답은 계약 §2-2 그대로**
   - [ ] `sessionCount`는 `user_baseline.session_count`, `demoMode`는 `profile.demo_mode`, `thresholdMode`는 F3-04 규칙으로 그 자리에서 계산 (표시용이며 실제 적용 값은 세션 시작 시 다시 내려간다)
   - [ ] **`openSession`은 Phase 2에서 채운다**(지금은 항상 `null`)
 
 > **감정 데이터 API는 `profileId`로만 동작한다.** 컨트롤러·서비스 어디에도 `kakao_sub`가 흘러다니지 않게 한다 — 식별자 분리(PRD §5.1)는 테이블만 나눈다고 지켜지지 않고, 코드가 조인하면 무너진다.
+
+## 1-6-1. CORS (앱이 다른 오리진에서 붙는다)
+
+앱은 GitHub Pages에 배포돼 **백엔드와 오리진이 다르다.** 허용하지 않으면 브라우저가 모든 요청을 차단하고, **서버 로그에는 요청이 도달하지도 않는다.**
+
+- [ ] 허용 오리진을 **환경변수 목록**으로 — `CORS_ALLOWED_ORIGINS=https://hackathon-yaho.github.io,http://localhost:*`
+- [ ] **`allowedOriginPatterns`를 쓴다** (`allowedOrigins` 아님) — 와일드카드 포트를 받으려면 이쪽이어야 한다
+- [ ] 메서드 `GET`·`POST`·`DELETE`·`OPTIONS`, 헤더 `Authorization`·`Content-Type`
+- [ ] **`Allow-Credentials`는 켜지 않는다** — 앱이 쿠키를 쓰지 않고(JWT는 헤더), 켜면 와일드카드 오리진을 못 쓴다
+
+> **오리진에 경로가 없다.** `https://hackathon-yaho.github.io/emotion/`이 아니라 **`https://hackathon-yaho.github.io`**다 — 브라우저가 보내는 `Origin` 헤더에는 경로가 없다. 앱이 "여기서 자주 어긋난다"고 짚어준 지점이다.
+
+> **프리플라이트가 JWT 필터에 막히면 안 된다.** `OPTIONS`에는 `Authorization`이 실리지 않으므로, 필터를 "인증 제외 경로"로만 관리하면 401이 난다. **경로가 아니라 메서드로 예외를 둔다.** 이 실패는 앱에서 그냥 네트워크 오류로 보이고 서버에는 401만 남아 **원인이 CORS라는 걸 알아채는 데 한참 걸린다.**
+
+> **환경변수인 이유** — 제품 이름이 정해지면 커스텀 도메인이 붙어 오리진이 한 번 더 바뀐다(PRD §14-6). 코드에 박으면 그때 재배포해야 한다. 근거는 `../../docs/response/app/cors-origin.md`.
 
 ## 1-7. 헬스체크 (F11-02)
 
@@ -94,6 +110,7 @@ com.hackathonyaho.voicejournal
 
 - `docker compose up` 후 애플리케이션이 로컬에서 기동한다
 - `GET /api/health`가 `{ "status": "ok", "db": "ok", ... }`를 반환한다
+- **배포된 앱 오리진에서 `OPTIONS` 프리플라이트가 인증 없이 200/204로 통과한다** (브라우저 콘솔에 CORS 오류 0건)
 - 11테이블이 로컬 DB에 만들어져 있다
 - 카카오 로그인 → JWT 발급 → 그 JWT로 `GET /api/me` 호출이 통과한다
 - **JWT 없이 감정 데이터 API를 호출하면 전부 401** (spec F1-02 수용 기준)
