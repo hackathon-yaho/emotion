@@ -62,6 +62,11 @@ public class Observation {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    /** 재호출은 덮어쓴다 (계약 §2-7-1). 관찰을 지우지 않는다. */
+    public void applyFeedback(String feedback) {
+        this.feedback = feedback;
+    }
+
     public static Observation of(UUID profileId, String sentence, String tag, int occurrences,
                                  BigDecimal tagAvgGap, BigDecimal userAvgGap, BigDecimal ratio) {
         Observation observation = new Observation();
