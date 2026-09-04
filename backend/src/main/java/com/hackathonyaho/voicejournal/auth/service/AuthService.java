@@ -6,6 +6,8 @@ import com.hackathonyaho.voicejournal.auth.entity.Account;
 import com.hackathonyaho.voicejournal.auth.entity.AccountProfile;
 import com.hackathonyaho.voicejournal.auth.entity.Profile;
 import com.hackathonyaho.voicejournal.auth.entity.UserBaseline;
+import com.hackathonyaho.voicejournal.auth.dto.request.WithdrawRequest;
+import com.hackathonyaho.voicejournal.auth.repository.AccountDeletionRepository;
 import com.hackathonyaho.voicejournal.auth.repository.AccountProfileRepository;
 import com.hackathonyaho.voicejournal.auth.repository.AccountRepository;
 import com.hackathonyaho.voicejournal.auth.repository.ProfileRepository;
@@ -32,6 +34,7 @@ public class AuthService {
     private final AccountProfileRepository accountProfileRepository;
     private final UserBaselineRepository userBaselineRepository;
     private final SessionService sessionService;
+    private final AccountDeletionRepository accountDeletionRepository;
 
     /**
      * 재로그인 시 <b>동일한 profileId</b>가 나와야 한다 (TC-01) — 기존 데이터가
@@ -67,6 +70,25 @@ public class AuthService {
         accountProfileRepository.save(new AccountProfile(account.getId(), profile.getId()));
         userBaselineRepository.save(new UserBaseline(profile.getId()));
         return profile.getId();
+    }
+
+    /**
+     * 탈퇴 (F10-03 · F1-04). <b>유예 기간을 두지 않는다</b> — 즉시 전량 삭제가 신뢰의
+     * 핵심이다(FR-003).
+     *
+     * <p><b>이 메서드에 트랜잭션을 걸지 않는다.</b> 삭제는 안쪽에서 커밋되고 unlink는
+     * 그 <b>뒤에</b> 일어나야 한다. 한 트랜잭션에 묶으면 unlink가 성공한 뒤 커밋이
+     * 실패하는 경로가 생겨 <b>"카카오는 끊겼는데 데이터는 남은" 상태</b>가 만들어진다 —
+     * 사용자 데이터가 먼저 사라져야 한다.
+     *
+     * <p>unlink 실패는 오류로 올리지 않는다. 우리 데이터는 이미 없으므로 탈퇴는 성립한다.
+     */
+    public void withdraw(UUID profileId, WithdrawRequest request) {
+        accountDeletionRepository.deleteAllFor(profileId);
+
+        if (request != null && request.canUnlink()) {
+            kakaoOAuthService.unlink(request.kakaoAuthCode(), request.redirectUri());
+        }
     }
 
     @Transactional(readOnly = true)

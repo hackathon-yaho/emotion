@@ -269,6 +269,8 @@ sessionRef = SHA-256(sessionId).hex[:8]
 ⑧ user_baseline 재계산 (F3-05와 같은 코드)
 ```
 
+> **구현은 ⑧을 ⑤보다 먼저 돌린다** (2026-09-05). ⑤가 `ratio`를 다시 계산하는데 그 분모가 `user_baseline.avg_gap`이라, 나중에 갱신하면 **방금 계산한 비율이 옛 평균으로 매겨진 채 남는다** — 관찰의 `evidence.userAvgGap`과 트렌드의 `userAvgGap`이 갈리고 그게 곧 §1.4 "evidence 불일치"다. 의존 순서(⑧은 턴 삭제 뒤, ⑤는 ⑧ 뒤)는 그대로다. **⑤는 `user_avg_gap`도 함께 갱신한다** — 분모가 바뀌었는데 분모를 안 적으면 evidence 안에서 숫자가 서로 안 맞는다.
+
 > **①을 ④보다 먼저 하지 않으면 안 된다.** 턴을 지우면 `observation_evidence` 연결이 사라져 "어느 관찰이 영향받았는지"를 알 방법이 없어진다.
 > 전 과정이 **단일 트랜잭션**이다. 중간 실패 시 롤백해 "절반만 지워진" 상태를 만들지 않는다.
 
@@ -280,6 +282,9 @@ sessionRef = SHA-256(sessionId).hex[:8]
 observation_evidence → observation → turn_tag → turn_log → crisis_event
 → voice_session → user_baseline → account_profile → account → profile
 ```
+
+> **`account_profile`을 지우기 전에 `account_id`를 잡아 둔다** (2026-09-05). 연결자가 사라지면 어느 `account`였는지 알 방법이 없다 — F10-01의 ①과 같은 함정이다.
+> **unlink는 트랜잭션 밖에서 한다.** 삭제가 커밋된 뒤여야 "카카오는 끊겼는데 데이터는 남은" 상태가 생기지 않는다.
 
 > 자식부터 부모 순서다. FK가 `NO ACTION`이라 순서를 어기면 제약 위반으로 실패하고 전체가 롤백된다 — **순서 실수가 조용히 넘어가지 않는다는 뜻**이라 오히려 안전하다.
 > 수용 기준: 같은 카카오 계정으로 재가입 시 **신규 사용자로 시작**한다(F10-03).

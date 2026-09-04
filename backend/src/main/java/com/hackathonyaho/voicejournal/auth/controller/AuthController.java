@@ -34,9 +34,6 @@ public class AuthController {
     /**
      * 계약 §2-3 탈퇴 (F1-04 · F10-03).
      *
-     * <p><b>Phase 1에서는 경로와 인증만 걸어둔다.</b> 실제 10테이블 삭제는 Phase 6에서
-     * 채운다 — 삭제 순서를 검증하려면 그 테이블들에 데이터가 있어야 한다.
-     *
      * <p>카카오 연결 해제는 <b>서버가</b> 한다(v1.6). 인가 코드 방식으로 바뀌면서 앱에
      * 카카오 자격증명이 남지 않기 때문이다. 어드민 키는 여전히 쓰지 않는다 — 본문으로
      * 온 인가 코드를 사용자 토큰으로 바꿔 자기 계정만 끊는다.
@@ -45,7 +42,7 @@ public class AuthController {
      */
     @DeleteMapping("/account")
     public ResponseEntity<Void> withdraw(@RequestBody(required = false) WithdrawRequest request) {
-        ProfileContext.require();
+        authService.withdraw(ProfileContext.require(), request);
         return ResponseEntity.noContent().build();
     }
 }
