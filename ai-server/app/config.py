@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     ai_rules_dir: Path = ROOT / "rules"
     ai_prompts_dir: Path = ROOT / "prompts"
 
+    # 캡처 (app/capture.py)
+    ai_shape_capture: bool = True
+    ai_eval_capture: bool = False
+    ai_capture_dir: Path = ROOT / "eval" / "capture"
+
     # 로깅
     ai_log_level: str = "info"
 

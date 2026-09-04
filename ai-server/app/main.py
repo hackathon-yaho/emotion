@@ -18,6 +18,7 @@ from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .backend_client import BackendClient, build_turn_payload
+from .capture import capture_shape, capture_snapshot
 from .clm import sse
 from .clm.request import ChatRequest
 from .config import settings
@@ -45,7 +46,10 @@ _backend = BackendClient(
     secret=_cfg.internal_shared_secret,
     retries=_cfg.ai_turn_post_retries,
 )
+# 전사 해시 → 분석 결과. 같은 발화를 두 번 분석하지 않는다(재시도·중복 요청).
+# **실패한 분석은 넣지 않는다** — 일시적 타임아웃이 그 발화를 영구히 오염시킨다.
 _analyze_cache: dict[str, analyze_call.Analysis] = {}
+ANALYZE_CACHE_MAX = 512
 _tasks: set[asyncio.Task] = set()
 
 
@@ -77,9 +81,16 @@ async def chat_completions(
     if not custom_session_id:
         raise HTTPException(status_code=401, detail="missing custom_session_id")
 
-    body = ChatRequest.model_validate(await request.json())
+    raw = await request.json()
+    body = ChatRequest.model_validate(raw)
     transcript = body.transcript()
     prosody = body.prosody()
+
+    # 첫 연결의 요청 모양을 남긴다. 발화는 담기지 않는다(FR-092).
+    if _cfg.ai_shape_capture:
+        capture_shape(raw, _cfg.ai_capture_dir / "shape")
+    if _cfg.ai_eval_capture:
+        capture_snapshot(transcript, prosody, _cfg.ai_capture_dir / "inbox")
 
     # ② 세션 컨텍스트 — 이 조회가 곧 인증이다 (§7.1). 실패하면 여기서 끝난다.
     try:
@@ -87,7 +98,7 @@ async def chat_completions(
             custom_session_id, history_user_turns=body.user_turn_count()
         )
     except SessionUnauthorized as exc:
-        error_log("clm_unauthorized", sid=custom_session_id, reason=exc.reason)
+        error_log(f"clm_unauthorized:{exc.reason}", sid=custom_session_id)
         raise HTTPException(status_code=401, detail=exc.reason) from exc
 
     ctx_ms = int((time.monotonic() - started) * 1000)
@@ -112,7 +123,10 @@ async def chat_completions(
             timeout_ms=_cfg.ai_analyze_timeout_ms,
             api_key=_cfg.anthropic_api_key,
         )
-        _analyze_cache[key] = analysis
+        if not analysis.degraded:
+            if len(_analyze_cache) >= ANALYZE_CACHE_MAX:
+                _analyze_cache.pop(next(iter(_analyze_cache)))
+            _analyze_cache[key] = analysis
         analyze_hit = False
     analyze_ms = int((time.monotonic() - analyze_started) * 1000)
 

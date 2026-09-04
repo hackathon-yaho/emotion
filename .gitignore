@@ -40,4 +40,5 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 ai-server/eval/reports/
+ai-server/eval/capture/
 ai-server/uv.lock

@@ -159,6 +159,7 @@ class SessionStore:
     ) -> SessionContext:
         """캐시 → 없거나 만료·재조회 조건이면 백엔드. 실패 시 401(캐시가 없을 때만)."""
         now = time.monotonic() if now is None else now
+        self._prune(now)
         cached = self._cache.get(session_id)
 
         if cached and not cached.expired(now):
@@ -212,6 +213,12 @@ class SessionStore:
         ctx.last_turn_at = time.monotonic() if now is None else now
 
     # ── 테스트·운영 보조 ──────────────────────────────────────────
+
+    def _prune(self, now: float) -> None:
+        """만료된 엔트리를 지운다. 안 지우면 프로세스 수명만큼 캐시가 자란다."""
+        dead = [k for k, v in self._cache.items() if v.expired(now)]
+        for k in dead:
+            del self._cache[k]
 
     def peek(self, session_id: str) -> SessionContext | None:
         return self._cache.get(session_id)

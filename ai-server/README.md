@@ -65,7 +65,9 @@ make eval     # 20쌍 · 위기 합성 세트 · 태그 · 관찰 문장 → eva
 
 ## 지금 있는 것 (2026-09-05)
 
-**엔드포인트 4종이 전부 서 있다. 테스트 161건 통과.** 통합 테스트 준비 목표였던 9/6보다 하루 빠르다.
+**엔드포인트 4종이 전부 서 있다. 테스트 182건 통과.** 통합 테스트 준비 목표였던 9/6보다 하루 빠르다.
+
+`uvicorn app.main:app --port 8100`으로 실제 기동해 `/healthz` 200과 인증 없는 요청 401을 확인했다.
 
 | 계층 | 상태 |
 | --- | --- |
@@ -75,9 +77,12 @@ make eval     # 20쌍 · 위기 합성 세트 · 태그 · 관찰 문장 → eva
 | `app/backend_client.py` — `/internal/turns` 적재(재시도 3회, 4xx 제외) | 완료 |
 | `app/llm/` — analyze · respond(스트리밍) · observe · summary | 완료 (**실제 API 키로는 미검증** — 키가 들어오면 확인) |
 | `app/telemetry.py` — 필드 화이트리스트 로그 | 완료 |
+| `app/capture.py` — 요청 뼈대 캡처(기본 켜짐) · 갭 스냅샷(기본 꺼짐) | 완료 |
 | `app/main.py` — `/chat/completions` · `/internal/observations` · `/internal/summaries` · `/healthz` | 완료 |
 | `eval/fixtures/internal/` — 내부 API 고정 JSON 10건 | 완료 (백엔드와 공유) |
 | `eval/run_eval.py` — 평가 실행기 | 미착수 (20쌍 수집 후) |
+
+**첫 Hume 연결에서 요청 뼈대가 `eval/capture/shape/`에 남는다.** 문서만 보고 짠 파서라 실제 모양을 한 번은 봐야 하고, 안 남기면 무료 할당량(월 5분)을 한 번 더 써야 한다. 발화·점수 값은 담기지 않으므로(키 이름과 타입만) 기본으로 켜 둔다.
 
 **아직 못 한 검증**: Hume 실제 연결(Config가 없다), Anthropic 실제 호출(키가 없다),
 백엔드 실제 연결(터널 전). 이 셋은 목으로만 검증돼 있다.
