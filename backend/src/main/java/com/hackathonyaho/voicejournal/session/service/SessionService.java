@@ -139,6 +139,17 @@ public class SessionService {
                 demoMode(profileId));
     }
 
+    /**
+     * 계약 §2-5-2. 앱이 EVI 소켓을 열자마자 받는 {@code chat_group_id}를 보관한다.
+     *
+     * <p><b>종료된 세션에도 쓴다.</b> 앱이 보내는 사이에 세션이 닫힐 수 있고,
+     * 그걸 404로 돌려주면 앱이 재시도해도 영영 안 된다 — 저장은 해롭지 않다.
+     */
+    @Transactional
+    public void attachChatGroup(UUID profileId, UUID sessionId, String chatGroupId) {
+        mine(profileId, sessionId).attachChatGroup(chatGroupId);
+    }
+
     // ── AI서버용 세션 컨텍스트 (계약 §3-4) ────────────────────────────
 
     @Transactional(readOnly = true)

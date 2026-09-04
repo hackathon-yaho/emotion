@@ -102,7 +102,8 @@ AI서버 → 백엔드. **CLM 인증을 겸한다**(계약 §4).
 - [x] `remainingSec = hardCutSec − usedSec`. **새 7분을 주지 않는다**
 - [x] `humeConfigId` 재포함 — 같은 Config로 붙어야 CLM이 이어진다
 - [x] `gapThreshold`는 **그 세션의 `gap_threshold` 스냅샷**을 그대로. 이어하기는 같은 세션이므로 임계값이 바뀌지 않는다
-- [x] `resumedChatGroupId` 반환 (`voice_session.hume_chat_group_id`)
+- [x] `resumedChatGroupId` 반환 (`voice_session.hume_chat_group_id`) — **값이 없으면 `null`이다**(계약 §1-3, v1.8). 빈 문자열로 내리지 않는다
+- [x] **`POST /api/session/{id}/chat-group` 신설** (계약 §2-5-2, v1.8, 2026-09-05) — 앱이 소켓 직후 받는 `chat_group_id`를 올린다. **멱등·204**, 종료된 세션에도 받는다, 마지막 값이 이긴다
 - [x] 이어하기 창(30분) 경과 또는 `remainingSec <= 0` → **409 `SESSION_NOT_RESUMABLE`**
 
 > **P1이라 잘려도 된다**(spec §11 스코프 컷 3번). F2-06이 데이터를 지키므로 없어도 유실은 없다. **잘라도 `openSession`(2-5)은 남긴다** — 앱이 "중단된 대화가 있다"를 표시하고 새로 시작하게 하는 데 쓴다.
@@ -120,7 +121,9 @@ AI서버 → 백엔드. **CLM 인증을 겸한다**(계약 §4).
 - ✅ **TC-22** — 강제 종료 5분 뒤 이어하기 시 **남은 시간이 7분이 아니라 잔여분**이다 (P1)
 - ✅ `api-spec.md` 구현 현황 갱신 (`session/start`·`end`·`resume`·`internal/sessions`)
 
-> **`resumedChatGroupId`를 채우는 경로가 아직 없다** (2026-09-04, 구현 중 발견). 계약 §2-5-1이 이어하기 응답에 이 값을 요구하는데, `voice_session.hume_chat_group_id`에 **쓰는 주체가 어느 문서에도 없다.** EVI의 `chat_group_id`는 앱이 Hume과 직접 붙어서 받는 값이라 백엔드가 스스로 알 수 없다. 지금은 항상 null이고, 그러면 **이어하기가 되긴 하지만 이전 대화 맥락이 복원되지 않는다.** 앱에 확인 요청을 보냈다 — `../../docs/request/app/chat-group-id.md`.
+> **~~`resumedChatGroupId`를 채우는 경로가 아직 없다~~ — 2026-09-05에 뚫렸다.** 앱이 **소켓이 열린 직후 `chat_metadata`로 값을 받는다**고 회신했고, `POST /api/session/{id}/chat-group`(계약 §2-5-2)을 신설해 받는다. **`end` 본문이 아니라 별도 엔드포인트인 이유**는 앱이 강제 종료되면 `end` 호출 자체가 없는데 **이어하기가 필요한 상황이 정확히 그 상황**이기 때문이다. 아래는 발견 당시의 기록이다.
+>
+> <sub>(2026-09-04, 구현 중 발견)</sub> 계약 §2-5-1이 이어하기 응답에 이 값을 요구하는데, `voice_session.hume_chat_group_id`에 **쓰는 주체가 어느 문서에도 없다.** EVI의 `chat_group_id`는 앱이 Hume과 직접 붙어서 받는 값이라 백엔드가 스스로 알 수 없다. 지금은 항상 null이고, 그러면 **이어하기가 되긴 하지만 이전 대화 맥락이 복원되지 않는다.** 앱에 확인 요청을 보냈다 — `../../docs/request/app/chat-group-id.md`.
 
 ## 이 Phase에서 하지 않는 것
 

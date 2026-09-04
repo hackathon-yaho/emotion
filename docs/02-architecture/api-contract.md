@@ -1,5 +1,7 @@
 # API 계약서 — 감정 케어 보이스 저널
 
+> **수정 기록 (2026-09-05 ⑥, 백엔드)** — **v1.8.** 앱 회신(`request/app/chat-group-id.md`)으로 **`chat_group_id`가 소켓이 열린 직후 `chat_metadata`로 온다**는 것이 확정됐다. ① **§2-5-2 `POST /api/session/{sessionId}/chat-group` 신설** — 앱이 값을 받은 즉시 올린다. **멱등·204**이며, 강제 종료로 `end`를 못 부른 세션까지 덮는 유일한 경로다(그리고 이어하기가 필요한 상황이 정확히 그 상황이다) ② **§2-5-1 `resumedChatGroupId`의 빈 값을 `null`로 확정** — 앱이 빈 문자열로 방어 중이었다. §1-3에 행을 추가했다. **필드 추가·삭제·개명 없음**(엔드포인트 1개 신설). §5 S02 행도 갱신했다.
+>
 > **수정 기록 (2026-09-05 ⑤, 백엔드)** — **v1.7.** 앱 요청(`request/backend/session-id-in-url.md`) 회신 — **`sessionId`의 앱 URL 프래그먼트 노출을 허용하고 그 근거를 §1-1에 명시**했다. 로그 금지와 모순되지 않는 이유는 **주소창에 오는 ID가 구조적으로 죽은 값**이기 때문이다: 기록 목록이 끝난 세션만 주고(§2-9), 끝난 세션은 CLM 401이며(§3-4), 이어하기로도 살아나지 않는다(§2-5-1). 셋 다 실측했다. **해시 라우팅이 전제**라는 조건과 **path 전략으로 바꾸면 무효**라는 것도 같이 적었다. **필드 추가·삭제·개명 없음.**
 >
 > **수정 기록 (2026-09-05 ④, 백엔드)** — **v1.6.** 앱 회신(`response/backend/kakao-web-login.md`)으로 **웹에서는 앱이 카카오 액세스 토큰을 받을 수 없다**는 것이 확정됐다(SDK 2.0.1 소스: 웹 로그인 API가 전부 `notSupported`, `authorize()`는 리다이렉트 후 빈 문자열). **§2-1 요청을 `kakaoAccessToken` → `kakaoAuthCode` + `redirectUri`로 교체**하고, **§2-3에 탈퇴 unlink용 선택 본문**을 넣었다. **이 회차의 유일한 필드 삭제는 `kakaoAccessToken`이고 앱·백엔드가 같이 맞춘다.** 응답은 §2-1·§2-3 모두 그대로다.
@@ -12,8 +14,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 문서 버전 | v1.7 |
-| 작성일 | 2026. 09. 03. (최종 개정 2026. 09. 04.) |
+| 문서 버전 | v1.8 |
+| 작성일 | 2026. 09. 03. (최종 개정 2026. 09. 05.) |
 | 상위 문서 | [prd.md](../00-context/prd.md) · [spec.md](../00-context/spec.md) · AI 내부 설계 [ai-pipeline.md](ai-pipeline.md) |
 | 범위 | ① 앱 ↔ 백엔드 ② AI서버 ↔ 백엔드(내부) ③ Hume ↔ AI서버(외부·변경 불가) |
 
@@ -86,6 +88,7 @@
 | `voiceValence` | 프로소디 점수 누락, 또는 긍정·부정 합계 질량이 기준(초기 0.05) 미만 — 중립만 찍힌 발화 ([ai-pipeline.md](ai-pipeline.md) §3) | 갭 미표시 |
 | `gap` | 위 둘 중 **하나라도** null | 그래프에서 점을 찍지 않는다 |
 | `summary` | 요약 생성 실패 | 요약 영역 숨김 |
+| `resumedChatGroupId` | 앱이 §2-5-2로 아직 올리지 않은 세션 | **맥락 복원 없이** 이어한다. 이어하기 자체는 정상이다 |
 | `observations[]` | 조건 미달로 관찰 미생성 | **빈 배열.** "아직 없어요" 안내만 표시하고 억지 문구를 만들지 않는다 |
 
 **그래프에서 값이 없는 날은 배열에서 아예 생략한다.** 0으로 채우거나 앞뒤를 이어 보간하지 않는다 — 없는 감정을 그리는 것이기 때문이다.
@@ -288,7 +291,7 @@
 | 필드 | 설명 |
 | --- | --- |
 | `humeConfigId` | **v1.3 신설.** §2-4와 동일 값 — 재연결도 같은 Config로 붙어야 CLM이 이어진다 |
-| `resumedChatGroupId` | 앱이 EVI 핸드셰이크의 `resumed_chat_group_id` 쿼리 파라미터로 넘긴다. **이전 대화 맥락이 복원된다** — [Resuming Chats](https://dev.hume.ai/docs/speech-to-speech-evi/features/resume-chats) |
+| `resumedChatGroupId` | 앱이 EVI 핸드셰이크의 `resumed_chat_group_id` 쿼리 파라미터로 넘긴다. **이전 대화 맥락이 복원된다** — [Resuming Chats](https://dev.hume.ai/docs/speech-to-speech-evi/features/resume-chats). **§2-5-2로 값을 받지 못한 세션은 `null`이다 — 빈 문자열은 오지 않는다**(v1.8) |
 | `remainingSec` | `hardCutSec − usedSec`. **새 7분을 주지 않는다** — 이어하기로 원가 상한이 뚫리면 안 된다 (PRD NFR-06) |
 
 | 오류 | 조건 |
@@ -298,6 +301,35 @@
 
 > **이어하기 창은 중단 후 30분이다.** 하드컷이 7분이라 정상 세션은 걸리지 않고, 감정 대화에서 몇 시간 뒤에 잇는 것은 이미 다른 대화이기 때문이다.
 > 사용자가 "아니오"를 고르면 앱은 이 대신 `POST /api/session/{id}/end`(`endReason: "user_end"`)를 호출해 그 세션을 닫는다.
+
+## 2-5-2. `POST /api/session/{sessionId}/chat-group` — 대화 그룹 ID 보관 (v1.8 신설)
+
+앱이 EVI 소켓을 연 직후 `chat_metadata`로 받는 `chat_group_id`를 **받자마자 한 번** 올린다. 이 값이 없으면 §2-5-1의 `resumedChatGroupId`가 항상 `null`이라 **이어하기는 되지만 이전 대화 맥락이 복원되지 않는다.**
+
+**요청**
+
+```json
+POST /api/session/550e8400-e29b-41d4-a716-446655440000/chat-group
+{ "chatGroupId": "cg_2b7f11" }
+```
+
+**응답 204** — 본문 없음.
+
+| 필드 | 규칙 |
+| --- | --- |
+| `chatGroupId` | **필수.** 공백 불가, 200자 이하. Hume이 준 문자열을 **그대로** 올린다 — 백엔드는 형식을 검사하지 않는다(접두사가 바뀌어도 우리가 먼저 깨지지 않게) |
+
+| 오류 | 조건 |
+| --- | --- |
+| 400 `VALIDATION_ERROR` | `chatGroupId`가 없거나 공백뿐 |
+| 403 `FORBIDDEN` | 남의 세션 |
+| 404 `SESSION_NOT_FOUND` | 없는 세션 |
+
+> **멱등하다.** 같은 값을 몇 번 보내도 204이고, **다른 값이 오면 마지막 값이 이긴다** — 값이 바뀌었다는 것은 새 그룹이 생겼다는 뜻이라 이전 그룹에는 이어붙일 맥락이 없다. 앱은 재연결마다 그냥 보내면 된다.
+>
+> **종료된 세션에도 204다.** 소켓 직후에 보내는 값이라 도착 전에 세션이 닫힐 수 있는데, 그걸 404로 튕기면 앱이 재시도해도 영영 성공하지 못한다. 저장은 해롭지 않다.
+>
+> **`end`(§2-5) 본문으로 받지 않는 이유** — 앱이 강제 종료되면 `end` 호출 자체가 없다. **그런데 이어하기가 필요한 상황이 정확히 그 상황이다.**
 
 ## 2-6. `GET /api/observations` — 관찰 목록
 
@@ -765,7 +797,7 @@ data: [DONE]
 | --- | --- |
 | S00 진입·로그인 | `POST /api/auth/kakao` |
 | S01 홈 | `GET /api/me`(`openSession` 포함), `GET /api/observations?limit=3` |
-| S02 대화 | `POST /api/session/start` **또는** `POST /api/session/{id}/resume` → (Hume 직접 연결) → **`GET /api/session/{id}/live` 폴링(§2-13, v1.3)** → `POST /api/session/{id}/end` |
+| S02 대화 | `POST /api/session/start` **또는** `POST /api/session/{id}/resume` → (Hume 직접 연결) → **`POST /api/session/{id}/chat-group`**(소켓 직후 1회, §2-5-2, v1.8) → **`GET /api/session/{id}/live` 폴링(§2-13, v1.3)** → `POST /api/session/{id}/end` |
 | S02-1 종료 요약 | 2-5 응답 재사용 (추가 호출 없음) |
 | S03 발견 | `GET /api/observations`, `POST /api/observations/{id}/feedback` |
 | S03-1 관찰 근거 | `GET /api/observations/{id}/evidence` |
@@ -790,6 +822,7 @@ data: [DONE]
 
 | 버전 | 일자 | 내용 |
 | --- | --- | --- |
+| **v1.8** | **2026-09-05** | `chat-group-id.md` 회신 반영 — 앱이 **`chat_group_id`를 소켓 직후 `chat_metadata`로 받는다**고 확인했다. ① **§2-5-2 신설** — `POST /api/session/{id}/chat-group`, 멱등·204. `end` 본문이 아니라 별도 엔드포인트인 이유는 **강제 종료된 세션을 덮는 경로가 그것뿐**이기 때문이다(그리고 이어하기가 필요한 상황이 정확히 그 상황이다). 종료된 세션에도 받고, 값이 바뀌면 마지막 값이 이긴다 ② **§2-5-1 `resumedChatGroupId`의 빈 값을 `null`로 확정**하고 §1-3 표에 행 추가 — 앱이 빈 문자열을 "없음"으로 방어하고 있었다. **필드 변경 없음, 엔드포인트 1개 신설** |
 | **v1.7** | **2026-09-05** | `session-id-in-url.md` 회신 — **§1-1에 `sessionId`의 앱 URL 노출 허용과 근거를 명시**했다. 앱이 대화 상세를 `#/records/{sessionId}`로 라우팅하는데 §1-1의 "로그에 남기지 않는다"만 보면 모순으로 읽히기 때문이다. 허용의 근거는 **그 값이 구조적으로 쓸 수 없는 값**이라는 것이고(목록은 종료 세션만 → CLM 401 → 재개 불가), 셋 다 백엔드가 실측했다. **해시 라우팅이 전제이며 path 전략으로 바꾸면 무효**임을 조건으로 달았다. **필드 변경 없음** |
 | **v1.6** | **2026-09-05** | `kakao-web-login.md` 회신 반영 — **웹에서는 앱이 카카오 액세스 토큰을 받을 수 없다**(앱이 SDK 2.0.1 소스로 확인: 웹 로그인 API가 전부 `notSupported`, `authorize()`는 빈 문자열 반환). ① **§2-1 요청을 `kakaoAccessToken` → `kakaoAuthCode` + `redirectUri`로 교체.** 서버가 인가 코드를 토큰으로 교환한다. `redirectUri`는 등록 목록과 대조해 아니면 400 — 인가 코드를 남의 주소로 흘릴 수 있는 자리다. **응답은 그대로**(`jwt`·`expiresAt`·`profileId`·`isNewUser`) ② **§2-1 오류 표 갱신** — 400에 `redirectUri` 미등록 추가, 401 사유를 코드 교환 실패로 ③ **§2-3에 선택 본문 신설** — 탈퇴 시 카카오 unlink용 인가 코드. **없어도 204**이며 unlink 실패는 오류로 올리지 않는다. 리프레시 토큰을 보관하지 않기로 한 결정의 결과다. **필드 삭제 1건(`kakaoAccessToken`) — 앱·백엔드 모두 이 회차에 맞춘다** |
 | v1.0 | 2026-09-03 | 최초 작성. PRD §8·spec 기준으로 12개 공개 엔드포인트 + 2개 내부 엔드포인트 확정 |

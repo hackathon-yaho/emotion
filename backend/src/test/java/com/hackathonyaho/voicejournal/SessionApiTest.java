@@ -294,6 +294,113 @@ class SessionApiTest {
                 .andExpect(jsonPath("$.humeConfigId").value("cfg_test"));
     }
 
+    // ── chat_group_id (F2-07, 계약 §2-5-2) ──────────────────────────
+
+    /**
+     * <b>이 엔드포인트가 없으면 {@code resumedChatGroupId}가 영원히 null이다.</b>
+     * 이어하기 자체는 되지만 이전 대화 맥락이 복원되지 않는다.
+     */
+    @Test
+    @DisplayName("앱이 올린 chatGroupId가 이어하기 응답으로 되돌아온다")
+    void chatGroupRoundTrips() throws Exception {
+        UUID sessionId = startSession();
+
+        mvc.perform(post("/api/session/{id}/chat-group", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chatGroupId\":\"cg_2b7f11\"}"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/api/session/{id}/resume", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resumedChatGroupId").value("cg_2b7f11"));
+    }
+
+    /** 앱이 재연결마다 보내도 안전해야 한다 — 그래야 재시도를 고민하지 않는다. */
+    @Test
+    @DisplayName("같은 값을 여러 번 보내도 204이고, 새 값이 오면 새 값이 이긴다")
+    void chatGroupIsIdempotent() throws Exception {
+        UUID sessionId = startSession();
+
+        postChatGroup(sessionId, "cg_first");
+        postChatGroup(sessionId, "cg_first");
+        postChatGroup(sessionId, "cg_second");
+
+        mvc.perform(post("/api/session/{id}/resume", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt))
+                .andExpect(jsonPath("$.resumedChatGroupId").value("cg_second"));
+    }
+
+    /** 값을 안 보낸 세션은 <b>빈 문자열이 아니라 null</b>이다 (계약 §1-3). */
+    @Test
+    @DisplayName("chatGroupId를 안 보낸 세션의 resumedChatGroupId는 null이다")
+    void resumedChatGroupIdIsNullWhenAbsent() throws Exception {
+        UUID sessionId = startSession();
+
+        String body = mvc.perform(post("/api/session/{id}/resume", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt))
+                .andExpect(jsonPath("$.resumedChatGroupId").value(org.hamcrest.Matchers.nullValue()))
+                .andReturn().getResponse().getContentAsString();
+
+        // 빈 문자열로 방어할 필요가 없다는 것을 본문으로 못박는다.
+        assertThat(body).contains("\"resumedChatGroupId\":null");
+    }
+
+    /**
+     * 소켓이 열린 직후 보내는 값이라 그 사이에 세션이 닫힐 수 있다. 404로 돌려주면
+     * 앱이 재시도해도 영영 성공하지 못한다 — 저장은 해롭지 않으므로 받는다.
+     */
+    @Test
+    @DisplayName("종료된 세션에도 받는다 — 늦게 도착한 값을 404로 튕기지 않는다")
+    void chatGroupAcceptedAfterEnd() throws Exception {
+        UUID sessionId = startSession();
+        mvc.perform(post("/api/session/{id}/end", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt))
+                .andExpect(status().isOk());
+
+        postChatGroup(sessionId, "cg_late");
+
+        em.flush();
+        em.clear();
+        assertThat(sessionRepository.findById(sessionId).orElseThrow().getHumeChatGroupId())
+                .isEqualTo("cg_late");
+    }
+
+    @Test
+    @DisplayName("남의 세션에는 못 쓴다 — 403")
+    void chatGroupRejectsOtherProfile() throws Exception {
+        UUID sessionId = startSession();
+        UUID other = profileRepository.save(Profile.create()).getId();
+        baselineRepository.save(new UserBaseline(other));
+
+        mvc.perform(post("/api/session/{id}/chat-group", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtProvider.issue(other).token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chatGroupId\":\"cg_stolen\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("빈 chatGroupId는 400이다 — null을 문자열로 덮어쓰지 않는다")
+    void chatGroupRejectsBlank() throws Exception {
+        UUID sessionId = startSession();
+
+        mvc.perform(post("/api/session/{id}/chat-group", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chatGroupId\":\"  \"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    private void postChatGroup(UUID sessionId, String chatGroupId) throws Exception {
+        mvc.perform(post("/api/session/{id}/chat-group", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chatGroupId\":\"" + chatGroupId + "\"}"))
+                .andExpect(status().isNoContent());
+    }
+
     @Test
     @DisplayName("이어하기 창이 지나면 409다")
     void resumeAfterWindow() throws Exception {

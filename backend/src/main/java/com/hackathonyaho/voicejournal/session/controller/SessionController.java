@@ -1,6 +1,7 @@
 package com.hackathonyaho.voicejournal.session.controller;
 
 import com.hackathonyaho.voicejournal.auth.security.ProfileContext;
+import com.hackathonyaho.voicejournal.session.dto.request.ChatGroupRequest;
 import com.hackathonyaho.voicejournal.session.dto.request.SessionEndRequest;
 import com.hackathonyaho.voicejournal.session.dto.response.SessionEndResponse;
 import com.hackathonyaho.voicejournal.session.dto.response.SessionResumeResponse;
@@ -49,6 +50,14 @@ public class SessionController {
     public ResponseEntity<LiveSignalResponse> live(@PathVariable UUID sessionId,
                                                    @RequestParam(required = false) Integer sinceTurnIndex) {
         return ResponseEntity.ok(turnService.live(ProfileContext.require(), sessionId, sinceTurnIndex));
+    }
+
+    /** 계약 §2-5-2. 멱등 — 같은 값이 몇 번 와도 204다. */
+    @PostMapping("/{sessionId}/chat-group")
+    public ResponseEntity<Void> chatGroup(@PathVariable UUID sessionId,
+                                          @Valid @RequestBody ChatGroupRequest request) {
+        sessionService.attachChatGroup(ProfileContext.require(), sessionId, request.chatGroupId());
+        return ResponseEntity.noContent().build();
     }
 
     /** 계약 §2-5-1 (P1). */

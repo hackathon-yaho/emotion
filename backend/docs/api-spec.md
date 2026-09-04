@@ -32,7 +32,8 @@
 | `DELETE /api/account` | F1-04, F10-03 | 6 | **구현 완료** — 10테이블 삭제 + unlink(선택 본문). 실계정 unlink 왕복만 미검증 |
 | `POST /api/session/start` | F2-01, F3-04 | 2 | **구현 완료** — Hume 키가 자리표시라 실발급만 미검증 |
 | `POST /api/session/{sessionId}/end` | F2-05 | 2 | **구현 완료** — `summary`는 항상 null (Phase 3) |
-| `POST /api/session/{sessionId}/resume` (P1) | F2-07 | 2 | **구현 완료** — `resumedChatGroupId`는 항상 null (아래 §2) |
+| `POST /api/session/{sessionId}/resume` (P1) | F2-07 | 2 | **구현 완료.** `resumedChatGroupId`는 앱이 `/chat-group`으로 올린 값이고, 안 올린 세션은 `null`이다 |
+| `POST /api/session/{sessionId}/chat-group` | F2-07 | 2 | **구현 완료** (계약 §2-5-2, v1.8). 멱등·204. 종료된 세션에도 받는다 |
 | `GET /api/session/{sessionId}/live` (v1.3) | F4-04, F11-01 | **3** | **구현 완료** |
 | `GET /api/observations` | F7-06 | 5 | **구현 완료** |
 | `GET /api/observations/{observationId}/evidence` | F7-07 | 5 | **구현 완료** |

@@ -90,4 +90,12 @@ public class VoiceSession {
     public void attachSummary(String summary) {
         this.summary = summary;
     }
+
+    /**
+     * 마지막으로 받은 값이 이긴다. 같은 값이 여러 번 오면 아무 일도 안 일어난 것과 같고,
+     * 다른 값이 오면 <b>새 그룹이 생겼다는 뜻</b>이라 이전 그룹에는 이어붙을 맥락이 없다.
+     */
+    public void attachChatGroup(String chatGroupId) {
+        this.humeChatGroupId = chatGroupId;
+    }
 }

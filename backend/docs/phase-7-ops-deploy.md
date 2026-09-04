@@ -129,6 +129,7 @@
 7. `GET /api/health`가 `{"status":"ok","db":"ok"}`인지 확인
 8. **cron-job.org에 10분 간격 `GET /api/health` 등록**
 9. **앱·AI에 배포 도메인 전달** — 앱은 `API_BASE_URL`, AI는 `BACKEND_BASE_URL`
+   - 앱 것은 **팀장이 직접 등록한다**: `gh variable set API_BASE_URL --repo hackathon-yaho/emotion --body https://…` (`.github/workflows/app-web.yml`이 `vars.API_BASE_URL`을 읽고, **비어 있으면 폴백이 `http://localhost:8080`이라 배포본이 조용히 로컬을 부른다**). `KAKAO_REST_KEY`는 2026-09-05에 등록해 뒀다
 10. AI서버가 배포되면 **`AI_SERVER_BASE_URL`을 그 주소로** 갱신
 
 > **10번을 빠뜨리면 조용히 실패한다.** 요약은 `null`, 관찰은 0건이 되는데 **둘 다 정상 동작과 구분이 안 된다**(설계상 실패해도 대화·기록은 멀쩡하다). 배포 후 첫 대화에서 `summary`가 `null`이면 이걸 먼저 본다.

@@ -334,10 +334,10 @@
 | --- | --- |
 | 설명 | 중단된 세션이 있으면 **이전 대화 맥락을 복원해** 이어서 대화한다 |
 | 트리거 | 홈(S01) 진입 시 `GET /api/me`의 `openSession`이 `null`이 아님 |
-| 처리 | ① "이어서 이야기할까요?" 제안 ② 예 → `POST /api/session/{id}/resume` ③ 응답의 `resumedChatGroupId`를 EVI 핸드셰이크 `resumed_chat_group_id`로 전달 ④ 아니오 → `POST /api/session/{id}/end`로 닫음 |
+| 처리 | ⓪ **세션 중 EVI 소켓이 열리면** `chat_metadata`의 `chat_group_id`를 `POST /api/session/{id}/chat-group`으로 올린다(계약 §2-5-2) ① "이어서 이야기할까요?" 제안 ② 예 → `POST /api/session/{id}/resume` ③ 응답의 `resumedChatGroupId`를 EVI 핸드셰이크 `resumed_chat_group_id`로 전달 ④ 아니오 → `POST /api/session/{id}/end`로 닫음 |
 | 시간 예산 | **남은 시간 = `hardCutSec − usedSec`.** 새 7분을 주지 않는다 — 이어하기로 **세션당 원가 상한 $0.49가 뚫리면 안 된다**(PRD NFR-06) |
 | 이어하기 창 | 중단 후 **30분.** F2-06의 정리 시간과 같은 값으로 맞춰 규칙을 하나로 유지 |
-| 예외 | 창 경과·잔여 시간 0 → 409 `SESSION_NOT_RESUMABLE`. 앱은 새 세션을 시작한다 |
+| 예외 | 창 경과·잔여 시간 0 → 409 `SESSION_NOT_RESUMABLE`. 앱은 새 세션을 시작한다. **⓪을 못 받은 세션은 `resumedChatGroupId`가 `null`이고, 맥락 없이 이어한다** — 이어하기 자체는 정상이다 |
 | 수용 기준 | 이어한 대화에서 AI가 **앞서 나눈 내용을 기억한다** |
 | 외부 근거 | Hume Chat Group으로 맥락이 보존된다 — [Resuming Chats](https://dev.hume.ai/docs/speech-to-speech-evi/features/resume-chats) |
 | 왜 P1인가 | 없어도 F2-06이 데이터를 지킨다. 밀리면 이것부터 버린다 |
