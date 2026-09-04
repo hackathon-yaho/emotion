@@ -68,16 +68,16 @@
 - **Git** — `main` 하나, 직접 커밋·푸시, **푸시 전 `git pull`**. 브랜치·PR 없음 (`docs/05-planning/git-branching.md`)
 - **문서 수정** — `docs/README.md` 맨 위 수정 기록 배너에 날짜와 함께 남긴다
 
-## 현재 상태 (2026-09-03)
+## 현재 상태 (2026-09-04)
 
 - **앱 프레임워크 확정(2026-09-03)**: **Flutter — 웹·모바일 앱 모두 지원, 배포·제출·시연은 웹.** 빌드·렌더링·EVI 세션 수립까지 실측했고 **마이크 음성 왕복은 미검증**이다 — 근거와 전환 조건은 PRD §14-4
 - **AI 스택 확정(2026-09-03)**: **Python 3.12 / FastAPI / Anthropic SDK.** 모델은 환경변수(분석 `claude-haiku-4-5` · 응답 `claude-sonnet-5` · 문장화 `claude-opus-5`, TC-12 후 조정). 설계 단일 출처 `docs/02-architecture/ai-pipeline.md`
 - **착수 전 확정 항목**: ~~매핑표(§14-1)~~ ✅ · ~~위기 키워드(§14-2)~~ ✅ (`ai-server/rules/`) · Hume 플랜 실측(§14-3, 백엔드) · 고정 임계값(§14-5) — 절차 확정, 수치는 20쌍 측정 후
 - **누락 문서 3개**: `decisions.md`, `voice-emotion-stack-options.md`, `selected-topic.md` — PRD가 참조하지만 저장소에 없음. `docs/00-context/`에 올릴 것
-- **요청 현황**
-  - ✅ `docs/request/ai/clm-turn-pipeline-review.md` — 회신 완료(2026-09-03). §9.1 개정, FR-025 신설. 회신은 `docs/response/app/`
-  - ⏳ `docs/request/backend/hume-config-id.md` — `config_id`가 계약에 없다. **CLM 전환 시점부터 F2-02 연결이 막힌다.** Hume Config는 AI가 생성·소유하기로 회신에 명시
-  - ⏳ `docs/request/backend/live-turn-signal.md` — 대화 중 턴 신호를 앱이 읽을 경로가 없다. **S07·데모 모드 트리거 보류**
-  - ⏳ `docs/request/backend/session-context-lookup.md` (AI) — AI서버가 임계값·모드를 알 경로 + CLM 인증. 회신 전엔 `.env` 고정 임계값
-  - ⏳ `docs/request/backend/session-summary-endpoint.md` (AI) — F2-05 요약 생성 경로
+- **계약은 v1.4(2026-09-04).** `api-contract.md`가 인터페이스 단일 출처이며, 변경 이력 표에 v1.0~v1.4의 무엇을 왜 바꿨는지가 있다
+- **요청 현황** — 회신 대기 중인 것만 ⏳다
+  - ⏳ `docs/request/ai/integration-test-path.md` (백엔드 → AI) — 양쪽이 로컬이면 AI서버가 백엔드에 도달하지 못해 통합 검증이 성립하지 않는다. 임시 터널로 뚫을 시점·순서 협의
+  - ⏳ `docs/request/ai/turn-index-numbering.md` (백엔드 → AI, 2026-09-04) — 이어하기 재연결 후 `turnIndex`를 이어 붙이는지. **리셋하면 백엔드의 중복 방어에 걸려 이후 턴이 오류 없이 버려진다.** 계약 v1.4가 규칙을 명시하고 §3-4가 `lastTurnIndex`를 제공한다
+  - ✅ `docs/request/ai/clm-turn-pipeline-review.md` — 회신 완료(2026-09-03). §9.1 개정, FR-025 신설
+  - ✅ `docs/request/backend/` **5건 전부 회신 완료** — `hume-config-id`·`live-turn-signal`·`session-context-lookup`·`session-summary-endpoint`(계약 v1.3) · `tag-gap-endpoint`(v1.4, 2026-09-04). 회신은 `docs/response/{app,ai}/`에 같은 파일명으로
 - 코드는 아직 없다. `ai-server/`에는 프롬프트 3종·규칙 데이터 3종·`.env.example`·`pyproject.toml`·평가 세트 안내가 있다

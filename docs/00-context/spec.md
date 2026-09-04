@@ -1,5 +1,7 @@
 # 기능 명세서 — 감정 케어 보이스 저널
 
+> **수정 기록 (2026-09-04 ③, 백엔드)** — 백엔드 계획 문서를 이 문서·계약서와 전수 대조하며 나온 결함 5건을 고쳤다(계약은 v1.4로 동시 개정). ① **F3-04에 `avg_gap IS NOT NULL` 가드 추가** — 조건이 `session_count >= 5` 하나뿐이라, TC-06(분석 호출 실패)이 반복돼 5세션 내내 갭이 NULL이면 **평균이 없는 상태로 `personal`로 전환**된다 ② **`session_count` 증가를 F3-05에서 분리해 세션 종료의 기본 동작으로** — F3-05는 P1이고 §11 스코프 컷 7번인데, 자르면 P0인 F3-04와 TC-07이 같이 죽었다 ③ **§6-1에 `voice_session.gap_threshold` 추가** — 세션에 적용된 임계값을 저장하지 않아 F9-02 음영이 임계값 확정(§14-5) 시 소급 변경된다 ④ **§6-1에 `profile.demo_mode` 추가** — F11-01 플래그의 실체가 어느 문서에도 없었다 ⑤ **F9-02 담당 `C` → `A/C`** — 음영 구간(`highlights`)은 계약 §2-8에서 **서버가 계산해 내려준다**. 아울러 F9-01·03에 API 경로를 채우고, §5 시나리오 16행의 "배치 큐 적재"를 실제 방식으로 정정했다.
+>
 > **수정 기록 (2026-09-04 ②, 백엔드)** — 백엔드 실행 문서를 쓰다 발견한 **§6-1 공백 3건**을 메웠다. ① **`turn_log`에 `role`·`occurred_at` 추가** — 계약 §2-10 응답과 §3-2 요청이 둘 다 요구하는데 컬럼 목록에 없었다(그대로 구현하면 §2-10 응답을 만들 수 없다) ② **`voice_session`에 `pattern_processed_at` 추가** — F7-01 배치 트리거를 스케줄러 방식으로 확정하면서 필요해졌다 ③ **F10-01 처리에 `crisis_event` 삭제 추가** — `crisis_event.session_id`가 FK인데 이 처리가 없어, 그대로 구현하면 **세션 삭제가 FK 위반으로 실패**한다. 아울러 F7-01 처리를 "큐 적재"에서 실제 방식으로 구체화했다. DDL은 `backend/docs/data-model.md`가 단일 출처다.
 >
 > **수정 기록 (2026-09-03 ①, 백엔드)** — api-contract v1.3(백엔드가 받은 요청 4건 회신) 반영. **F2-01**(`sessionId` UUID·`humeConfigId`·`livePollIntervalSec` 출력 추가) · **F2-03**(AI서버가 세션 컨텍스트로 경과 판단) · **F2-05**(요약 동기 생성, `timeout`은 미생성) · **F4-04**(앱이 `live` 폴링으로 감지 확인) · **F5-04**(재시도 1회→3회) · **F11-01**(비데모 계정은 `turns: []`) 개정, **§10 TC-26·TC-27 신설**, §9 추적 매트릭스 2곳 갱신. 이 이후 수정은 이 배너에 번호를 이어 붙인다(②③…).
@@ -169,7 +171,7 @@
 | F8-02 | 관찰 근거 기반 제안 생성 | P1 | B | S02 |
 | F8-03 | 범위 가드 | P1 | B | — |
 | F9-01 | 두 선 그래프 | P0 | A/C | S04 |
-| F9-02 | 갭 구간 강조 | P0 | C | S04 |
+| F9-02 | 갭 구간 강조 | P0 | A/C | S04 |
 | F9-03 | 태그별 갭 비교 | P1 | A/C | S04 |
 | F9-04 | 대화 기록 목록 | P0 | A/C | S05 |
 | F9-05 | 대화 상세 | P0 | A/C | S05-1 |
@@ -258,7 +260,7 @@
 | 설명 | 대화 시작 시 세션 레코드를 만들고 **Hume 단기 액세스 토큰**을 발급한다 |
 | 트리거 | S01 홈에서 `[오늘 이야기하기]` |
 | 입력 | JWT |
-| 처리 | ① `voice_session` 생성, `sessionId`는 **UUIDv4**(v1.3 — CLM 인증에 쓰이므로 128비트 미만 형식 금지) ② `user_baseline.session_count` 조회 → **임계 모드 결정(F3-04)** ③ Hume 액세스 토큰·`humeConfigId`(환경변수, AI서버가 소유) 확인 ④ 반환 |
+| 처리 | ① `voice_session` 생성, `sessionId`는 **UUIDv4**(v1.3 — CLM 인증에 쓰이므로 128비트 미만 형식 금지) ② `user_baseline` 조회 → **임계 모드 결정(F3-04)** → **적용 임계값을 `voice_session.gap_threshold`에 스냅샷** ③ Hume 액세스 토큰·`humeConfigId`(환경변수, AI서버가 소유) 확인 ④ 반환 |
 | 출력 | `{ sessionId, humeAccessToken, humeTokenExpiresAt, humeConfigId, thresholdMode, gapThreshold, softWrapSec, hardCutSec, livePollIntervalSec, demoMode }` — 전체 스키마는 [api-contract.md](../02-architecture/api-contract.md) §2-4 (v1.3) |
 | 예외 | Hume 토큰 발급 실패 → 대화 시작 차단 + 원인 안내 |
 | 수용 기준 | **Hume API 키가 앱 번들·네트워크 응답 어디에도 노출되지 않는다** |
@@ -381,8 +383,9 @@
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 세션 누적 수에 따라 고정 임계값과 개인 baseline 중 하나를 고른다 |
-| 처리 | `session_count < 5` → `fixed` / `>= 5` → `personal` (개인 평균 ± 표준편차) |
-| 출력 | `thresholdMode: "fixed" \| "personal"`, 적용 임계값 |
+| 처리 | `session_count >= 5` **AND** `avg_gap IS NOT NULL` → `personal` (개인 평균 ± 표준편차) / 그 외 → `fixed` (2026-09-04 가드 추가) |
+| 출력 | `thresholdMode: "fixed" \| "personal"`, 적용 임계값. **적용 임계값은 `voice_session.gap_threshold`에 그대로 스냅샷한다**(§6-1) — F9-02 음영 판정이 이 값을 쓴다 |
+| 예외 | **`avg_gap`이 NULL이면 세션 수와 무관하게 `fixed`를 유지한다.** 5세션 내내 분석 호출이 실패해(F3-06·TC-06) 갭이 한 건도 산출되지 않으면 개인 평균이 존재하지 않고, 그 상태로 `personal`을 적용하면 임계값을 계산할 수 없다 |
 | 수용 기준 | 첫 세션부터 갭 트리거가 동작하며(데모 성립), 5회째 세션에서 모드가 `personal`로 전환된 로그가 남는다 |
 | 근거 | PRD FR-023 · 고정 단독은 목소리가 원래 낮은 사용자에게 매번 오탐. 개인 baseline 단독은 **첫 사용자에게 baseline이 없어 데모 첫 장면이 작동하지 않는다**. 5회는 도그푸딩 기간(9/10~9/20) 안에 전환 로그를 확보할 수 있는 값 |
 | 미확정 | 고정 임계값의 초기 수치는 20쌍 세트 측정 후 결정(PRD §14-5) |
@@ -392,10 +395,12 @@
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 세션 종료 시 개인 평균 갭·표준편차를 갱신한다 |
-| 처리 | `user_baseline` 갱신 (session_count, avg_gap, stddev_gap) |
+| 처리 | `user_baseline`의 **`avg_gap`·`stddev_gap`** 갱신 (전체 재계산) |
+| 범위 밖 | **`session_count` 증가는 F3-05가 아니라 세션 종료(F2-05·F2-06)의 기본 동작이다** (2026-09-04 분리) |
 | 예외 | 갭이 `null`인 턴은 집계에서 제외 |
 | 수용 기준 | 세션 삭제(F10-01) 시 baseline도 재계산된다 |
 | 연관 | F3-04, F10-01 |
+| 근거 (분리) | F3-05는 P1이고 §11 스코프 컷 7번이다. `session_count`까지 여기 묶여 있으면 **자르는 순간 P0인 F3-04가 영영 `fixed`에 머물고, `GET /api/me`의 `sessionCount`도 0으로 굳고, TC-07이 실패한다.** 카운트는 종료가 하고, 이 기능은 평균·표준편차만 맡는다 — 잘라도 F3-04의 가드가 안전하게 `fixed`를 유지한다 |
 
 ### F3-06 파싱 실패 폴백
 
@@ -676,7 +681,7 @@
 | --- | --- |
 | 설명 | 기간별 **텍스트 valence와 음성 valence를 두 개의 선**으로 함께 그린다 |
 | API | `GET /api/trend?range=30d` |
-| 출력 | 일자별 `{ date, textValenceAvg, voiceValenceAvg, gapAvg }` |
+| 출력 | 일자별 `{ date, textValence, voiceValence, gap, sessionCount }` — **필드명·형식은 계약 §2-8이 단일 출처다** |
 | 예외 | 데이터 없는 날은 선을 잇지 않고 끊는다 (없는 값을 보간하지 않는다) |
 | 수용 기준 | 두 선이 각각 구분되어 보이고, 축 범위가 −1~+1로 고정된다 |
 | 근거 | PRD FR-070 · **이 제품의 서명 화면.** 단일 감정 곡선은 어느 감정 앱에나 있지만, "말한 내용"과 "목소리"를 나란히 그린 그래프는 갭 지수를 채택한 제품에서만 존재할 수 있다 |
@@ -686,16 +691,21 @@
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 두 선이 벌어진 구간을 시각적으로 강조한다 |
-| 처리 | 갭이 임계 초과인 날짜 구간을 음영 처리 |
+| API | `GET /api/trend`의 `highlights` — **서버가 연속 구간을 계산해 내려준다**(계약 §2-8). 앱은 그 구간을 음영 처리한다 |
+| 처리 | 갭이 임계 초과인 날짜 구간을 음영 처리. **판정 기준은 그날의 세션에 실제로 적용됐던 `voice_session.gap_threshold`**(§6-1)이며, 현재 설정값으로 소급 판정하지 않는다 |
 | 수용 기준 | 강조 구간을 탭하면 그날의 대화(S05-1)로 이동한다 |
+| 근거 (스냅샷) | 고정 임계값의 초기 수치는 20쌍 측정 후 확정된다(PRD §14-5). 현재값으로 판정하면 **수치를 바꾸는 순간 과거 날짜의 음영이 통째로 달라져**, 그날 실제로 되물었던 근거(FR-022)와 화면이 어긋난다 |
 
 ### F9-03 태그별 갭 비교 (P1)
 
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 태그별 평균 갭을 막대로 비교한다 |
-| 출력 | `[{ tag, occurrences, tagAvgGap }]` 상위 N개 |
-| 예외 | 등장 3회 미만 태그는 표시하지 않는다 (F7-03과 동일 기준) |
+| API | `GET /api/trend`의 **`tagGaps`·`userAvgGap`** (계약 §2-8, v1.4). S04가 이미 하는 호출에 실어 보내 왕복을 늘리지 않는다 |
+| 출력 | `[{ tag, occurrences, tagAvgGap }]` **상위 7개**, `tagAvgGap` 내림차순. 기준선용 `userAvgGap`이 함께 온다 (앱이 ×1.5로 판정선을 그린다) |
+| 예외 | 등장 3회 미만 태그는 표시하지 않는다 (F7-03과 동일 기준). **필터는 서버가 한다** — 앱이 숨기는 것보다 기준이 한 곳에 남는다. 조건을 만족하는 태그가 없으면 `[]` |
+| 기간 | **`range`에 종속**된다. 같은 화면의 두 선 그래프와 기간이 다르면 두 그래프를 연결해 읽을 수 없다 |
+| 근거 | 이 화면의 값은 **"3회 이상이지만 1.5배 미만인 태그"를 함께 보여주는 것**이다. 관찰(F7-06)은 판정을 통과한 태그만 만들어지므로 대체할 수 없다 — 넘은 것만 보이면 비교 대상이 없어 "왜 이게 발견인가"가 설명되지 않는다 |
 
 ### F9-04 대화 기록 목록
 
@@ -763,7 +773,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 대화 화면에 실시간 갭·valence를 노출한다 |
-| 처리 | 계정 단위 플래그. `POST /api/session/start` 응답의 `demoMode`로 앱에 전달. **수치는 `GET /api/session/{id}/live`(v1.3, §2-13)로 도달** — `demoMode == true`일 때만 `turns[]`가 채워지고, `false`면 항상 빈 배열(마스킹에 `null`을 쓰지 않는다 — §1-3 null 규칙과 충돌 방지) |
+| 처리 | **`profile.demo_mode` 플래그**(§6-1, 2026-09-04 확정). `POST /api/session/start` 응답의 `demoMode`로 앱에 전달. **수치는 `GET /api/session/{id}/live`(v1.3, §2-13)로 도달** — `demoMode == true`일 때만 `turns[]`가 채워지고, `false`면 항상 빈 배열(마스킹에 `null`을 쓰지 않는다 — §1-3 null 규칙과 충돌 방지) |
 | 표시 | 텍스트 valence / 음성 valence / 갭 / 트리거 여부 |
 | 수용 기준 | 일반 사용자 화면에는 노출되지 않는다. **서버 응답 단계에서도** `demoMode == false` 계정의 `turns`는 항상 빈 배열이다(TC-26) |
 | 근거 | PRD FR-090 · 대화 중 수치 노출은 실사용 경험을 해치지만 심사장에서는 필요하다. 플래그로 분리해 둘 다 만족 |
@@ -847,7 +857,7 @@
 | 13 | — | — | `POST /internal/turns` 비동기 적재 (음성 원본 없음) | F5-01~03 |
 | 14 | S02 | 대화 계속 (3~4분) | 턴마다 7~13 반복 | F3, F4, F5 |
 | 15 | S02 | 5분 경과 | AI가 마무리 유도 — *"오늘은 여기까지 정리해볼까요?"* | F2-03 |
-| 16 | S02 | `[종료]` 탭 | `POST /api/session/{id}/end` → 세션 종료 기록 → **배치 큐 적재** | F2-05, F7-01 |
+| 16 | S02 | `[종료]` 탭 | `POST /api/session/{id}/end` → 세션 종료 기록(`ended_at`) → **`pattern_processed_at`이 NULL이므로 배치 미처리 상태로 남음** | F2-05, F7-01 |
 | 17 | S02-1 | 요약 확인 | 오늘 대화 한 줄 요약 표시 | F2-05 |
 | 18 | S01 | 홈 복귀 | 세션 종료. **첫날은 관찰이 생성되지 않는다** (태그 3회 미만) | F7-03 |
 
@@ -923,8 +933,8 @@
 | --- | --- | --- |
 | `account` | `id`, `kakao_sub`, `created_at` | **있음 (분리 보관)** |
 | `account_profile` | `account_id`, `profile_id` | 연결자 |
-| `profile` | `id`, `created_at` | 없음 |
-| `voice_session` | `id`, `profile_id`, `started_at`, `ended_at`, `duration_sec`, `threshold_mode`, `end_reason`, `summary`, **`hume_chat_group_id`**(이어하기용), **`pattern_processed_at`**(F7-01 배치 처리 시각) | 없음 |
+| `profile` | `id`, **`demo_mode`**(F11-01 플래그), `created_at` | 없음 |
+| `voice_session` | `id`, `profile_id`, `started_at`, `ended_at`, `duration_sec`, `threshold_mode`, **`gap_threshold`**(그 세션에 적용된 임계값 스냅샷 — F9-02 음영 판정), `end_reason`, `summary`, **`hume_chat_group_id`**(이어하기용), **`pattern_processed_at`**(F7-01 배치 처리 시각) | 없음 |
 | `turn_log` | `id`, `session_id`, `turn_index`, **`role`**, **`occurred_at`**, `transcript_enc`, `text_valence`, `voice_valence`, `gap`, `gap_triggered`, `top_prosody`(jsonb), `created_at` | **발화 내용(암호화)** |
 | `turn_tag` | `turn_id`, `tag` | 없음 |
 | `user_baseline` | `profile_id`, `session_count`, `avg_gap`, `stddev_gap`, `updated_at` | 없음 |
@@ -936,6 +946,10 @@
 > **`crisis_event`에 `turn_id`를 두지 않는 이유** — turn ID가 있으면 조인 한 번으로 "그때 무슨 말을 했는지"에 도달한다. 위기 발화라는 가장 민감한 지점에서 그 경로를 아예 만들지 않는다. 세션 단위까지만 남기며, 이것으로 "언제 몇 번 감지됐는지"는 파악되고 운영에는 충분하다.
 >
 > **`ops_error_log`가 탈퇴 삭제 대상(F10-03)에서 빠지는 이유** — 사용자 데이터를 담지 않으며(발화 내용 미포함), 장애 분석에 필요하다. 삭제 대상은 나머지 10개 테이블이다.
+>
+> **`voice_session.gap_threshold`가 필요한 이유 (2026-09-04)** — `threshold_mode`만 남기면 그 세션에 실제로 적용된 **수치**가 사라진다. 초기 임계값은 20쌍 측정 후 확정되므로(PRD §14-5) 반드시 한 번 바뀌고, 바뀌는 순간 F9-02의 과거 음영이 소급 재판정된다. 세션 시작 시점의 값을 그대로 박아 둔다.
+>
+> **`profile.demo_mode`가 컬럼인 이유 (2026-09-04)** — 환경변수 목록으로 두면 심사 당일 플래그를 켜는 데 재배포가 필요하다. 컬럼이면 `UPDATE` 한 줄이고, 스키마는 어차피 지금 한 번에 만든다(추가 마이그레이션 0회). `GET /api/me`·`session/start`·`/live`·`/internal/sessions` 네 곳이 같은 소스를 읽는다.
 
 ## 6-2. 서버에 보관하지 않는 것
 

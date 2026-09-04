@@ -1,11 +1,13 @@
 # API 계약서 — 감정 케어 보이스 저널
 
+> **수정 기록 (2026-09-04 ②, 백엔드)** — **v1.4.** 백엔드 계획 문서를 루트 스펙과 전수 대조하다 나온 공백을 메웠다. ① **§2-8에 `userAvgGap`·`tagGaps` 신설** — 앱 요청 `request/backend/tag-gap-endpoint.md` 회신. spec F9-03의 출력이 어느 엔드포인트에도 없었다 ② **§2-8 `highlights`의 판정 기준을 세션 스냅샷으로 명시** — 임계값은 PRD §14-5로 반드시 한 번 바뀌는데 적용값을 저장하지 않아, 바꾸는 순간 **과거 트렌드의 음영이 소급 변경**된다. `voice_session.gap_threshold` 신설(spec §6-1) ③ **§3-2에 `turnIndex` 채번 규칙 명시** — 이어하기(§2-5-1)가 같은 `sessionId`를 유지하는데 채번 규칙이 없었다. AI가 재연결 후 인덱스를 리셋하면 백엔드의 중복 방어(`unique(session_id, turn_index)`)에 걸려 **이후 턴이 오류 없이 202로 버려진다** ④ **§3-4 응답에 `lastTurnIndex` 추가** — ③의 이어붙임 근거를 서버가 준다 ⑤ §2-5 각주의 "배치 큐 적재"를 실제 방식(`pattern_processed_at`)으로 정정 — 큐는 2026-09-04에 폐기했는데 이 문장만 남아 있었다. **필드 삭제·개명 없음.**
+>
 > **수정 기록 (2026-09-03 ①, 백엔드)** — 백엔드가 받은 요청 4건(`hume-config-id.md`·`live-turn-signal.md`·`session-context-lookup.md`·`session-summary-endpoint.md`)에 회신하며 **v1.3으로 개정**. 주요 변경 — ① `sessionId` 형식을 `sess_`+짧은 문자열에서 **UUIDv4(접두사 없음)로 교체**(전 예시 일괄 반영, CLM 인증에 쓰이므로 엔트로피 확보) ② `POST /api/session/start`·`resume` 응답에 **`humeConfigId`**(기동 시 fail-fast, null 불가)·**`livePollIntervalSec`** 추가 ③ **§2-13 `GET /api/session/{id}/live` 신설**(폴링, 비데모 계정은 `turns: []`) ④ **§3-4 `GET /internal/sessions/{id}` 신설**(CLM 인증 겸용, 캐시 미스 시 fail-closed) ⑤ **§3-5 `POST /internal/summaries` 신설**(동기 3초, `endReason: timeout`은 미호출) ⑥ §3-2 `/internal/turns` 재시도 1회 → **3회**(전 세션 동일 정책) ⑦ §4 CLM 인증을 `custom_session_id` 검증으로 확정. 상세 결정 근거는 각 요청 문서의 회신(`response/app/`·`response/ai/`) 참조. **이 이후 수정은 이 배너에 번호를 이어 붙인다 (②③…).**
 
 | 항목 | 내용 |
 | --- | --- |
-| 문서 버전 | v1.3 |
-| 작성일 | 2026. 09. 03. |
+| 문서 버전 | v1.4 |
+| 작성일 | 2026. 09. 03. (최종 개정 2026. 09. 04.) |
 | 상위 문서 | [prd.md](../00-context/prd.md) · [spec.md](../00-context/spec.md) · AI 내부 설계 [ai-pipeline.md](ai-pipeline.md) |
 | 범위 | ① 앱 ↔ 백엔드 ② AI서버 ↔ 백엔드(내부) ③ Hume ↔ AI서버(외부·변경 불가) |
 
@@ -220,7 +222,7 @@
 | 404 `SESSION_NOT_FOUND` | — |
 | 403 `FORBIDDEN` | 타 사용자 세션 |
 
-> 종료 처리는 **패턴 분석 배치 큐 적재**(spec F7-01)를 포함한다. 배치는 비동기이므로 이 응답에 관찰이 포함되지 않는다.
+> 종료 처리는 **그 세션을 패턴 분석 배치의 미처리 상태로 남긴다**(spec F7-01) — `ended_at`이 기록되고 `pattern_processed_at`이 NULL인 것 자체가 미처리이며, 별도 큐에 넣지 않는다(2026-09-04 확정). 배치는 비동기이므로 이 응답에 관찰이 포함되지 않는다.
 > **`summary`는 null일 수 있다**(생성 실패). 대화 기록 자체는 남는다.
 > **요약 생성 (v1.3)** — `endReason`이 `user_end`·`soft_wrap`·`hard_cut`이면 백엔드가 §3-5 `POST /internal/summaries`를 **동기 호출**(타임아웃 3초)해 `summary`를 채운다. 실패·타임아웃이면 `null`. **`endReason: "timeout"`(F2-06 스케줄러)은 이 호출을 하지 않고 항상 `summary: null`** — 미종료 세션을 여러 건 정리할 때 건당 3초씩 대기하지 않기 위함이며, 어차피 아무도 보고 있지 않은 세션이다.
 
@@ -360,6 +362,12 @@
   ],
   "highlights": [
     { "from": "2026-09-11", "to": "2026-09-13", "reason": "gap_exceeded" }
+  ],
+  "userAvgGap": 0.72,
+  "tagGaps": [
+    { "tag": "회의", "occurrences": 7, "tagAvgGap": 1.31 },
+    { "tag": "야근", "occurrences": 4, "tagAvgGap": 0.98 },
+    { "tag": "가족", "occurrences": 3, "tagAvgGap": 0.65 }
   ]
 }
 ```
@@ -370,6 +378,13 @@
 | 값 범위 | `textValence`·`voiceValence`는 −1.00 ~ 1.00 |
 | 하루에 2세션 이상 | 그날의 **평균**. `sessionCount`로 표시 |
 | `highlights` | 갭이 임계를 넘은 **연속 구간**. 앱은 이 구간을 음영 처리하고, 탭하면 해당 날짜의 대화 상세로 이동 (spec F9-02) |
+| `highlights` 판정 기준 (**v1.4**) | 그날의 세션에 **실제로 적용됐던 임계값**(`voice_session.gap_threshold` 스냅샷, spec §6-1)과 비교한다. 현재 설정값과 비교하지 않는다 — 아래 주의 |
+| `userAvgGap` (**v1.4**) | 그 사용자 **전 기간** 평균 갭. `tagGaps` 막대의 기준선이며, 앱은 이 값에 ×1.5를 곱해 판정선을 그린다. 갭이 `null`인 턴은 제외 |
+| `tagGaps` (**v1.4**) | `range`에 **종속**된다. **등장 3회 이상만 서버가 걸러** 내려주고(F7-03과 같은 기준), `tagAvgGap` **내림차순**, **상위 7개**까지. 조건을 만족하는 태그가 없으면 `[]` |
+
+> **`highlights`는 F9-02, `tagGaps`는 F9-03(P1)이다.** 둘 다 `GET /api/trend` 한 번에 실려 오므로 S04는 호출이 늘지 않는다.
+> **`tagGaps`가 관찰(§2-6)로 대체되지 않는 이유** — 관찰은 판정을 **통과한** 태그만 만들어진다(3회 이상 AND 1.5배 이상). S04 막대 차트의 값은 "3회 이상이지만 1.5배 **미만**인 태그"를 함께 보여주는 데 있다. 넘은 것만 보이면 비교 대상이 없어 "왜 이게 발견인가"가 설명되지 않는다.
+> **`highlights`가 현재 임계값을 쓰지 않는 이유 (v1.4)** — 초기 임계값은 20쌍 세트 측정 후 확정된다(PRD §14-5). 현재값으로 소급 판정하면 **임계값을 바꾸는 순간 과거 날짜의 음영이 통째로 달라지고**, 그날 앱이 실제로 되물었던 근거(FR-022)와 화면이 어긋난다. 세션 시작 시 적용값을 그대로 스냅샷해 두고 그것으로 판정한다.
 
 ## 2-9. `GET /api/sessions` — 대화 기록 목록
 
@@ -542,6 +557,7 @@ DB 연결 확인을 포함한다. **Supabase 유휴 일시정지 방지용 주�
 
 | 필드 | 규칙 |
 | --- | --- |
+| `turnIndex` | **세션 내에서 단조 증가하는 정수.** AI서버가 채번한다. **이어하기(§2-5-1)로 재연결해도 `sessionId`가 같으므로 인덱스를 0부터 다시 시작하지 않고 직전 값에서 이어 붙인다** — 재연결 직후의 시작점은 §3-4 응답의 `lastTurnIndex`로 확인한다 (v1.4) |
 | `role` | `"user"` \| `"assistant"`. assistant 턴은 valence·gap·tags가 전부 null/빈 배열 |
 | `tags` | **원문 대조 검증을 통과한 태그만** 보낸다 (spec F6-02). 백엔드는 재검증하지 않는다 |
 | `topProsody` | 상위 5개까지. 디버깅·재현성 검증용 |
@@ -556,6 +572,7 @@ DB 연결 확인을 포함한다. **Supabase 유휴 일시정지 방지용 주�
 | 5xx · 타임아웃 | **3회 재시도**(백오프) 후 포기 — v1.3, 기존 1회에서 상향. **모든 세션에 동일하게 적용**(데모 계정 전용 분기를 두지 않는다) |
 
 > **이 호출은 fire-and-forget이다.** 실패해도 대화 응답을 막지 않는다 (spec F5-04). 백엔드가 내려가 있어도 사용자는 대화를 계속할 수 있어야 한다.
+> **`turnIndex` 중복은 오류가 아니라 "이미 적재됨"으로 처리된다 (202).** 3회 재시도가 있어 같은 턴이 실제로 두 번 도착하기 때문이다. **그래서 채번 규칙이 지켜지지 않으면 유실이 조용하다** — 이어하기 후 인덱스를 리셋하면 이후의 모든 새 턴이 "중복"으로 판정돼 오류 없이 버려진다 (v1.4).
 
 ## 3-3. `POST /internal/observations` — 관찰 문장 반환 (배치)
 
@@ -599,6 +616,7 @@ AI서버 → 백엔드. **CLM 인증을 겸한다** — §4 참조.
   "status": "open",
   "startedAt": "2026-09-18T12:30:00Z",
   "usedSec": 0,
+  "lastTurnIndex": 0,
   "thresholdMode": "fixed",
   "gapThreshold": 0.85,
   "softWrapSec": 300,
@@ -614,6 +632,7 @@ AI서버 → 백엔드. **CLM 인증을 겸한다** — §4 참조.
 | --- | --- |
 | `status` | `"open"` \| `"ended"` |
 | `usedSec` | 이어하기(§2-5-1) 세션이면 이미 쓴 시간. `startedAt`과 함께 5분 마무리 유도(spec F2-03) 판단에 쓴다 |
+| `lastTurnIndex` (**v1.4**) | 그 세션에 **지금까지 적재된 최대 `turnIndex`.** 적재된 턴이 없으면 `0`. AI서버는 §3-2 채번을 이 값 다음부터 이어 붙인다 — 이어하기로 재연결했을 때 인덱스를 리셋하지 않기 위한 근거다 |
 | `recentObservations` | 최근 3개. F8(P1, 관찰 근거 기반 제안)에서 사용 |
 | `transcript`류 | **포함하지 않는다** |
 
@@ -734,4 +753,5 @@ data: [DONE]
 | v1.0 | 2026-09-03 | 최초 작성. PRD §8·spec 기준으로 12개 공개 엔드포인트 + 2개 내부 엔드포인트 확정 |
 | v1.1 | 2026-09-03 | 문서 교차 검증 반영 — ① `POST /api/session/{id}/resume` 신설(중단 세션 이어하기) ② `POST /api/observations/{id}/feedback` 신설(측정 절차가 없던 §1.4 "맞아요" 지표를 실제로 수집 가능하게) ③ `GET /api/me`에 `openSession` 추가 ④ `endReason`에 `timeout`·`resumed` 추가 ⑤ 409 `SESSION_NOT_RESUMABLE` 추가 ⑥ JWT 만료 7일 명시 ⑦ `gapThreshold` 예시값 표기 |
 | v1.2 | 2026-09-03 | AI 파이프라인 개정 반영(`request/ai/clm-turn-pipeline-review.md` 회신) — ① §1-3 `textValence` null 사유를 "분석 호출 실패·타임아웃"으로 ② §4 마지막 경고를 "메타 태그 없음"으로, CLM 인증 방향 각주 ③ 상위 문서에 `ai-pipeline.md` 추가 ④ §1-3 `voiceValence` null 사유에 합계 질량 부족(중립만 찍힌 발화) 추가. **필드 변경 없음.** 계약 공백 2건은 별도 요청(`request/backend/session-context-lookup.md`, `session-summary-endpoint.md`)으로 다음 버전에서 |
+| **v1.4** | **2026-09-04** | 백엔드 계획 문서를 루트 스펙과 전수 대조하며 나온 공백 5건 — ① **§2-8에 `userAvgGap`·`tagGaps` 추가**(F9-03 출력의 데이터 경로. `range` 종속, 3회 이상 필터는 서버, `tagAvgGap` 내림차순 상위 7개) — `tag-gap-endpoint.md` 회신 ② **§2-8 `highlights` 판정 기준을 `voice_session.gap_threshold` 스냅샷으로 명시**(현재 설정값으로 소급 판정하면 임계값 확정 시 과거 음영이 통째로 바뀐다) ③ **§3-2에 `turnIndex` 채번 규칙 명시**(이어하기 재연결 후 이어 붙임 — 리셋하면 중복 방어에 걸려 턴이 조용히 유실된다) ④ **§3-4 응답에 `lastTurnIndex` 추가**(③의 근거) ⑤ §2-5 각주 "배치 큐 적재" → `pattern_processed_at` 방식으로 정정. **필드 삭제·개명 없음** |
 | **v1.3** | **2026-09-03** | 백엔드가 받은 요청 4건 회신 — ① `sessionId`를 `sess_`+짧은 문자열에서 **UUIDv4(접두사 없음)로 교체**(전 예시 반영, §1-1에 로깅 금지 규칙 추가) ② §2-4·§2-5-1에 **`humeConfigId`**(null 불가, 기동 시 fail-fast) 추가 — `hume-config-id.md` ③ §2-4에 **`livePollIntervalSec`** 추가, **§2-13 `GET /api/session/{id}/live` 신설**(비데모는 `turns: []`, `crisisDetected`는 세션 단위) — `live-turn-signal.md` ④ **§3-4 `GET /internal/sessions/{id}` 신설**(CLM 인증 겸용, 캐시 미스 시 fail-closed 401), §4 CLM 인증을 `custom_session_id` 검증으로 확정 — `session-context-lookup.md` ⑤ **§3-5 `POST /internal/summaries` 신설**(동기 3초, `endReason: timeout`은 미호출), §2-5에 각주 — `session-summary-endpoint.md` ⑥ §3-2 `/internal/turns` 재시도 1회 → **3회**(전 세션 동일) ⑦ §5 S02·S07 행 갱신 |

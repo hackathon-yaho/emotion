@@ -621,13 +621,15 @@
 | --- | --- | --- | --- |
 | ~~1~~ | ~~48종 감정 → valence ±1 매핑표 확정~~ → **확정: 긍정 18 / 부정 21 / 중립 9, 균일 가중치 ±1** (`ai-server/rules/valence_mapping.json`, [ai-pipeline.md](../02-architecture/ai-pipeline.md) §3) | AI | **2026-09-03 해결** |
 | ~~2~~ | ~~위기 키워드 목록 확정 (공개 자료 기준)~~ → **확정 v1: 보건복지부·한국생명존중희망재단 심리부검, 광주자살예방센터, 국가트라우마센터 자료 기준** (`ai-server/rules/crisis_keywords.json`, 항목별 출처 기재. `review: true` 항목은 합성 세트로 존속 판단) | AI | **2026-09-03 해결** |
-| 3 | Hume Starter 플랜 실제 조건 확인 | 백엔드 | 9/10 이전 |
+| 3 | Hume Starter 플랜 실제 조건 확인·결제 | 백엔드 | **로컬에서 EVI를 처음 켜는 시점** — Free는 월 5분이라 첫 테스트에 소진된다. 9/10은 고정 기한이 아니다(§12 개정) |
 | ~~4~~ | ~~앱 프레임워크 확정 (RN / Flutter)~~ → **확정: Flutter — 웹·모바일 앱 모두 지원, 배포는 웹** (§14-4 아래 참조) | 프론트 | **2026-09-03 해결** |
 | 5 | 고정 임계값의 초기 수치 결정 — **결정 절차 확정**([ai-pipeline.md](../02-architecture/ai-pipeline.md) §4.3), 수치는 측정 후. 그때까지 `.env` 임시값 0.85 (코드 상수 아님) | AI | 20쌍 세트 측정 후 |
 | 6 | 제품 이름 | 팀 | 발표 전 |
 | 7 | 발표 슬라이드 구성 | 팀 | 발표 전 |
 | ~~8~~ | ~~AI서버 언어·LLM 모델~~ → **확정: Python 3.12 / FastAPI / Anthropic SDK. 모델은 환경변수** — 분석 `claude-haiku-4-5`, 응답 `claude-sonnet-5`, 문장화 `claude-opus-5` (TC-12 측정 후 조정) | AI | **2026-09-03 해결** |
-| 9 | 계약 공백 — AI서버가 세션 임계값·모드를 알 경로, 세션 요약(F2-05) 생성 경로. `request/backend/session-context-lookup.md`, `session-summary-endpoint.md` | 백엔드 | 회신 대기 |
+| ~~9~~ | ~~계약 공백 — AI서버가 세션 임계값·모드를 알 경로, 세션 요약(F2-05) 생성 경로~~ → **해결: api-contract v1.3** — §3-4 `GET /internal/sessions/{id}`(CLM 인증 겸용) · §3-5 `POST /internal/summaries`(동기 3초) 신설 | 백엔드 | **2026-09-03 해결** |
+| 10 | 이야기별 갭(F9-03)의 데이터 경로 — **해결: api-contract v1.4** §2-8에 `tagGaps`·`userAvgGap` 추가 (`request/backend/tag-gap-endpoint.md` 회신) | 백엔드 | **2026-09-04 해결** |
+| 11 | `turnIndex` 채번 — 이어하기 재연결 후 인덱스를 이어 붙이는지 AI서버 확인 필요. 계약 v1.4 §3-2에 규칙을 명시했고 §3-4가 `lastTurnIndex`를 제공한다 (`request/ai/turn-index-numbering.md`) | AI | 회신 대기 |
 
 ## 14-4. 앱 프레임워크 결정 (2026-09-03, 프론트)
 
