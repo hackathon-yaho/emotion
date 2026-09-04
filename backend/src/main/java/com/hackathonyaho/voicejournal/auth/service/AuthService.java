@@ -38,8 +38,8 @@ public class AuthService {
      * 그대로 조회되는 근거다. kakaoId로 account를 찾아 연결자를 따라간다.
      */
     @Transactional
-    public AuthResponse loginWithKakao(String kakaoAccessToken) {
-        String kakaoId = kakaoOAuthService.verifyAndGetKakaoId(kakaoAccessToken);
+    public AuthResponse loginWithKakao(String kakaoAuthCode, String redirectUri) {
+        String kakaoId = kakaoOAuthService.exchangeCodeForKakaoId(kakaoAuthCode, redirectUri);
 
         var existing = accountRepository.findByKakaoId(kakaoId);
         boolean isNewUser = existing.isEmpty();

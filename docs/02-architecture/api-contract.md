@@ -1,5 +1,7 @@
 # API 계약서 — 감정 케어 보이스 저널
 
+> **수정 기록 (2026-09-05 ④, 백엔드)** — **v1.6.** 앱 회신(`response/backend/kakao-web-login.md`)으로 **웹에서는 앱이 카카오 액세스 토큰을 받을 수 없다**는 것이 확정됐다(SDK 2.0.1 소스: 웹 로그인 API가 전부 `notSupported`, `authorize()`는 리다이렉트 후 빈 문자열). **§2-1 요청을 `kakaoAccessToken` → `kakaoAuthCode` + `redirectUri`로 교체**하고, **§2-3에 탈퇴 unlink용 선택 본문**을 넣었다. **이 회차의 유일한 필드 삭제는 `kakaoAccessToken`이고 앱·백엔드가 같이 맞춘다.** 응답은 §2-1·§2-3 모두 그대로다.
+>
 > **수정 기록 (2026-09-04 ③, AI)** — **v1.5.** `request/ai/turn-index-numbering.md` 회신(✅)에서 백엔드가 확인을 요청한 `occurredAt`의 의미를 **§3-2 필드 표에 명시**했다. 백엔드의 중복 판별 가드(`unique` 위반 시 `occurred_at`으로 재시도와 충돌을 가름)가 이 필드 하나에 걸려 있는데, 계약에는 예시만 있고 규칙이 없었다. **발화 시각 · 밀리초 정밀도 · 재시도 시 동일 값**을 규칙으로 못 박고 §3-2 예시를 초 단위에서 밀리초로 고쳤다(§2-10의 앱 응답 예시는 그대로). **필드 추가·삭제·개명 없음.**
 >
 > **수정 기록 (2026-09-04 ②, 백엔드)** — **v1.4.** 백엔드 계획 문서를 루트 스펙과 전수 대조하다 나온 공백을 메웠다. ① **§2-8에 `userAvgGap`·`tagGaps` 신설** — 앱 요청 `request/backend/tag-gap-endpoint.md` 회신. spec F9-03의 출력이 어느 엔드포인트에도 없었다 ② **§2-8 `highlights`의 판정 기준을 세션 스냅샷으로 명시** — 임계값은 PRD §14-5로 반드시 한 번 바뀌는데 적용값을 저장하지 않아, 바꾸는 순간 **과거 트렌드의 음영이 소급 변경**된다. `voice_session.gap_threshold` 신설(spec §6-1) ③ **§3-2에 `turnIndex` 채번 규칙 명시** — 이어하기(§2-5-1)가 같은 `sessionId`를 유지하는데 채번 규칙이 없었다. AI가 재연결 후 인덱스를 리셋하면 백엔드의 중복 방어(`unique(session_id, turn_index)`)에 걸려 **이후 턴이 오류 없이 202로 버려진다** ④ **§3-4 응답에 `lastTurnIndex` 추가** — ③의 이어붙임 근거를 서버가 준다 ⑤ §2-5 각주의 "배치 큐 적재"를 실제 방식(`pattern_processed_at`)으로 정정 — 큐는 2026-09-04에 폐기했는데 이 문장만 남아 있었다. **필드 삭제·개명 없음.**
@@ -8,7 +10,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 문서 버전 | v1.5 |
+| 문서 버전 | v1.6 |
 | 작성일 | 2026. 09. 03. (최종 개정 2026. 09. 04.) |
 | 상위 문서 | [prd.md](../00-context/prd.md) · [spec.md](../00-context/spec.md) · AI 내부 설계 [ai-pipeline.md](ai-pipeline.md) |
 | 범위 | ① 앱 ↔ 백엔드 ② AI서버 ↔ 백엔드(내부) ③ Hume ↔ AI서버(외부·변경 불가) |
@@ -98,8 +100,20 @@
 **요청**
 
 ```json
-{ "kakaoAccessToken": "AAAA..." }
+{
+  "kakaoAuthCode": "abcd...",
+  "redirectUri": "http://localhost:3000/"
+}
 ```
+
+| 필드 | 규칙 |
+| --- | --- |
+| `kakaoAuthCode` | 카카오 인가 페이지가 돌려준 **인가 코드**. **1회용이고 10분 만료** — 앱은 사용 후 주소창의 `?code=`를 지운다(안 지우면 새로고침이 같은 코드를 다시 보내 400이 된다) |
+| `redirectUri` | **인가 요청에 쓴 것과 정확히 같은 값.** 카카오 토큰 교환이 두 값의 일치를 요구하는데 로컬(`http://localhost:3000/`)과 배포(`https://hackathon-yaho.github.io/emotion/`)가 달라 서버가 하나로 못 박을 수 없다. **서버는 등록된 목록과 대조하고 아니면 400으로 거절한다** — 열어두면 인가 코드를 남의 주소로 흘릴 수 있는 자리다 |
+
+> **웹에서는 액세스 토큰을 앱이 받을 수 없다** (v1.6, 앱이 `kakao_flutter_sdk` 2.0.1 소스로 확인). 웹 빌드에서는 `loginWithKakaoAccount()` 계열이 전부 `notSupported`를 던지고, `authorize()`는 페이지를 리다이렉트한 뒤 빈 문자열을 돌려준다. 그래서 **앱이 하는 일은 인가 URL로 보내는 것까지**이고, 코드를 토큰으로 바꾸는 것은 서버 몫이다.
+> **인가 URL의 `client_id`도 REST API 키를 쓴다** — 인가와 교환에서 키가 같아야 한다. 백엔드가 실계정으로 `REST 키 인가 → REST 키 + 시크릿 교환`을 확인했다(2026-09-04).
+> **`codeVerifier`(PKCE)는 두지 않는다.** 교환에 서버의 클라이언트 시크릿이 필요해 코드 단독으로는 교환되지 않는다. 넣기로 하면 이 표에 한 칸을 추가한다.
 
 **응답 200**
 
@@ -114,8 +128,8 @@
 
 | 오류 | 조건 |
 | --- | --- |
-| 400 `VALIDATION_ERROR` | `kakaoAccessToken` 누락 |
-| 401 `KAKAO_VERIFY_FAILED` | 카카오 검증 실패 |
+| 400 `VALIDATION_ERROR` | `kakaoAuthCode` 누락 · **`redirectUri`가 등록 목록에 없음** |
+| 401 `KAKAO_VERIFY_FAILED` | 코드 교환 실패 — 만료·재사용·`redirect_uri` 불일치 |
 | 503 `INTERNAL_ERROR` | 카카오 API 장애 |
 
 > `isNewUser`는 앱이 온보딩 고지(spec F1-05)를 띄울지 판단하는 데만 쓴다.
@@ -153,6 +167,15 @@
 
 ## 2-3. `DELETE /api/account` — 탈퇴
 
+**요청 본문 (선택, v1.6)**
+
+```json
+{
+  "kakaoAuthCode": "abcd...",
+  "redirectUri": "http://localhost:3000/"
+}
+```
+
 **응답 204** (본문 없음)
 
 | 오류 | 조건 |
@@ -160,6 +183,10 @@
 | 500 `INTERNAL_ERROR` | 삭제 트랜잭션 실패 — **부분 삭제 상태를 남기지 않고 롤백** |
 
 > 삭제 대상 10개 테이블은 spec F10-03 참조. 유예 기간을 두지 않는다.
+> **본문은 카카오 연결 해제(unlink)용이며 선택이다** (v1.6). 있으면 백엔드가 **데이터를 지운 뒤** 그 코드로 받은 사용자 토큰으로 `POST /v1/user/unlink`를 호출한다. 없으면 데이터만 지우고 **똑같이 204**를 준다 — unlink 실패는 오류로 올리지 않는다(우리 데이터는 이미 없다).
+> **앱은 탈퇴 버튼을 누른 시점에 카카오 인가를 한 번 더 통과시켜 코드를 얻는다.** 이미 동의한 계정이면 동의 화면 없이 되돌아오는 것이 보통이다.
+> **왜 토큰을 보관하지 않는가** — 로그인 때 받는 액세스 토큰은 6시간, 리프레시 토큰은 2개월이다. 탈퇴 시점까지 쓰려면 리프레시 토큰을 저장해야 하는데, 그러면 **모든 사용자의 2개월짜리 카카오 자격증명을 우리 DB가 들고 있게 된다.** "저장하는 것은 회원번호 하나"라는 제품 주장(PRD §5.1·F10-04)과 정면으로 어긋난다.
+> **어드민 키는 쓰지 않는다.** `unlink`는 사용자 액세스 토큰(Bearer)으로 동작하며, 어드민 키 방식은 `target_id`로 남을 끊을 때 쓰는 경로다.
 
 ## 2-4. `POST /api/session/start` — 대화 세션 시작
 
@@ -753,6 +780,7 @@ data: [DONE]
 
 | 버전 | 일자 | 내용 |
 | --- | --- | --- |
+| **v1.6** | **2026-09-05** | `kakao-web-login.md` 회신 반영 — **웹에서는 앱이 카카오 액세스 토큰을 받을 수 없다**(앱이 SDK 2.0.1 소스로 확인: 웹 로그인 API가 전부 `notSupported`, `authorize()`는 빈 문자열 반환). ① **§2-1 요청을 `kakaoAccessToken` → `kakaoAuthCode` + `redirectUri`로 교체.** 서버가 인가 코드를 토큰으로 교환한다. `redirectUri`는 등록 목록과 대조해 아니면 400 — 인가 코드를 남의 주소로 흘릴 수 있는 자리다. **응답은 그대로**(`jwt`·`expiresAt`·`profileId`·`isNewUser`) ② **§2-1 오류 표 갱신** — 400에 `redirectUri` 미등록 추가, 401 사유를 코드 교환 실패로 ③ **§2-3에 선택 본문 신설** — 탈퇴 시 카카오 unlink용 인가 코드. **없어도 204**이며 unlink 실패는 오류로 올리지 않는다. 리프레시 토큰을 보관하지 않기로 한 결정의 결과다. **필드 삭제 1건(`kakaoAccessToken`) — 앱·백엔드 모두 이 회차에 맞춘다** |
 | v1.0 | 2026-09-03 | 최초 작성. PRD §8·spec 기준으로 12개 공개 엔드포인트 + 2개 내부 엔드포인트 확정 |
 | v1.1 | 2026-09-03 | 문서 교차 검증 반영 — ① `POST /api/session/{id}/resume` 신설(중단 세션 이어하기) ② `POST /api/observations/{id}/feedback` 신설(측정 절차가 없던 §1.4 "맞아요" 지표를 실제로 수집 가능하게) ③ `GET /api/me`에 `openSession` 추가 ④ `endReason`에 `timeout`·`resumed` 추가 ⑤ 409 `SESSION_NOT_RESUMABLE` 추가 ⑥ JWT 만료 7일 명시 ⑦ `gapThreshold` 예시값 표기 |
 | v1.2 | 2026-09-03 | AI 파이프라인 개정 반영(`request/ai/clm-turn-pipeline-review.md` 회신) — ① §1-3 `textValence` null 사유를 "분석 호출 실패·타임아웃"으로 ② §4 마지막 경고를 "메타 태그 없음"으로, CLM 인증 방향 각주 ③ 상위 문서에 `ai-pipeline.md` 추가 ④ §1-3 `voiceValence` null 사유에 합계 질량 부족(중립만 찍힌 발화) 추가. **필드 변경 없음.** 계약 공백 2건은 별도 요청(`request/backend/session-context-lookup.md`, `session-summary-endpoint.md`)으로 다음 버전에서 |

@@ -115,7 +115,22 @@ class ApiIntegrationTest {
     void validatesLoginBody() throws Exception {
         mvc.perform(post("/api/auth/kakao")
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("{\"kakaoAccessToken\":\"\"}"))
+                        .content("{\"kakaoAuthCode\":\"\",\"redirectUri\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    /**
+     * <b>등록하지 않은 주소를 카카오에 그대로 넘기면 안 된다.</b> 열어두면 공격자가
+     * 자기 주소로 인가를 받아 그 코드를 우리 서버로 교환시킬 수 있다 — 카카오를
+     * 부르기 전에 막혀야 하므로 401이 아니라 400이다.
+     */
+    @Test
+    @DisplayName("등록되지 않은 redirectUri는 카카오를 부르기 전에 400으로 막힌다")
+    void rejectsUnregisteredRedirectUri() throws Exception {
+        mvc.perform(post("/api/auth/kakao")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"kakaoAuthCode\":\"any-code\",\"redirectUri\":\"https://evil.example.com/\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
     }

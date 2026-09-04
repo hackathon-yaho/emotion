@@ -20,7 +20,9 @@ app:
     secret: dGVzdC1vbmx5LXNlY3JldC1ub3QtdXNlZC1pbi1kZXBsb3ltZW50MDA=
     expiry-days: 7
   kakao:
-    app-id: 999999
+    rest-api-key: test-rest-key
+    client-secret: test-client-secret
+    redirect-uris: http://localhost:3000/
   scheduler:
     fixed-delay-ms: 300000
   hume:
@@ -29,6 +31,9 @@ app:
     config-id: cfg_test
   internal:
     shared-secret: test-internal-secret
+  crypto:
+    # 테스트 전용 고정 키. 배포 키와 다르다.
+    transcript-key: dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1leGFjdGx5ISE=
   session:
     soft-wrap-sec: 300
     hard-cut-sec: 420

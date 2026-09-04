@@ -2,6 +2,8 @@
 
 > **수정 기록 (2026-09-04 ⑤)** — **Phase 1 구현.** `POST /api/auth/kakao`·`GET /api/me`·`GET /api/health` 3건 구현 완료. `DELETE /api/account`는 계약대로 204를 주지만 **라우트와 인증만** 걸려 있고 삭제 로직은 Phase 6이다. 계약과 다르게 동작하는 부분은 없어 아래 절은 비워 둔다.
 >
+> **수정 기록 (2026-09-05 ⑤)** — 계약 **v1.6** 반영. **`POST /api/auth/kakao`가 액세스 토큰이 아니라 인가 코드를 받는다** — 웹에서는 앱이 토큰을 손에 쥘 수 없다(앱이 SDK 소스로 확인). `redirectUri`를 함께 받아 **등록 목록과 대조**하고, REST 키 + 클라이언트 시크릿으로 교환한다. **종전의 `app_id` 대조는 걷어냈다**(우리 키로 교환한 토큰은 정의상 우리 앱 것). `DELETE /api/account`에 **선택 본문**이 생겼다(탈퇴 시 카카오 unlink용) — 라우트는 받지만 처리는 Phase 6.
+
 > **수정 기록 (2026-09-04 ④)** — 계약 **v1.5** 반영(AI 개정). `/internal/turns`의 `occurredAt`에 규칙이 명시됐다 — **발화 시각 · 밀리초 정밀도 · 재시도 시 동일 문자열.** 백엔드의 중복 판별 가드가 이 필드에 걸려 있어 요청했던 확인이 계약으로 못 박혔다. 엔드포인트 목록 변화 없음.
 >
 > **수정 기록 (2026-09-04 ③)** — 계약 **v1.4** 반영. `GET /api/trend`가 `tagGaps`·`userAvgGap`(F9-03)과 `highlights`(F9-02)를 함께 내려주게 되어 기능 ID를 갱신했다. **`GET /api/session/{id}/live`를 Phase 5 → Phase 3으로 이동** — 의존이 `turn_log`·`crisis_event`뿐이고 앱이 S02를 끝내는 데 필요하다. `GET /internal/sessions/{id}`에 `lastTurnIndex` 추가(v1.4).
@@ -15,9 +17,9 @@
 
 | 엔드포인트 | 기능 ID | Phase | 상태 |
 | --- | --- | --- | --- |
-| `POST /api/auth/kakao` | F1-01 | 1 | **구현 완료 (v1.5 기준)** |
+| `POST /api/auth/kakao` | F1-01 | 1 | **구현 완료 (v1.6 — 인가 코드 방식)** |
 | `GET /api/me` | F1-02, F2-07 | 1, 2 | **구현 완료 (v1.5 기준)** |
-| `DELETE /api/account` | F1-04, F10-03 | 6 | 라우트만 (삭제 로직은 Phase 6) |
+| `DELETE /api/account` | F1-04, F10-03 | 6 | 라우트만 — **선택 본문(v1.6)을 받지만 아직 쓰지 않는다.** 삭제·unlink는 Phase 6 |
 | `POST /api/session/start` | F2-01, F3-04 | 2 | **구현 완료** — Hume 키가 자리표시라 실발급만 미검증 |
 | `POST /api/session/{sessionId}/end` | F2-05 | 2 | **구현 완료** — `summary`는 항상 null (Phase 3) |
 | `POST /api/session/{sessionId}/resume` (P1) | F2-07 | 2 | **구현 완료** — `resumedChatGroupId`는 항상 null (아래 §2) |
@@ -44,6 +46,7 @@
 | 날짜 | 내용 |
 | --- | --- |
 | 2026-09-04 ⑤ | **Phase 1 구현** — auth/kakao · me · health 구현 완료, DELETE /api/account는 라우트만 |
+| 2026-09-05 ⑤ | 계약 v1.6 — `/api/auth/kakao`가 인가 코드 방식으로. `redirectUri` 화이트리스트 검증 추가, `app_id` 대조 제거. `DELETE /api/account`에 unlink용 선택 본문 |
 | 2026-09-04 ④ | 계약 v1.5 — `/internal/turns`의 `occurredAt` 규칙 명시(발화 시각·밀리초·재시도 불변). 중복 판별 가드의 전제가 계약으로 확정 |
 | 2026-09-04 ③ | 계약 v1.4 — `GET /api/trend`에 `highlights`(F9-02)·`tagGaps`(F9-03) 편입, `/live`를 Phase 3으로 이동, `/internal/sessions`에 `lastTurnIndex` |
 | 2026-09-03 ② | 받은 요청 4건 회신 반영 — §2-13·§3-4·§3-5 신설 3건을 구현 현황 표로 편입 |

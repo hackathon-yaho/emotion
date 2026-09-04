@@ -26,9 +26,13 @@ app:
     # 계약 §1-1 — 매일 쓰는 앱이라 더 짧으면 재로그인이 잦아 이탈 요인이 된다.
     expiry-days: 7
   kakao:
-    # access_token_info의 app_id와 대조한다 (spec F1-01 ③).
-    # 비밀이 아니지만 콘솔에서 값이 바뀔 수 있어 환경변수로 둔다.
-    app-id: ${KAKAO_APP_ID}
+    # 인가 코드를 토큰으로 교환한다 (계약 §2-1 v1.6). 인가 URL의 client_id도 같은 키다.
+    rest-api-key: ${KAKAO_REST_API_KEY}
+    # 카카오가 REST 키에 기본 활성화로 붙여 준다. 비어 있으면 안 보낸다.
+    client-secret: ${KAKAO_CLIENT_SECRET:}
+    # 앱이 보내온 redirectUri를 이 목록과 대조한다 — 열어두면 인가 코드를 남의 주소로
+    # 흘릴 수 있는 자리다. 카카오 콘솔 등록값과 같아야 한다.
+    redirect-uris: ${KAKAO_REDIRECT_URIS:https://hackathon-yaho.github.io/emotion/,http://localhost:3000/}
   scheduler:
     # F2-06 정리와 F7-01 배치가 같은 주기를 쓴다 (2026-09-04 확정, phase-1 1-7).
     fixed-delay-ms: 300000
@@ -42,6 +46,10 @@ app:
   internal:
     # AI서버 → 백엔드 인증 (계약 §3-1). 저장소에 넣지 않는다.
     shared-secret: ${INTERNAL_SHARED_SECRET}
+  crypto:
+    # 발화 암호화 키 (F5-02). base64(16/24/32바이트).
+    # ⚠️ 잃으면 도그푸딩 발화 전체가 복호화 불가다 — 세 시크릿 중 이것만 오프라인 사본을 둔다.
+    transcript-key: ${TRANSCRIPT_ENC_KEY}
   session:
     # 앱에 상수로 박지 않고 서버가 내려준다 (계약 §2-4) — 정책 변경에 재배포가 필요 없다.
     soft-wrap-sec: 300
