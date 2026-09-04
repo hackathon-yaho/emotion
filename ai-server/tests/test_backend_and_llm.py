@@ -160,6 +160,16 @@ def test_거부당한_파라미터를_빼고_다시_만든다():
     llm._unsupported.discard("reasoning_effort")
 
 
+def test_base_url로_벤더를_갈아끼운다():
+    """Gemini의 OpenAI 호환 엔드포인트를 쓴다. 코드가 아니라 환경변수로 바꾼다."""
+    c = llm.client("k", "https://generativelanguage.googleapis.com/v1beta/openai/")
+    assert "generativelanguage.googleapis.com" in str(c.base_url)
+
+
+def test_base_url이_없으면_기본값을_쓴다():
+    assert llm.client("k2") is not llm.client("k2", "https://example.test/v1/")
+
+
 def test_모르는_400은_그대로_올린다():
     """아무 파라미터나 빼면 원인을 못 찾는다."""
     from openai import BadRequestError

@@ -9,7 +9,7 @@
 | 대상 대회 | 원티드 AI Championship 2026 |
 | 제출 마감 | 2026. 09. 20. — **잔여 17일** |
 | 팀 구성 | 3인 (프론트엔드 / 백엔드 / AI) |
-| 기술 스택 | **백엔드** Java / Spring Boot · Supabase(PostgreSQL) · **AI서버** Python 3.12 / FastAPI · OpenAI SDK (2026-09-03 확정, LLM 벤더는 2026-09-05 교체, §14-8) · **앱** Flutter(**웹·모바일 앱 모두 지원** · 배포는 웹, §14-4) · **음성** Hume EVI + Custom Language Model |
+| 기술 스택 | **백엔드** Java / Spring Boot · Supabase(PostgreSQL) · **AI서버** Python 3.12 / FastAPI · LLM은 Google Gemini 무료 티어 (2026-09-03 확정, 벤더는 2026-09-05 교체, §14-8) · **앱** Flutter(**웹·모바일 앱 모두 지원** · 배포는 웹, §14-4) · **음성** Hume EVI + Custom Language Model |
 
 > 이 문서는 프로젝트의 단일 진실 공급원(source of truth)입니다. `docs/` 하위 다른 문서와 내용이 다르면 이 문서가 우선합니다.
 > 기능 단위 상세는 [spec.md](spec.md)를 참조하되, 둘이 다르면 이 문서(PRD)가 우선합니다.
@@ -628,7 +628,7 @@
 | 5 | 고정 임계값의 초기 수치 결정 — **결정 절차 확정**([ai-pipeline.md](../02-architecture/ai-pipeline.md) §4.3), 수치는 측정 후. 그때까지 `.env` 임시값 0.85 (코드 상수 아님) | AI | 20쌍 세트 측정 후 |
 | 6 | 제품 이름 | 팀 | 발표 전 |
 | 7 | 발표 슬라이드 구성 | 팀 | 발표 전 |
-| ~~8~~ | ~~AI서버 언어·LLM 모델~~ → **확정: Python 3.12 / FastAPI / OpenAI SDK. 모델은 환경변수** — 분석 `gpt-5.6-luna`, 응답 `gpt-5.6-terra`, 관찰 `gpt-5.6-sol`, 요약 `gpt-5.6-luna` (TC-12 측정 후 조정). **LLM 벤더는 2026-09-05 Anthropic에서 OpenAI로 교체**(팀 결정). 설계·프롬프트·가드는 벤더 중립이라 바뀌지 않았고 `app/llm/` 4개 파일과 환경변수만 고쳤다 | AI | **2026-09-03 해결** |
+| ~~8~~ | ~~AI서버 언어·LLM 모델~~ → **확정: Python 3.12 / FastAPI. LLM은 Google Gemini 무료 티어, 모델은 환경변수** — 분석 `gemini-3.5-flash-lite`, 응답 `gemini-3.8-flash`, 관찰 `gemini-2.5-pro`, 요약 `gemini-3.5-flash-lite` (TC-12 측정 후 조정). **벤더는 2026-09-05 Anthropic → OpenAI → Google로 두 번 바뀌었고**(크레딧 소진, 팀 결정), 두 번 다 설계·프롬프트·가드는 그대로였다. Gemini의 OpenAI 호환 엔드포인트를 써서 SDK도 그대로다. **무료 티어의 제약은 비용이 아니라 분당 요청 수다** — 3인 동시 도그푸딩은 한 키로 감당이 안 되므로 시간을 나눠 한다([ai-pipeline.md](../02-architecture/ai-pipeline.md) §2.9) | AI | **2026-09-03 해결** |
 | ~~9~~ | ~~계약 공백 — AI서버가 세션 임계값·모드를 알 경로, 세션 요약(F2-05) 생성 경로~~ → **해결: api-contract v1.3** — §3-4 `GET /internal/sessions/{id}`(CLM 인증 겸용) · §3-5 `POST /internal/summaries`(동기 3초) 신설 | 백엔드 | **2026-09-03 해결** |
 | 10 | 이야기별 갭(F9-03)의 데이터 경로 — **해결: api-contract v1.4** §2-8에 `tagGaps`·`userAvgGap` 추가 (`request/backend/tag-gap-endpoint.md` 회신) | 백엔드 | **2026-09-04 해결** |
 | ~~11~~ | ~~`turnIndex` 채번 — 이어하기 재연결 후 인덱스를 이어 붙이는지 AI서버 확인 필요~~ → **확인 완료: 카운터를 세션 캐시 안에 두고 `lastTurnIndex`에서 시드하므로 0에서 시작하는 경로가 없다. 이어하기는 유휴 간격으로 감지해 재조회한다.** `occurredAt` 규칙(발화 시각·밀리초·재시도 불변)을 **계약 v1.5 §3-2**에 명시 ([ai-pipeline.md](../02-architecture/ai-pipeline.md) §7.3) | AI | **2026-09-04 해결** |

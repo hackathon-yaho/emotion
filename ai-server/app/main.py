@@ -121,7 +121,8 @@ async def chat_completions(
             known_tags=known_tags,
             model=_cfg.ai_model_analyze,
             timeout_ms=_cfg.ai_analyze_timeout_ms,
-            api_key=_cfg.openai_api_key,
+            api_key=_cfg.google_api_key,
+            base_url=_cfg.ai_llm_base_url,
         )
         if not analysis.degraded:
             if len(_analyze_cache) >= ANALYZE_CACHE_MAX:
@@ -208,7 +209,8 @@ async def chat_completions(
                 flags=flags,
                 model=_cfg.ai_model_respond,
                 effort=_cfg.ai_respond_effort,
-                api_key=_cfg.openai_api_key,
+                api_key=_cfg.google_api_key,
+                base_url=_cfg.ai_llm_base_url,
             ):
                 collected.append(piece)
                 yield sse.content_chunk(custom_session_id, piece)
@@ -251,7 +253,8 @@ async def observations(
             payload=payload,
             model=_cfg.ai_model_observe,
             effort=_cfg.ai_observe_effort,
-            api_key=_cfg.openai_api_key,
+            api_key=_cfg.google_api_key,
+            base_url=_cfg.ai_llm_base_url,
         )
     except batch_call.Rejected as exc:
         return JSONResponse(
@@ -271,7 +274,8 @@ async def summaries(
         summary = await batch_call.summarize(
             turns=payload.get("turns") or [],
             model=_cfg.ai_model_summary,
-            api_key=_cfg.openai_api_key,
+            api_key=_cfg.google_api_key,
+            base_url=_cfg.ai_llm_base_url,
         )
     except batch_call.Rejected as exc:
         return JSONResponse(

@@ -970,7 +970,7 @@
 | --- | --- | --- |
 | **Hume EVI** | 앱 → Hume | 음성 스트림 (단기 액세스 토큰 인증) |
 | **Hume CLM** | Hume → AI서버 | `POST /chat/completions?custom_session_id={id}` · `messages[].models.prosody.scores` · 응답은 SSE `ChatCompletionChunk` + `data: [DONE]` — [문서](https://dev.hume.ai/docs/speech-to-speech-evi/guides/custom-language-model) |
-| **LLM** | AI서버 → LLM | 분석 호출(텍스트 valence·태그·위기 — 전사만 입력) + 응답 호출(대화 텍스트) / 관찰 문장화 (배치). OpenAI SDK (2026-09-05 벤더 교체) |
+| **LLM** | AI서버 → LLM | 분석 호출(텍스트 valence·태그·위기 — 전사만 입력) + 응답 호출(대화 텍스트) / 관찰 문장화 (배치). Google Gemini 무료 티어, OpenAI 호환 엔드포인트 (2026-09-05 벤더 교체) |
 | **카카오** | 앱 → 카카오 / 백엔드 → 카카오 | 로그인, 액세스 토큰 검증 |
 | **Supabase** | 백엔드 → DB | PostgreSQL |
 

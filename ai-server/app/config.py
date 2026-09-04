@@ -31,14 +31,17 @@ class Settings(BaseSettings):
     ai_session_lookup_connect_retry: int = 1
     ai_session_refetch_idle_sec: int = 60
 
-    # LLM (2026-09-05 OpenAI로 전환)
-    openai_api_key: str = ""
-    ai_model_analyze: str = "gpt-5.6-luna"
-    ai_model_respond: str = "gpt-5.6-terra"
+    # LLM — 2026-09-05 Google Gemini 무료 티어.
+    # OpenAI 호환 엔드포인트를 쓰므로 SDK는 그대로다. 벤더를 또 바꾸려면
+    # 키와 base_url과 모델 이름만 바꾸면 된다 — 코드는 손대지 않는다.
+    google_api_key: str = ""
+    ai_llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    ai_model_analyze: str = "gemini-3.5-flash-lite"
+    ai_model_respond: str = "gemini-3.8-flash"
     ai_respond_effort: str = "low"
-    ai_model_observe: str = "gpt-5.6-sol"
+    ai_model_observe: str = "gemini-2.5-pro"
     ai_observe_effort: str = "medium"
-    ai_model_summary: str = "gpt-5.6-luna"
+    ai_model_summary: str = "gemini-3.5-flash-lite"
     ai_analyze_timeout_ms: int = 400
     ai_summary_timeout_ms: int = 2500
     ai_speculative_respond: bool = False

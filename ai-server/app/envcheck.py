@@ -17,7 +17,7 @@ from .config import settings
 REQUIRED = [
     ("INTERNAL_SHARED_SECRET", "internal_shared_secret", True,
      "백엔드와의 내부 API 전부 (계약 §3-1)"),
-    ("OPENAI_API_KEY", "openai_api_key", True,
+    ("GOOGLE_API_KEY", "google_api_key", True,
      "분석, 응답, 관찰, 요약. 없으면 정형 문장만 나간다"),
 ]
 
@@ -29,6 +29,7 @@ INTEGRATION = [
 ]
 
 INFO = [
+    ("AI_LLM_BASE_URL", "ai_llm_base_url", False, "Gemini의 OpenAI 호환 엔드포인트"),
     ("AI_MODEL_ANALYZE", "ai_model_analyze", False, ""),
     ("AI_MODEL_RESPOND", "ai_model_respond", False, ""),
     ("AI_MODEL_OBSERVE", "ai_model_observe", False, ""),

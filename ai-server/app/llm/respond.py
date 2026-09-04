@@ -69,8 +69,10 @@ def build_messages(
     return messages
 
 
-async def _iter(messages: list[dict[str, str]], kwargs: dict[str, Any], api_key: str):
-    stream = await llm.client(api_key).chat.completions.create(
+async def _iter(
+    messages: list[dict[str, str]], kwargs: dict[str, Any], api_key: str, base_url: str = ""
+):
+    stream = await llm.client(api_key, base_url).chat.completions.create(
         messages=messages, stream=True, **kwargs
     )
     async for chunk in stream:
@@ -89,6 +91,7 @@ async def stream(
     model: str,
     effort: str = "low",
     api_key: str = "",
+    base_url: str = "",
     prompts_dir=None,
 ) -> AsyncIterator[str]:
     """텍스트 조각을 그대로 흘린다. 실패하면 정형 문장 하나를 흘리고 끝낸다."""
@@ -102,7 +105,7 @@ async def stream(
 
     sent = False
     try:
-        async for piece in _iter(messages, kwargs, api_key):
+        async for piece in _iter(messages, kwargs, api_key, base_url):
             sent = True
             yield piece
         return
@@ -124,7 +127,7 @@ async def stream(
         return
 
     try:
-        async for piece in _iter(messages, kwargs, api_key):
+        async for piece in _iter(messages, kwargs, api_key, base_url):
             yield piece
     except Exception:
         error_log("respond_failed")

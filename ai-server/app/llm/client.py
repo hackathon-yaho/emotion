@@ -4,7 +4,11 @@
 
 **LLM SDK를 import하는 곳은 `app/llm/` 안뿐이다.** 밖에서 import하면 리뷰에서 반려한다
 (ai-server/README.md 경계). 벤더를 바꿀 때 고쳐야 하는 범위가 이 폴더로 한정된다 —
-2026-09-05에 Anthropic에서 OpenAI로 옮길 때 실제로 그랬다.
+2026-09-05에 Anthropic → OpenAI → Google로 두 번 옮길 때 실제로 그랬다.
+
+현재 벤더는 **Google Gemini 무료 티어**이고, Gemini가 제공하는 **OpenAI 호환
+엔드포인트**를 쓴다. 그래서 SDK는 `openai`를 그대로 두고 `base_url`만 바꾼다.
+또 옮기게 되면 키·`base_url`·모델 이름만 환경변수로 갈면 된다.
 
 프롬프트 전문은 `prompts/*.system.md`가 단일 출처다. 문서에는 요지만 둔다(PRD §9.3).
 
@@ -22,7 +26,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from openai import AsyncOpenAI, BadRequestError
+from openai import AsyncOpenAI, BadRequestError, RateLimitError
 
 from ..telemetry import error_log, log
 
@@ -42,8 +46,13 @@ class LLMRefusal(Exception):
 
 
 @lru_cache(maxsize=4)
-def client(api_key: str = "") -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=api_key) if api_key else AsyncOpenAI()
+def client(api_key: str = "", base_url: str = "") -> AsyncOpenAI:
+    kwargs: dict[str, Any] = {}
+    if api_key:
+        kwargs["api_key"] = api_key
+    if base_url:
+        kwargs["base_url"] = base_url
+    return AsyncOpenAI(**kwargs)
 
 
 @lru_cache(maxsize=16)
@@ -102,15 +111,26 @@ def learn_unsupported(exc: BadRequestError, kwargs: dict[str, Any]) -> dict[str,
     return out
 
 
-async def create(messages: list[dict[str, Any]], kwargs: dict[str, Any], api_key: str):
+async def create(
+    messages: list[dict[str, Any]],
+    kwargs: dict[str, Any],
+    api_key: str,
+    base_url: str = "",
+):
     """비스트리밍 호출. 파라미터가 거부되면 한 번만 고쳐서 다시 시도한다."""
+    c = client(api_key, base_url)
     try:
-        return await client(api_key).chat.completions.create(messages=messages, **kwargs)
+        return await c.chat.completions.create(messages=messages, **kwargs)
+    except RateLimitError:
+        # 무료 티어는 분당 요청 수가 낮다. 다른 실패와 구분해서 남겨야
+        # "왜 정형 문장만 나왔나"를 나중에 설명할 수 있다.
+        error_log("llm_rate_limited", model=kwargs.get("model"))
+        raise
     except BadRequestError as exc:
         retry = learn_unsupported(exc, kwargs)
         if retry is None:
             raise
-        return await client(api_key).chat.completions.create(messages=messages, **retry)
+        return await c.chat.completions.create(messages=messages, **retry)
 
 
 def text_of(completion: Any) -> str:

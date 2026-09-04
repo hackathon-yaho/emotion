@@ -83,6 +83,7 @@ async def run(
     model: str,
     timeout_ms: int,
     api_key: str = "",
+    base_url: str = "",
     prompts_dir=None,
 ) -> Analysis:
     """실패·타임아웃은 예외를 올리지 않는다. 빈 결과로 대화를 계속한다."""
@@ -105,7 +106,7 @@ async def run(
 
     async def _call() -> Analysis:
         try:
-            completion = await llm.create(messages, kwargs, api_key)
+            completion = await llm.create(messages, kwargs, api_key, base_url)
         except llm.LLMRefusal:
             return Analysis.empty("refusal")
         return parse(llm.parse_json(llm.text_of(completion)))

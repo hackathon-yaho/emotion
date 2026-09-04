@@ -28,7 +28,7 @@ class Rejected(Exception):
 
 async def observe(
     *, payload: dict[str, Any], model: str, effort: str = "medium",
-    api_key: str = "", prompts_dir=None, rules_dir=None,
+    api_key: str = "", base_url: str = "", prompts_dir=None, rules_dir=None,
 ) -> str:
     """숫자와 태그만 받아 한 문장. 원본 대화는 오지 않는다(계약 §3-3)."""
     system = (
@@ -45,7 +45,7 @@ async def observe(
     )
 
     try:
-        completion = await llm.create(messages, kwargs, api_key)
+        completion = await llm.create(messages, kwargs, api_key, base_url)
         body = llm.parse_json(llm.text_of(completion)) or {}
     except llm.LLMRefusal:
         raise Rejected(["refusal"])
@@ -68,7 +68,7 @@ async def observe(
 
 async def summarize(
     *, turns: list[dict[str, str]], model: str, api_key: str = "",
-    prompts_dir=None, rules_dir=None,
+    base_url: str = "", prompts_dir=None, rules_dir=None,
 ) -> str:
     """턴 텍스트만 받아 한 문장. valence·갭·태그는 오지 않는다(계약 §3-5)."""
     system = (
@@ -87,7 +87,7 @@ async def summarize(
     )
 
     try:
-        completion = await llm.create(messages, kwargs, api_key)
+        completion = await llm.create(messages, kwargs, api_key, base_url)
         body = llm.parse_json(llm.text_of(completion)) or {}
     except llm.LLMRefusal:
         raise Rejected(["refusal"])
