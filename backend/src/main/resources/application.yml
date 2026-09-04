@@ -47,8 +47,10 @@ app:
     # AI서버 → 백엔드 인증 (계약 §3-1). 저장소에 넣지 않는다.
     shared-secret: ${INTERNAL_SHARED_SECRET}
   ai:
-    # 백엔드 → AI서버 (계약 §3-5 요약 · Phase 4의 §3-3 관찰). AI 로컬 포트는 8000.
-    base-url: ${AI_SERVER_BASE_URL:http://localhost:8000}
+    # 백엔드 → AI서버 (계약 §3-5 요약 · §3-3 관찰).
+    # AI 로컬 포트는 8100이다 (ai-server/.env.example의 AI_PORT) — 8000으로 잘못 적어뒀던 것을
+    # 통합 준비 중에 잡았다. 계약에는 포트 규정이 없어 상대 .env.example이 출처다.
+    base-url: ${AI_SERVER_BASE_URL:http://localhost:8100}
     # 요약은 종료 응답을 붙잡는 동기 호출이라 짧게 끊는다. 실패하면 summary: null이다.
     summary-timeout-ms: 3000
     # 관찰 문장화는 배치라 사용자를 기다리게 하지 않는다 — 요약보다 넉넉히 준다.
