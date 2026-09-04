@@ -297,20 +297,55 @@ v1은 **활용형 정규화(어간 포함 대조)만** 한다. `미팅`과 `회�
 
 ---
 
-# 7. 세션 컨텍스트 — 백엔드 내부 조회 (요청 중)
+# 7. 세션 컨텍스트 — `GET /internal/sessions/{id}` (계약 §3-4, 확정)
 
-AI서버가 알아야 하지만 Hume이 주지 않는 것들이다. `request/backend/session-context-lookup.md`로 요청했다.
+AI서버가 알아야 하지만 Hume이 주지 않는 것들이다. 계약 v1.3에서 신설됐고 v1.4에서 `lastTurnIndex`가 붙었다.
 
-| 필요한 값 | 쓰이는 곳 | 없으면 |
+| 받는 값 | 쓰이는 곳 | 조회 실패 시 |
 | --- | --- | --- |
-| `thresholdMode`, `gapThreshold` | ④ 트리거, `/internal/turns`의 `thresholdMode` | `.env` 고정값으로 대화 계속 |
-| `startedAt`, `softWrapSec`, `hardCutSec` | 5분 마무리 유도(F2-03 B 측) | Hume `time.end`로 근사 |
-| 세션 존재 여부 | **CLM 인증** — 모르는 `custom_session_id`는 401 | 조회 실패 시 인증 통과(가용성 우선) + 경고 로그 |
+| `thresholdMode`, `gapThreshold` | ④ 트리거, `/internal/turns`의 `thresholdMode` | `.env` 고정값 (**캐시 히트일 때만** — 아래) |
+| `startedAt`, `usedSec`, `softWrapSec`, `hardCutSec` | 5분 마무리 유도(F2-03 B 측) | Hume `time.end`로 근사 |
+| `status` + 세션 존재 여부 | **CLM 인증** | **401 (fail-closed)** |
+| `lastTurnIndex` (v1.4) | `turnIndex` 채번 시드 | — |
 | `recentObservations[]` (문장+태그) | F8-02 근거 기반 제안 (P1) | 제안 경로 비활성 |
 | `demoMode` | 로깅 상세도 | 무시 |
 
-- 세션당 **1회** 조회 후 메모리 캐시 (TTL = hardCutSec + 30분 이어하기 창). 실시간 경로에 매 턴 홉을 더하지 않는다.
-- 이 조회가 곧 인증이므로 `sessionId`는 추측 불가능해야 한다 — 백엔드에 128비트 이상 엔트로피를 요청했다. `language_model_api_key`(앱이 `session_settings`로 보내야 함)는 웹 번들에 노출되므로 쓰지 않는다.
+## 7.1 인증 — fail-closed
+
+`language_model_api_key`(앱이 `session_settings`로 보내야 해서 웹 번들에 노출)는 쓰지 않는다. 대신 이 조회가 인증을 겸한다. `sessionId`는 백엔드가 **UUIDv4(122비트)** 로 발급한다.
+
+| 상황 | Hume에 돌려주는 것 |
+| --- | --- |
+| 200 `status: "open"` | 정상 처리 |
+| 200 `status: "ended"` | **401** — 종료된 세션으로 들어오는 요청이다 |
+| 404 | **401** |
+| 캐시 히트 | **통과** (백엔드 상태와 무관) |
+| 캐시 미스 + 5xx·타임아웃 | **401 (fail-closed)** |
+
+**마지막 줄이 요청서에서 제안한 것과 반대 방향이다.** 처음엔 가용성을 위해 fail-open(고정 임계값으로 통과)을 제안했으나, 백엔드가 지적한 대로 그러면 "백엔드 장애 시간 = 인증 무방비 시간"이 된다. **fail-closed로 잃는 가용성이 없다** — 백엔드가 죽어 있으면 `POST /api/session/start`도 죽어 있어 새 세션 자체가 생기지 않고, 진행 중인 대화는 캐시가 지킨다. F5-04(백엔드 다운에도 대화 계속)의 목적은 캐시가 달성한다.
+
+## 7.2 캐시와 재조회
+
+세션당 **1회** 조회 후 메모리 캐시(TTL = `hardCutSec` + 30분 이어하기 창). 실시간 경로에 매 턴 홉을 더하지 않기 위함이다. **다만 아래 두 경우에는 캐시를 버리고 다시 조회한다.**
+
+| 재조회 방아쇠 | 이유 |
+| --- | --- |
+| 같은 `sid`의 직전 턴에서 `AI_SESSION_REFETCH_IDLE_SEC`(초기 60초) 이상 경과 | **이어하기 감지.** 재연결은 AI서버에 보이지 않으므로(Hume은 매 턴 상태 없는 요청에 `custom_session_id`만 실어 보낸다) 유휴 간격으로 간접 감지한다 |
+| 들어온 이력의 user 메시지 수 > 내 카운터 | 보조 신호. 이어하기 때 Hume이 복원 이력을 싣는지는 미실측이라 주 신호로 쓰지 않는다 |
+
+**거짓 양성이 싸고 거짓 음성이 비싸므로** 느슨하게 잡았다. 대화 중 60초 침묵도 방아쇠에 걸리지만, 그때 드는 비용은 불필요한 조회 1회이고 결과는 같은 값이다.
+
+## 7.3 `turnIndex` 채번 (계약 §3-2 v1.4, `response/backend/turn-index-numbering.md`)
+
+```
+turnIndex = lastTurnIndex(조회 시점 값) + 그 조회 이후 발급한 개수
+```
+
+카운터는 **세션 캐시 엔트리 안에** 산다. 그래서 캐시가 죽으면 카운터도 같이 죽고, 캐시가 죽으면 다음 요청이 재조회를 하므로 **재시작이 곧 재시드**다. **0에서 시작하는 경로가 설계상 없다** — 0은 백엔드가 `lastTurnIndex: 0`을 준 경우, 즉 실제로 적재된 턴이 없을 때뿐이다.
+
+user 턴과 assistant 턴의 번호는 **user 턴 처리 시점에 둘 다 미리 잡는다**(user = n+1, assistant = n+2). assistant 적재는 스트림 종료 후라 지연되는데, 미리 잡아두면 순서가 뒤집히지 않는다.
+
+**`occurredAt`은 발화 시각이고 재시도에서 불변이다** (계약 §3-2 v1.5). 페이로드를 만들 때 밀리초 정밀도로 한 번 찍고 재시도에 같은 문자열을 다시 보낸다. 같은 세션 직전 턴과 값이 같으면 1ms를 더한다 — 백엔드의 중복 판별이 이 필드로 재시도와 충돌을 가르기 때문이다.
 
 ---
 
@@ -328,9 +363,28 @@ AI서버가 알아야 하지만 Hume이 주지 않는 것들이다. `request/bac
 
 숫자를 문장에 넣지 않는 것이 "문장 ↔ evidence 불일치 0건"을 가장 싸게 지키는 방법이다. 불일치가 날 숫자가 문장에 없다.
 
-## 8.2 세션 요약 (F2-05) — 경로 미정, 요청 중
+## 8.2 세션 요약 (`POST /internal/summaries`, F2-05 — 계약 §3-5, 확정)
 
-spec F2-05는 요약 생성을 A/B 담당으로 두지만 계약에 AI서버 경로가 없다. `request/backend/session-summary-endpoint.md`로 `POST /internal/summaries`(백엔드 → AI서버, 턴 텍스트 → 1문장) 신설을 제안했다. 백엔드가 직접 LLM을 호출하는 대안도 가능하나, LLM 호출 지점을 AI서버 하나로 유지하는 쪽이 금칙어 검사·로깅 정책을 한 곳에서 지킨다.
+| 항목 | 내용 |
+| --- | --- |
+| 입력 | 계약 §3-5 그대로 — `sessionId`, `turns[].{role, transcript}`. **valence·갭·태그는 오지 않는다** |
+| 호출 조건 | `endReason`이 `user_end`·`soft_wrap`·`hard_cut`일 때만. `timeout`(F2-06 스케줄러)은 백엔드가 호출하지 않고 `summary: null`로 닫는다 |
+| 모델 | `AI_MODEL_SUMMARY` (초기 `claude-haiku-4-5`), 동기 · 타임아웃 `AI_SUMMARY_TIMEOUT_MS`(초기 2500 — 계약의 3초 안쪽에서 끝내기 위해 여유를 둔다) |
+| 프롬프트 | `prompts/summary.system.md` |
+| 실패 | `422 SUMMARY_REJECTED`(사후 검사 실패) 또는 5xx. 백엔드는 재시도 없이 `summary: null` |
+
+LLM 호출 지점을 AI서버 하나로 모으는 쪽을 택했다. 백엔드가 직접 부르는 대안도 가능했지만, 그러면 금칙어 검사·로깅 정책을 두 곳에서 지켜야 한다.
+
+## 8.3 요약 사후 검사 (`summary_guard`)
+
+| 폐기 조건 | 이유 |
+| --- | --- |
+| 아라비아 숫자 포함 | 회의 3개·2시간 같은 수치가 목록에 남는다 |
+| 2문장 이상 · 물음표 | 목록의 라벨이지 편지가 아니다 |
+| 금칙어(진단명·약물·치료) | `rules/guard` 공용 |
+| 감정 단정 표현 | "힘든 하루"·"괜찮은 하루" 모두 폐기. **요약에 목소리 정보가 오지 않으므로 단정할 근거 자체가 없다** |
+
+**갭이 요약으로 새지 않는 것이 이 검사의 핵심이다.** S02는 수치를 숨기는데(FR-031) 요약이 "말과 달리 지쳐 보이는 대화였습니다"라고 적으면 화면이 숨긴 것을 문장이 흘린다.
 
 ---
 
@@ -343,12 +397,14 @@ spec F2-05는 요약 생성을 A/B 담당으로 두지만 계약에 AI서버 경
 | 응답 호출 실패·refusal | 정형 응답 1문장. 위기 플래그면 109 포함. `ops_error_log` | 계속 |
 | 응답 스트림 중 끊김(끼어들기) | 스트림 취소, 보낸 만큼 assistant 턴 적재 | 계속 |
 | 태그 원문 대조 실패 | 해당 태그 폐기. 0개면 F7 집계 제외(valence 통계는 포함) | 계속 |
-| 세션 컨텍스트 조회 실패 | `.env` 고정 임계값, 인증 통과, 경고 로그 | 계속 |
-| `/internal/turns` 실패 | 재시도 `AI_TURN_POST_RETRIES`회(초기 1, 계약 준수) 후 포기. `ops_error_log` | 계속 |
+| 세션 컨텍스트 조회 실패 — **캐시 히트** | `.env` 고정 임계값으로 진행, 경고 로그 | 계속 |
+| 세션 컨텍스트 조회 실패 — **캐시 미스** | **401을 Hume에 반환 (fail-closed, §7.1)** | **중단** |
+| `/internal/turns` 실패 | 5xx·타임아웃만 `AI_TURN_POST_RETRIES`회(계약 v1.3 기준 **3회**, 지수 백오프) 후 포기. 4xx는 재시도 없음. `ops_error_log` | 계속 |
+| 요약 사후 검사 실패 | `422 SUMMARY_REJECTED`. 백엔드가 `summary: null` | — |
 | **위기 LLM 판정 실패** | **Tier A 규칙이 단독 동작** | 계속 |
 | 관찰 문장 검사 실패 | 관찰 미생성. 템플릿 없음 | — |
 
-"대화" 열이 전부 "계속"인 것이 이 표의 요점이다. 실시간 경로에서 **대화를 멈추는 실패는 없다.**
+실시간 경로에서 **대화를 멈추는 실패는 인증 실패 하나뿐이다.** 나머지는 전부 기능을 줄이면서 대화를 계속한다. 인증만 예외인 이유는 §7.1에 있다 — 그 경로는 애초에 정상 사용자에게 열리지 않는다.
 
 ---
 
@@ -392,7 +448,7 @@ ai-server/
 │  │  ├─ tags.py            원문 대조 · 불용어
 │  │  ├─ guard.py           금칙어(진단·약물·치료)
 │  │  └─ observe_guard.py   관찰 문장 검사
-│  ├─ llm/                  analyze · respond · observe — LLM 호출은 여기에만
+│  ├─ llm/                  analyze · respond · observe · summary — LLM 호출은 여기에만
 │  ├─ session.py            세션 컨텍스트 캐시 · 백엔드 조회
 │  ├─ backend_client.py     /internal/turns 적재 (fire-and-forget, 재시도)
 │  └─ telemetry.py          구조화 로그 (필드 화이트리스트)
@@ -400,12 +456,13 @@ ai-server/
 │  ├─ analyze.system.md
 │  ├─ respond.system.md
 │  ├─ observe.system.md
-│  └─ summary.system.md     (경로 확정 시)
+│  └─ summary.system.md     세션 요약 (계약 §3-5)
 ├─ rules/                   ★ 데이터로서의 규칙
 │  ├─ valence_mapping.json
 │  ├─ crisis_keywords.json
 │  └─ tag_stopwords.json
 ├─ eval/                    20쌍 스냅샷 · 합성 세트 · run_eval.py · reports/(gitignore)
+│  └─ fixtures/internal/     ★ 내부 API 고정 JSON — 백엔드와 같은 파일로 검증한다
 └─ tests/
 ```
 
@@ -422,16 +479,21 @@ AI_PORT=8100
 AI_PUBLIC_URL=                      # Hume Config에 등록한 https://…/chat/completions 의 origin
 
 # 백엔드 연동
-BACKEND_BASE_URL=
+BACKEND_BASE_URL=                   # 백엔드 로컬 포트는 8080
 INTERNAL_SHARED_SECRET=             # X-Internal-Secret
-AI_TURN_POST_RETRIES=1              # 계약 §3-2 기본값. 데모 세션 신뢰도 이슈 시 상향
+AI_TURN_POST_RETRIES=3              # 계약 §3-2 (v1.3). 5xx·타임아웃만, 지수 백오프
+AI_SESSION_LOOKUP_TIMEOUT_MS=800    # 통합 테스트(양쪽 터널) 기간에는 2000
+AI_SESSION_LOOKUP_CONNECT_RETRY=1   # 연결 단계 실패에만. 4xx·5xx 응답은 재시도하지 않는다
+AI_SESSION_REFETCH_IDLE_SEC=60      # 이 시간 이상 유휴면 세션 컨텍스트 재조회 (§7.2 이어하기 감지)
 
 # LLM
 ANTHROPIC_API_KEY=
 AI_MODEL_ANALYZE=claude-haiku-4-5
 AI_MODEL_RESPOND=claude-sonnet-5
 AI_MODEL_OBSERVE=claude-opus-5
+AI_MODEL_SUMMARY=claude-haiku-4-5
 AI_ANALYZE_TIMEOUT_MS=400
+AI_SUMMARY_TIMEOUT_MS=2500          # 계약 §3-5의 3초 안쪽에서 끝낸다
 AI_SPECULATIVE_RESPOND=false
 
 # 규칙
@@ -449,3 +511,8 @@ AI_VOICE_VALENCE_MIN_MASS=0.05      # P+N 이 이 값 미만이면 voice_valence
 | AI-12 | `decisions.md`가 저장소에 없어 AI 결정은 이 표에 둔다 | 파일이 올라오면 #16부터 이관 | 2026-09-03 |
 | AI-13 | 응답 스트림 메타 태그 전면 폐지 (`<v>`·`<m>` 모두) | TTFT + 누출 실패 모드 제거. §2.2 | 2026-09-03 |
 | AI-14 | 관찰 문장에 숫자 금지 | 불일치 0건을 가장 싸게 지키는 방법. §8.1 | 2026-09-03 |
+| AI-15 | `turnIndex` 카운터를 세션 캐시 엔트리 안에 둔다 | 캐시가 죽으면 카운터도 죽고, 캐시가 죽으면 재조회가 돈다 — 재시작이 곧 재시드가 되어 "0부터 시작" 경로가 사라진다. §7.3 | 2026-09-04 |
+| AI-16 | 이어하기를 **유휴 간격**으로 감지한다 | 재연결은 AI서버에 보이지 않는다. 거짓 양성 비용은 조회 1회, 거짓 음성 비용은 인덱스 어긋남. §7.2 | 2026-09-04 |
+| AI-17 | 세션 조회 실패 시 **fail-closed**(요청서의 fail-open 철회) | fail-open은 "백엔드 장애 시간 = 인증 무방비 시간". 백엔드가 죽으면 새 세션도 안 생기므로 잃는 가용성이 없다. §7.1 | 2026-09-04 |
+| AI-18 | 통합 테스트에 **fail-open 개발 스위치를 만들지 않는다** | 개발 편의 스위치는 배포까지 따라간다. 타임아웃 상향(`.env`)으로 대신한다. `response/backend/integration-test-path.md` | 2026-09-04 |
+| AI-19 | 요약 모델은 `claude-haiku-4-5` | 입력이 짧고 출력이 1문장이며 비실시간이다. 3초 예산 안에서 여유를 확보하는 쪽이 품질보다 이득이 크다. §8.2 | 2026-09-04 |

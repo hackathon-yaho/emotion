@@ -11,14 +11,15 @@
 | `POST /chat/completions?custom_session_id=` | Hume → 여기 | 턴 처리: 음성 valence(규칙) · 분석 호출(텍스트 valence·태그·위기) · 갭 판정(규칙) · 응답 호출 → SSE | 계약 §4 (외부·변경 불가) |
 | `POST /internal/observations` | 백엔드 → 여기 | 집계 숫자 → 관찰 문장 1개 | 계약 §3-3 |
 | `POST /internal/turns` | 여기 → 백엔드 | 턴 적재 (fire-and-forget) | 계약 §3-2 |
-| `GET /internal/sessions/{id}` | 여기 → 백엔드 | 세션 컨텍스트 조회 (**요청 중** — `docs/request/backend/session-context-lookup.md`) | — |
+| `POST /internal/summaries` | 백엔드 → 여기 | 세션 턴 텍스트 → 요약 1문장 (동기, 3초) | 계약 §3-5 |
+| `GET /internal/sessions/{id}` | 여기 → 백엔드 | 세션 컨텍스트 조회. **CLM 인증을 겸한다** — 캐시 미스 + 조회 실패는 401 | 계약 §3-4 |
 | `GET /healthz` | — | 헬스체크 | — |
 
 ## 이 폴더의 단일 출처
 
 | 경로 | 내용 | 바꾸면 |
 | --- | --- | --- |
-| `prompts/*.system.md` | **프롬프트 전문** (PRD §9.3 — 문서에는 요지만) | `make eval` 재실행 |
+| `prompts/*.system.md` | **프롬프트 전문** 4종 — analyze · respond · observe · summary (PRD §9.3 — 문서에는 요지만) | `make eval` 재실행 |
 | `rules/valence_mapping.json` | 48종 → ±1 매핑표 (PRD §14-1) | 20쌍 갭 방향 일치율 재측정 |
 | `rules/crisis_keywords.json` | 위기 키워드 Tier A(규칙)·Tier B(LLM 힌트) + 출처 (PRD §14-2) | 합성 세트 재현율 재측정 |
 | `rules/tag_stopwords.json` | 태그 불용어 | 태그 케이스 재실행 |
@@ -66,13 +67,14 @@ ai-server/
 │  ├─ main.py            FastAPI 엔트리
 │  ├─ clm/               Hume 요청 파싱 · SSE 청크
 │  ├─ rules/             ★ 순수 함수 (valence · gap · crisis · tags · guard · observe_guard)
-│  ├─ llm/               ★ analyze · respond · observe — LLM 호출은 여기에만
+│  ├─ llm/               ★ analyze · respond · observe · summary — LLM 호출은 여기에만
 │  ├─ session.py         세션 컨텍스트 캐시 · 백엔드 조회
 │  ├─ backend_client.py  /internal/turns 적재
 │  └─ telemetry.py       구조화 로그 (필드 화이트리스트)
-├─ prompts/              ★ 프롬프트 단일 출처
+├─ prompts/              ★ 프롬프트 단일 출처 (analyze · respond · observe · summary)
 ├─ rules/                ★ 규칙 데이터 단일 출처
 ├─ eval/                 평가 세트 · run_eval.py · reports/ (gitignore)
+│  └─ fixtures/internal/ ★ 내부 API 고정 JSON — 백엔드와 같은 파일로 검증한다
 └─ tests/
 ```
 

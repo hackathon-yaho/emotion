@@ -86,4 +86,5 @@ git pull && grep -L "✅" docs/request/{내 역할}/*.md   # README.md는 무시
 - **요청 현황은 위 grep이 단일 출처다.** 아래는 grep이 못 주는 "왜 중요한가"만 적는다 — **개수·완결 선언을 여기 쓰지 않는다**
   - `request/ai/integration-test-path.md` (백엔드 → AI) — 양쪽이 로컬이면 AI서버가 백엔드에 도달하지 못해 통합 검증이 성립하지 않는다. 임시 터널로 뚫을 시점·순서 협의. **단위 개발은 안 막는다**
   - `request/ai/turn-index-numbering.md` (백엔드 → AI, 2026-09-04) — 이어하기 재연결 후 `turnIndex` 채번. **유실 자체는 백엔드가 `occurred_at` 판별로 이미 막았고**, 남은 확인은 `occurredAt`이 발화 시각이며 재시도에서 불변인지다(그 가드의 유일한 전제)
-- 코드는 아직 없다. `ai-server/`에는 프롬프트 3종·규칙 데이터 3종·`.env.example`·`pyproject.toml`·평가 세트 안내가 있다
+- 코드는 아직 없다. `ai-server/`에는 프롬프트 4종(analyze·respond·observe·summary)·규칙 데이터 3종·`.env.example`·`pyproject.toml`·평가 세트 안내가 있다
+- **AI서버 통합 준비 목표는 9/6**이다(`response/backend/integration-test-path.md`). 9/5 `app/rules/` 순수 함수 + 테스트 → 9/6 세션 조회·CLM SSE·턴 적재

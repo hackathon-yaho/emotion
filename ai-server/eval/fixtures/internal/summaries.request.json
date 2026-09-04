@@ -1,0 +1,17 @@
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "turns": [
+    {
+      "role": "user",
+      "transcript": "오늘 회의가 세 개나 있었는데 다 괜찮았어요"
+    },
+    {
+      "role": "assistant",
+      "transcript": "괜찮다고 하시는데 목소리는 좀 다르네요. 무슨 일 있으셨어요?"
+    },
+    {
+      "role": "user",
+      "transcript": "그냥 좀 피곤하네요"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "turnIndex": 8,
+  "role": "user",
+  "occurredAt": "2026-09-18T12:31:02.417Z",
+  "transcript": "오늘 완전 괜찮았어요",
+  "textValence": 0.7,
+  "voiceValence": -0.62,
+  "gap": 1.32,
+  "gapTriggered": true,
+  "thresholdMode": "personal",
+  "tags": [
+    "회의"
+  ],
+  "topProsody": {
+    "Tiredness": 0.71,
+    "Sadness": 0.42,
+    "Distress": 0.19,
+    "Calmness": 0.08,
+    "Joy": 0.06
+  },
+  "crisis": {
+    "detected": false,
+    "by": null
+  }
+}

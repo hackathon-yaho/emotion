@@ -1,0 +1,13 @@
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "ended",
+  "startedAt": "2026-09-18T12:30:00Z",
+  "usedSec": 412,
+  "lastTurnIndex": 14,
+  "thresholdMode": "fixed",
+  "gapThreshold": 0.85,
+  "softWrapSec": 300,
+  "hardCutSec": 420,
+  "demoMode": false,
+  "recentObservations": []
+}

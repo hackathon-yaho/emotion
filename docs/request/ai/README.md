@@ -13,5 +13,6 @@ AI 개발자에게 요청할 사항을 문서로 정리하는 폴더입니다.
 
 | 문서 | 상태 | 막고 있던 작업 |
 | --- | --- | --- |
-| [integration-test-path.md](integration-test-path.md) | ⏳ **회신 대기** (2026-09-04, 요청자 백엔드) | AI서버 → 백엔드 방향에 도달 경로가 없다(양쪽 로컬). 백엔드가 통합 테스트 동안만 터널을 열려는데 **시점·순서 협의** 필요. 단위 개발은 안 막힘 |
+| [integration-test-path.md](integration-test-path.md) | ✅ **회신 완료** (2026-09-04) | ~~AI서버 → 백엔드 방향에 도달 경로가 없다(양쪽 로컬)~~ → 양쪽 터널 동의, **AI서버 준비 목표 9/6**, `GET /internal/sessions` 먼저. 회신 `../../response/backend/integration-test-path.md` |
+| [turn-index-numbering.md](turn-index-numbering.md) | ✅ **회신 완료** (2026-09-04) | ~~이어하기 후 `turnIndex` 리셋 시 턴이 조용히 유실~~ → 캐시 시드 + 유휴 재조회로 리셋 경로 제거, `occurredAt` 규칙을 **계약 v1.5**에 명시. 회신 `../../response/backend/turn-index-numbering.md` |
 | [clm-turn-pipeline-review.md](clm-turn-pipeline-review.md) | ✅ **회신 완료** (2026-09-03) | ~~PRD §9.1 실시간 턴 처리 — 순환 의존 + 채널 독립성~~ → 분석 호출 분리·프로소디 미노출(FR-025)로 해소. 회신 `../../response/app/clm-turn-pipeline-review.md`, 설계 `../../02-architecture/ai-pipeline.md` |

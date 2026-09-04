@@ -1,0 +1,19 @@
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "open",
+  "startedAt": "2026-09-18T12:30:00Z",
+  "usedSec": 186,
+  "lastTurnIndex": 7,
+  "thresholdMode": "personal",
+  "gapThreshold": 0.92,
+  "softWrapSec": 300,
+  "hardCutSec": 420,
+  "demoMode": false,
+  "recentObservations": [
+    {
+      "observationId": "obs_014",
+      "tag": "회의",
+      "sentence": "회의 얘기를 하실 때만 목소리가 유독 무거워지시네요."
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "turnIndex": 10,
+  "role": "user",
+  "occurredAt": "2026-09-18T12:31:19.004Z",
+  "transcript": "그냥 좀 피곤하네요",
+  "textValence": null,
+  "voiceValence": -0.44,
+  "gap": null,
+  "gapTriggered": false,
+  "thresholdMode": "personal",
+  "tags": [],
+  "topProsody": {
+    "Tiredness": 0.66,
+    "Boredom": 0.21,
+    "Calmness": 0.11
+  },
+  "crisis": {
+    "detected": false,
+    "by": null
+  }
+}
