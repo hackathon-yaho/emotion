@@ -50,7 +50,7 @@ public class SessionController {
     /** 계약 §2-14. 사용자가 기다리기를 그만둔다. 없는 티켓이어도 204다. */
     @DeleteMapping("/queue/{ticketId}")
     public ResponseEntity<Void> leaveQueue(@PathVariable UUID ticketId) {
-        sessionService.leaveQueue(ticketId);
+        sessionService.leaveQueue(ProfileContext.require(), ticketId);
         return ResponseEntity.noContent().build();
     }
 

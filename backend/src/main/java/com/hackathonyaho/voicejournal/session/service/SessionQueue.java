@@ -87,6 +87,12 @@ public class SessionQueue {
         return queue.size();
     }
 
+    /** 줄이 비었는지. <b>새치기 판단에 쓴다</b> — 만료된 티켓은 세지 않는다. */
+    public synchronized boolean isEmpty() {
+        sweep();
+        return queue.isEmpty();
+    }
+
     private void touch(UUID ticketId) {
         Ticket old = queue.stream().filter(t -> t.ticketId().equals(ticketId)).findFirst().orElse(null);
         if (old == null) {

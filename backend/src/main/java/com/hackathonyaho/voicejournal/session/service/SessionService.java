@@ -62,7 +62,9 @@ public class SessionService {
 
     /** 큐가 꺼져 있으면 정원을 보지 않는다 — 코드 경로가 큐 도입 전과 같다. */
     public StartResult startOrEnqueue(UUID profileId) {
-        if (!queue.isEnabled() || hasRoom()) {
+        // 줄이 서 있으면 자리가 나도 새로 온 사람을 바로 들이지 않는다 — 그러면 기다리던
+        // 사람 앞에서 새치기가 되고, 맨 앞이 계속 밀려 순번이 뜻을 잃는다.
+        if (!queue.isEnabled() || (queue.isEmpty() && hasRoom())) {
             return new StartResult(start(profileId), null);
         }
         UUID ticketId = queue.enqueue(profileId);
@@ -88,8 +90,11 @@ public class SessionService {
         return SessionQueueResponse.admitted(ticketId, policy.getLivePollIntervalSec(), start(profileId));
     }
 
-    public void leaveQueue(UUID ticketId) {
-        queue.remove(ticketId);
+    /** 남의 티켓은 취소하지 못한다 — 폴링과 같은 검사를 쓴다. 없는 티켓이어도 조용히 끝난다. */
+    public void leaveQueue(UUID profileId, UUID ticketId) {
+        if (queue.poll(ticketId, profileId).isPresent()) {
+            queue.remove(ticketId);
+        }
     }
 
     /** 조회에 실패하면 여유가 있다고 본다 — 조회가 죽었다고 대화를 막지 않는다. */

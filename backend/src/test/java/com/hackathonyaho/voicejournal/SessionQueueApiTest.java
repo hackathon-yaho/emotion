@@ -157,6 +157,57 @@ class SessionQueueApiTest {
     }
 
     /**
+     * <b>줄이 서 있으면 자리가 나도 새로 온 사람이 먼저 들어가지 못한다.</b> 그러면
+     * 기다리던 사람 앞에서 새치기가 되고, 맨 앞이 계속 밀려 순번이 뜻을 잃는다.
+     */
+    @Test
+    @DisplayName("줄이 있으면 자리가 나도 신규는 줄 뒤로 간다 — 새치기 금지")
+    void newcomerCannotJumpTheQueue() throws Exception {
+        seatsTaken(5);
+        UUID waiting = ticketOf(startAndGetBody());
+
+        // 자리가 났다. 그래도 줄이 있으므로 신규는 들어가지 못한다.
+        seatsTaken(4);
+
+        UUID other = profileRepository.save(Profile.create()).getId();
+        baselineRepository.save(new UserBaseline(other));
+        String otherJwt = jwtProvider.issue(other).token();
+
+        String body = mvc.perform(post("/api/session/start").header(HttpHeaders.AUTHORIZATION, "Bearer " + otherJwt))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.position").value(2))
+                .andReturn().getResponse().getContentAsString();
+
+        // 자리는 기다리던 사람이 가져간다.
+        mvc.perform(get("/api/session/queue/{id}", waiting).header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt))
+                .andExpect(jsonPath("$.position").value(0))
+                .andExpect(jsonPath("$.session.sessionId").exists());
+
+        queue.remove(ticketOf(body));
+    }
+
+    @Test
+    @DisplayName("남의 티켓은 취소하지 못한다 — 줄에서 밀어낼 수 없다")
+    void cannotCancelOthersTicket() throws Exception {
+        seatsTaken(5);
+        UUID ticket = ticketOf(startAndGetBody());
+
+        UUID other = profileRepository.save(Profile.create()).getId();
+        baselineRepository.save(new UserBaseline(other));
+
+        mvc.perform(delete("/api/session/queue/{id}", ticket)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtProvider.issue(other).token()))
+                .andExpect(status().isNoContent());
+
+        // 여전히 줄에 있다.
+        mvc.perform(get("/api/session/queue/{id}", ticket).header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.position").value(1));
+
+        queue.remove(ticket);
+    }
+
+    /**
      * <b>조회가 죽었다고 대화를 막지 않는다.</b> 정원을 넘겨 붙으면 Hume이 E0700으로
      * 거절하고 그건 앱이 처리한다 — 여기서 막으면 Hume이 멀쩡할 때도 아무도 못 쓴다.
      */
