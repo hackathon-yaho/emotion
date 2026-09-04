@@ -9,16 +9,50 @@
 ## 실행
 
 ```bash
-cp .env.example .env   # 값을 채웁니다
 flutter pub get
 flutter run -d chrome
 ```
+
+**설정 파일이 필요 없습니다.** 환경변수는 `--dart-define`이고 기본값이 있습니다 — 자세한 값은 [`.env.example`](.env.example)에 적어 뒀습니다.
 
 | 명령 | 용도 |
 | --- | --- |
 | `flutter analyze` | 정적 분석 — **이슈 0을 유지합니다** |
 | `flutter test` | 토큰·스케일·「두 겹」 규약 회귀 테스트 |
 | `flutter build web --release` | 웹 빌드. **배포 채널이라 항상 도는 상태로 유지합니다** |
+
+## 팀원이 웹으로 보는 방법
+
+**세 가지 중 하나입니다.** 아직 URL이 없으므로 지금은 ①만 가능합니다.
+
+### ① 로컬 실행 (Flutter가 있는 사람)
+
+```bash
+git clone https://github.com/hackathon-yaho/emotion.git
+cd emotion/app
+flutter pub get
+flutter run -d chrome
+```
+
+**설정 파일을 만들 필요가 없습니다.** 환경변수는 `--dart-define`이고 기본값이 있어서, 클론하고 바로 실행됩니다. (예전에는 `.env`가 없으면 빌드가 실패했습니다.)
+
+백엔드에 붙일 때만 값을 줍니다.
+
+```bash
+flutter run -d chrome --dart-define=API_BASE_URL=https://api.example.com
+```
+
+### ② GitHub Pages (URL 하나로 보기) — 설정 한 번 필요
+
+[`.github/workflows/app-web.yml`](../.github/workflows/app-web.yml)이 `app/` 변경 시 자동으로 빌드·배포합니다. `analyze`·`test`·`build`가 다 통과해야 배포됩니다.
+
+**켜는 방법**: 저장소 **Settings → Pages → Source를 "GitHub Actions"로** 바꾸면 끝입니다. 주소는 `https://hackathon-yaho.github.io/emotion/`.
+
+> **이 저장소는 비공개입니다.** 비공개 저장소의 Pages는 **유료 플랜에서만** 동작합니다. 무료 플랜이면 ③을 쓰세요.
+
+### ③ 정적 호스팅 (Vercel 등)
+
+`flutter build web --release`의 `build/web`을 올리면 됩니다. 계정 연결이 필요해 앱 담당이 직접 합니다. 제출용 도메인은 제품 이름이 정해진 뒤에 붙입니다 (PRD §14-6).
 
 ## 구조
 

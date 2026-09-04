@@ -51,8 +51,6 @@ dependencies:
   record: ^5.2.1
   audioplayers: ^6.1.0
 
-  # 환경변수 (Hume config_id, API base URL — 앱에 하드코딩 금지)
-  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -71,9 +69,6 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   uses-material-design: true
-
-  assets:
-    - .env
 
   # 서체를 번들할 때 여기에 등록한다. 파일은 fonts/ 아래.
   # fonts:
