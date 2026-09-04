@@ -1,0 +1,36 @@
+package com.hackathonyaho.voicejournal.health.scheduler;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+/**
+ * F2-06 미종료 세션 정리(Phase 2)와 F7-01 배치 스캔(Phase 4)이 <b>같은 스케줄러</b>에
+ * 올라탄다 — 추가 인프라 0.
+ *
+ * <p><b>주기 5분.</b> F2-06이 "시작 후 30분 경과"를 판정하므로 실제 종료 시각의
+ * 오차가 최대 5분이고, {@code resumableUntil = ended_at + 30분}이라 이어하기 창도
+ * 그만큼만 밀린다. 1분은 빈 스캔이 60배로 늘고(관찰은 3회·1.5배 조건이라 어차피
+ * 매번 생기지 않는다), 10분은 이어하기 창이 40분까지 밀린다.
+ *
+ * <p><b>fixedRate가 아니라 fixedDelay다</b> — 배치가 오래 걸릴 때 겹쳐 도는 것을 막는다.
+ * 인스턴스는 Render Free라 1개뿐이므로 분산 락은 필요 없다.
+ *
+ * <p>Render가 슬립하면 이 스케줄러도 멈춘다. cron이 10분마다 {@code /api/health}를
+ * 쳐서 깨워두지만, 슬립 구간에 밀린 세션은 깨어난 뒤 다음 주기에 주워간다 —
+ * {@code pattern_processed_at} 컬럼 방식이라 유실이 없다(F7-01).
+ */
+@Slf4j
+@Component
+public class MaintenanceScheduler {
+
+    @Scheduled(fixedDelayString = "${app.scheduler.fixed-delay-ms}")
+    public void tick() {
+        // Phase 2: 시작 후 30분 경과 + ended_at IS NULL → end_reason 'timeout'
+        // Phase 4: ended_at IS NOT NULL AND pattern_processed_at IS NULL 스캔 → 배치
+
+        // 각 작업은 예외를 스스로 삼킨다 — 하나가 실패해도 다음 작업과 다음 주기가
+        // 영향을 받지 않아야 한다 (F7-01 수용 기준: 배치 실패가 대화·조회에 영향 없음).
+        log.debug("maintenance tick");
+    }
+}

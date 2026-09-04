@@ -1,0 +1,47 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  config:
+    import: "optional:file:.env[.properties]"
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    # 스키마는 db/migration.sql이 단일 출처다 (data-model.md). JPA가 만들지 않는다.
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+        show_sql: false
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    # 계약 §1-1 — 매일 쓰는 앱이라 더 짧으면 재로그인이 잦아 이탈 요인이 된다.
+    expiry-days: 7
+  kakao:
+    # access_token_info의 app_id와 대조한다 (spec F1-01 ③).
+    # 비밀이 아니지만 콘솔에서 값이 바뀔 수 있어 환경변수로 둔다.
+    app-id: ${KAKAO_APP_ID}
+  scheduler:
+    # F2-06 정리와 F7-01 배치가 같은 주기를 쓴다 (2026-09-04 확정, phase-1 1-7).
+    fixed-delay-ms: 300000
+
+cors:
+  # 앱은 GitHub Pages에 있어 오리진이 다르다. 커스텀 도메인이 붙으면 값만 바꾼다.
+  # allowedOriginPatterns를 쓰므로 localhost:* 와일드카드가 그대로 통한다.
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:https://hackathon-yaho.github.io,http://localhost:*}
+
+logging:
+  level:
+    com.hackathonyaho.voicejournal: info
+  # 발화 내용·sessionId를 어떤 로그 문구에도 넣지 않는다 (FR-092, 절대 원칙 3·6번).
+  # 세션 상관은 sessionRef(해시 8자)로만 한다.
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%X{sessionRef:-'-'}] %logger{36} - %msg%n"

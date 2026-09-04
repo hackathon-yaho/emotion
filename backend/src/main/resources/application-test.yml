@@ -1,0 +1,23 @@
+# 통합 테스트 — compose Postgres의 테스트 전용 DB를 쓴다 (phase-1 1-9).
+# Testcontainers를 쓰지 않는 이유: 백엔드에 CI가 없어 "외부 상태 비의존"의 이득이 없다.
+spring:
+  datasource:
+    url: ${TEST_DATASOURCE_URL:jdbc:postgresql://localhost:5432/emotion_test}
+    username: ${TEST_DATASOURCE_USERNAME:emotion}
+    password: ${TEST_DATASOURCE_PASSWORD:emotion}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+  sql:
+    init:
+      # 스키마도 배포와 같은 파일로 검증한다.
+      mode: always
+      schema-locations: classpath:db/migration.sql
+
+app:
+  jwt:
+    secret: dGVzdC1vbmx5LXNlY3JldC1ub3QtdXNlZC1pbi1kZXBsb3ltZW50MDA=
+    expiry-days: 7
+  kakao:
+    app-id: 999999

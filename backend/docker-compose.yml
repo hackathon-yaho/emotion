@@ -1,0 +1,26 @@
+name: emotion-backend
+
+services:
+  db:
+    image: postgres:16
+    container_name: emotion_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: emotion
+      POSTGRES_USER: emotion
+      POSTGRES_PASSWORD: emotion
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 통합 테스트용 DB를 기동 시 함께 만든다 (phase-1 1-9).
+      # 개발 데이터와 섞이지 않도록 DB 이름을 나눈다.
+      - ./src/test/resources/init-test-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "emotion", "-d", "emotion"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
