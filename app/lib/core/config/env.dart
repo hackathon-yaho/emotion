@@ -27,4 +27,11 @@ abstract final class Env {
   /// `POST /api/session/start` 응답의 `humeConfigId`로 온다 (§2-4).
   /// 백엔드가 기동 시 fail-fast로 검증하므로 앱은 폴백을 두지 않는다.
   static bool get isConfigured => apiBaseUrl.isNotEmpty;
+
+  /// 샘플 모드로 빌드할지 — `--dart-define=SAMPLE_DATA=true`.
+  ///
+  /// **실제 Hume API를 켜 두고 테스트할 수 없어서** 있는 스위치다. 켜면
+  /// 백엔드·Hume을 타지 않고 화면과 흐름만 확인한다. 주소에 `?sample=1`을
+  /// 붙여도 같다 (`dataModeProvider`).
+  static const sampleData = bool.fromEnvironment('SAMPLE_DATA');
 }

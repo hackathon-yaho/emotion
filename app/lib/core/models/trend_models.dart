@@ -5,6 +5,8 @@ class Trend {
     required this.timezone,
     required this.points,
     required this.highlights,
+    this.userAvgGap,
+    this.tagGaps = const [],
   });
 
   final String range;
@@ -18,6 +20,14 @@ class Trend {
   /// 상세로 이동한다 (F9-02).
   final List<TrendHighlight> highlights;
 
+  /// 그 사용자 **전 기간** 평균 갭 (v1.4 §2-8). `tagGaps` 막대의 기준선이고,
+  /// 앱이 ×1.5를 곱해 판정선을 그린다. 기록이 없으면 null이다.
+  final double? userAvgGap;
+
+  /// 이야기별 갭 (F9-03, v1.4 §2-8). **`range`에 종속**되고 서버가 3회 미만을
+  /// 걸러 `tagAvgGap` 내림차순 상위 7개까지 준다. 없으면 빈 배열.
+  final List<TagGap> tagGaps;
+
   factory Trend.fromJson(Map<String, dynamic> j) => Trend(
         range: j['range'] as String,
         timezone: j['timezone'] as String? ?? 'Asia/Seoul',
@@ -26,6 +36,10 @@ class Trend {
             .toList(),
         highlights: (j['highlights'] as List<dynamic>? ?? const [])
             .map((e) => TrendHighlight.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        userAvgGap: (j['userAvgGap'] as num?)?.toDouble(),
+        tagGaps: (j['tagGaps'] as List<dynamic>? ?? const [])
+            .map((e) => TagGap.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
 }
@@ -83,4 +97,23 @@ abstract final class TrendRange {
   static const d7 = '7d';
   static const d30 = '30d';
   static const d90 = '90d';
+}
+
+/// 이야기별 갭 한 줄 (계약 §2-8, v1.4).
+class TagGap {
+  const TagGap({
+    required this.tag,
+    required this.occurrences,
+    required this.tagAvgGap,
+  });
+
+  final String tag;
+  final int occurrences;
+  final double tagAvgGap;
+
+  factory TagGap.fromJson(Map<String, dynamic> j) => TagGap(
+        tag: j['tag'] as String,
+        occurrences: j['occurrences'] as int? ?? 0,
+        tagAvgGap: (j['tagAvgGap'] as num).toDouble(),
+      );
 }

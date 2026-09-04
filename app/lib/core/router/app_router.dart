@@ -96,11 +96,15 @@ GoRouter createRouter(AppSession session) {
       ),
       GoRoute(
         path: Routes.evidence,
-        builder: (context, state) => const EvidenceScreen(),
+        builder: (context, state) => EvidenceScreen(
+          observationId: state.pathParameters['observationId'] ?? '',
+        ),
       ),
       GoRoute(
         path: Routes.recordDetail,
-        builder: (context, state) => const RecordDetailScreen(),
+        builder: (context, state) => RecordDetailScreen(
+          sessionId: state.pathParameters['sessionId'] ?? '',
+        ),
       ),
       GoRoute(
         path: Routes.settings,

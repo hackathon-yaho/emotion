@@ -33,6 +33,10 @@ class ApiException implements Exception {
 
   bool get isTokenExpired => code == ApiErrorCode.tokenExpired;
 
+  /// 서버에 닿지 못했다. **웹에서는 CORS 차단도 여기로 온다** — 구분할 방법이
+  /// 없다 (`api_client.dart` 주석).
+  bool get isNetwork => code == ApiErrorCode.networkUnavailable;
+
   @override
   String toString() => 'ApiException($code, status=$statusCode)';
 }

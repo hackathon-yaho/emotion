@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/fixtures/sample_data.dart';
 import '../../core/models/observation_models.dart';
+import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/widgets/async_view.dart';
 import '../../shared/widgets/hairline.dart';
 import '../../shared/widgets/meta_row.dart';
 import '../../shared/widgets/screen_scaffold.dart';
+import '../../shared/widgets/skeleton.dart';
 import '../../shared/widgets/small_label.dart';
 import '../../shared/widgets/two_line_chart.dart';
 
@@ -20,18 +23,30 @@ import '../../shared/widgets/two_line_chart.dart';
 ///
 /// 근거 턴에는 **텍스트·음성 valence를 둘 다** 보여준다 (design-system §7-9) —
 /// "근거"라면 갭이 어디서 왔는지가 보여야 한다.
-class EvidenceScreen extends StatelessWidget {
-  const EvidenceScreen({super.key});
+class EvidenceScreen extends ConsumerWidget {
+  const EvidenceScreen({super.key, required this.observationId});
+
+  final String observationId;
 
   @override
-  Widget build(BuildContext context) {
-    final t = context.tokens;
-    final d = Sample.evidenceDetail;
-    final e = d.evidence;
-
+  Widget build(BuildContext context, WidgetRef ref) {
+    final provider = evidenceProvider(observationId);
     return ScreenScaffold(
       topPadding: 40,
-      child: Column(
+      child: AsyncView<ObservationEvidence>(
+        value: ref.watch(provider),
+        loading: const SkeletonLines(widths: [0.4, 1, 0.9, 0.7], gap: 34),
+        onRetry: () => ref.invalidate(provider),
+        data: (d) => _content(context, d),
+      ),
+    );
+  }
+
+  Widget _content(BuildContext context, ObservationEvidence d) {
+    final t = context.tokens;
+    final e = d.evidence;
+
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _BackRow(onBack: () => context.pop()),
@@ -92,8 +107,7 @@ class EvidenceScreen extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }

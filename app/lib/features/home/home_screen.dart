@@ -1,21 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/fixtures/sample_data.dart';
 import '../../core/models/observation_models.dart';
+import '../../core/providers.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/widgets/async_view.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/hairline.dart';
 import '../../shared/widgets/outline_button.dart';
 import '../../shared/widgets/screen_scaffold.dart';
 import '../../shared/widgets/skeleton.dart';
 import '../../shared/widgets/small_label.dart';
-
-/// 홈 화면의 상태 — 지금은 샘플로 전환하고, API가 붙으면 프로바이더가 준다.
-enum HomeState { normal, empty, loading, startBlocked, resumable, resumeExpired }
 
 /// S01 오늘 (홈).
 ///
@@ -24,18 +23,29 @@ enum HomeState { normal, empty, loading, startBlocked, resumable, resumeExpired 
 /// **빈 상태가 도그푸딩 첫 며칠의 실제 화면이다** (spec 5-1 #4·#18) — 첫날은
 /// 태그가 3회 미만이라 관찰이 생성되지 않는다. 억지 문구를 만들지 않는다
 /// (FR-052).
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, this.state = HomeState.normal});
-
-  final HomeState state;
+class HomeScreen extends ConsumerWidget {
+  const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = context.tokens;
-    final isEmpty = state == HomeState.empty;
-    final isLoading = state == HomeState.loading;
-    final blocked = state == HomeState.startBlocked;
-    final observation = Sample.observations.first;
+    final me = ref.watch(meProvider);
+    final observations = ref.watch(observationsProvider);
+    final sessions = ref.watch(sessionsProvider);
+
+    final isLoading = observations.isLoading || sessions.isLoading;
+    final observation = observations.valueOrNull?.items.firstOrNull;
+    final recent = sessions.valueOrNull?.items.take(2).toList() ?? const [];
+
+    // **실패를 빈 상태로 바꿔 말하지 않는다.** "아직 발견한 것이 없습니다"는
+    // 사실 주장이라, 못 불러온 것을 그렇게 적으면 거짓이 된다.
+    final failure = observations.error ?? sessions.error;
+    final isEmpty = !isLoading && failure == null && observation == null;
+
+    // F2-07 — 비정상 중단으로 열려 있는 세션 (§2-2 `openSession`).
+    final open = me.valueOrNull?.openSession;
+    final resumable = open != null && open.isResumable;
+    final resumeExpired = open != null && !open.isResumable;
 
     return ScreenScaffold(
       child: Column(
@@ -44,7 +54,7 @@ class HomeScreen extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(child: SmallLabel('9월 14일 목요일')),
+              Expanded(child: SmallLabel(_today())),
               _GearButton(onTap: () => context.push(Routes.settings)),
             ],
           ),
@@ -60,12 +70,21 @@ class HomeScreen extends StatelessWidget {
 
                   if (isLoading)
                     const SkeletonLines(widths: [1, 0.92, 0.58])
+                  else if (failure != null)
+                    AsyncErrorBlock(
+                      error: failure,
+                      onRetry: () {
+                        ref.invalidate(observationsProvider);
+                        ref.invalidate(sessionsProvider);
+                        ref.invalidate(meProvider);
+                      },
+                    )
                   else if (isEmpty)
                     const EmptyState(
                       message: '아직 발견한 것이 없습니다.\n대화가 쌓이면 여기에 보입니다.',
                     )
                   else
-                    _Observation(observation: observation),
+                    _Observation(observation: observation!),
 
                   const SizedBox(height: Space.xl),
                   const Hairline(),
@@ -75,7 +94,9 @@ class HomeScreen extends StatelessWidget {
 
                   if (isLoading)
                     const SkeletonLines(widths: [0.8, 0.66], gap: 40)
-                  else if (isEmpty)
+                  else if (failure != null)
+                    const SizedBox.shrink()
+                  else if (recent.isEmpty)
                     Text(
                       '첫 대화를 기다리고 있습니다.',
                       style: AppType.sans(
@@ -85,15 +106,15 @@ class HomeScreen extends StatelessWidget {
                       ),
                     )
                   else
-                    ...Sample.sessions.take(2).map(
-                          (s) => Padding(
-                            padding: const EdgeInsets.only(bottom: Space.lg + 2),
-                            child: _PastRow(
-                              date: '${s.startedAt.month}.${s.startedAt.day}',
-                              text: s.summary ?? '요약이 없습니다',
-                            ),
-                          ),
+                    ...recent.map(
+                      (s) => Padding(
+                        padding: const EdgeInsets.only(bottom: Space.lg + 2),
+                        child: _PastRow(
+                          date: '${s.startedAt.month}.${s.startedAt.day}',
+                          text: s.summary ?? '요약이 없습니다',
                         ),
+                      ),
+                    ),
 
                   const SizedBox(height: Space.xxl),
                 ],
@@ -101,36 +122,27 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
 
-          if (state == HomeState.resumable ||
-              state == HomeState.resumeExpired)
-            _ResumeBlock(expired: state == HomeState.resumeExpired),
+          if (resumable || resumeExpired) _ResumeBlock(expired: resumeExpired),
 
-          if (state != HomeState.resumable) ...[
+          if (!resumable) ...[
             OutlineAction(
-              label: blocked ? '다시 시도' : '오늘 이야기하기',
-              icon: blocked
-                  ? null
-                  : Icon(Icons.mic_none, size: 17, color: t.paper),
-              onPressed: blocked
-                  ? null
-                  : () => context.push(Routes.conversation),
+              label: '오늘 이야기하기',
+              icon: Icon(Icons.mic_none, size: 17, color: t.paper),
+              onPressed: () => context.push(Routes.conversation),
             ),
             const SizedBox(height: Space.lg),
             Text(
-              blocked
-                  ? '지금은 대화를 시작할 수 없습니다. 잠시 후 다시 시도해 주세요.'
-                  : '목소리는 분석 직후 삭제됩니다',
+              '목소리는 분석 직후 삭제됩니다',
               textAlign: TextAlign.center,
               style: AppType.sans(
-                size: blocked
-                    ? AppType.captionSize
-                    : AppType.smallLabelSize,
-                color: blocked ? t.muted : t.faint,
+                size: AppType.smallLabelSize,
+                color: t.faint,
                 height: 1.7,
-                letterSpacing: blocked ? null : 0.06 * AppType.smallLabelSize,
+                letterSpacing: 0.06 * AppType.smallLabelSize,
               ),
             ),
           ],
+
           // 홈은 아래가 스크롤이 아니라 CTA라 실제로 여백을 준다 — 칩이
           // 버튼을 덮으면 시작을 못 한다.
           SizedBox(height: Space.xs + MediaQuery.paddingOf(context).bottom),
@@ -324,4 +336,15 @@ class _GearButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 오늘 날짜 — "9월 14일 목요일".
+///
+/// **서버가 주는 값이 아니다.** 사용자의 기기 시각을 쓴다. 계약의 날짜는
+/// `Asia/Seoul` 기준이라 해외에서 하루가 어긋날 수 있는데, 도그푸딩·심사
+/// 모두 국내라 지금은 문제가 되지 않는다.
+String _today() {
+  const days = ['월', '화', '수', '목', '금', '토', '일'];
+  final now = DateTime.now();
+  return '${now.month}월 ${now.day}일 ${days[now.weekday - 1]}요일';
 }

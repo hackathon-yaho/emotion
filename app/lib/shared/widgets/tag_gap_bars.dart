@@ -1,21 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../core/models/trend_models.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
-
-/// 이야기별 갭 (F9-03).
-class TagGap {
-  const TagGap({
-    required this.tag,
-    required this.occurrences,
-    required this.tagAvgGap,
-  });
-
-  final String tag;
-  final int occurrences;
-  final double tagAvgGap;
-}
 
 /// 이야기별 갭 막대.
 ///
@@ -25,7 +13,7 @@ class TagGap {
 ///
 /// 갭은 채널이 아니므로 `cool`/`warm`을 쓰지 않는다 (design-system §7-16).
 ///
-/// 데이터 경로가 계약에 아직 없다 — `docs/request/backend/tag-gap-endpoint.md`.
+/// 데이터는 `GET /api/trend`의 `tagGaps`·`userAvgGap`으로 온다 (계약 v1.4 §2-8).
 class TagGapBars extends StatelessWidget {
   const TagGapBars({
     super.key,

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/fixtures/sample_data.dart';
+import '../../core/models/paged.dart';
 import '../../core/models/record_models.dart';
+import '../../core/providers.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/widgets/async_view.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/hairline.dart';
 import '../../shared/widgets/screen_scaffold.dart';
@@ -20,14 +23,11 @@ import '../../shared/widgets/small_label.dart';
 /// 들어갈 이유가 생긴다.
 ///
 /// 페이징은 기본 20개, **"더 보기" 버튼 없이** 바닥에서 이어 불러온다 (§7-22).
-class RecordsScreen extends StatelessWidget {
-  const RecordsScreen({super.key, this.isEmpty = false, this.isLoading = false});
-
-  final bool isEmpty;
-  final bool isLoading;
+class RecordsScreen extends ConsumerWidget {
+  const RecordsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ScreenScaffold(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,7 +40,7 @@ class RecordsScreen extends StatelessWidget {
                 // 떠 있는 탭 칩 높이만큼 안쪽에 남긴다 (TabPill.reserve).
                 bottom: Space.xl + MediaQuery.paddingOf(context).bottom,
               ),
-              child: _body(context),
+              child: _body(ref),
             ),
           ),
         ],
@@ -48,9 +48,10 @@ class RecordsScreen extends StatelessWidget {
     );
   }
 
-  Widget _body(BuildContext context) {
-    if (isLoading) {
-      return const Column(
+  Widget _body(WidgetRef ref) {
+    return AsyncView<Paged<SessionSummary>>(
+      value: ref.watch(sessionsProvider),
+      loading: const Column(
         children: [
           Hairline(),
           Padding(
@@ -69,18 +70,16 @@ class RecordsScreen extends StatelessWidget {
           ),
           Hairline(),
         ],
-      );
-    }
-
-    if (isEmpty) {
-      return const EmptyState(message: '아직 대화가 없습니다.');
-    }
-
-    return Column(
-      children: [
-        for (final s in Sample.sessions) _RecordRow(session: s),
-        const Hairline(),
-      ],
+      ),
+      isEmpty: (d) => d.isEmpty,
+      empty: const EmptyState(message: '아직 대화가 없습니다.'),
+      onRetry: () => ref.invalidate(sessionsProvider),
+      data: (d) => Column(
+        children: [
+          for (final s in d.items) _RecordRow(session: s),
+          const Hairline(),
+        ],
+      ),
     );
   }
 }

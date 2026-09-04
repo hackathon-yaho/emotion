@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/fixtures/sample_data.dart';
 import '../../core/models/record_models.dart';
+import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/widgets/async_view.dart';
 import '../../shared/widgets/confirm_sheet.dart';
 import '../../shared/widgets/hairline.dart';
 import '../../shared/widgets/meta_row.dart';
 import '../../shared/widgets/screen_scaffold.dart';
+import '../../shared/widgets/skeleton.dart';
 import '../../shared/widgets/small_label.dart';
 
 /// S05-1 대화 상세 (F9-05 · F10-01).
@@ -20,22 +23,34 @@ import '../../shared/widgets/small_label.dart';
 ///
 /// 삭제 확인 시트는 **연쇄 무효화를 미리 말한다** (FR-081) — 근거 대화가
 /// 삭제됐는데 관찰만 남으면 그 관찰은 그 순간 "근거 없는 문장"이 된다.
-class RecordDetailScreen extends StatelessWidget {
-  const RecordDetailScreen({super.key});
+class RecordDetailScreen extends ConsumerWidget {
+  const RecordDetailScreen({super.key, required this.sessionId});
+
+  final String sessionId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final provider = sessionDetailProvider(sessionId);
+    return ScreenScaffold(
+      topPadding: 40,
+      child: AsyncView<SessionDetail>(
+        value: ref.watch(provider),
+        loading: const SkeletonLines(widths: [0.5, 1, 1, 0.8], gap: 34),
+        onRetry: () => ref.invalidate(provider),
+        data: (d) => _content(context, ref, d),
+      ),
+    );
+  }
+
+  Widget _content(BuildContext context, WidgetRef ref, SessionDetail d) {
     final t = context.tokens;
-    final d = Sample.sessionDetail;
     final at = d.startedAt;
     final minutes = d.durationSec ~/ 60;
     final seconds = d.durationSec % 60;
 
-    return ScreenScaffold(
-      topPadding: 40,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
           Row(
             children: [
               _IconTap(
@@ -45,7 +60,7 @@ class RecordDetailScreen extends StatelessWidget {
               ),
               const Spacer(),
               GestureDetector(
-                onTap: () => _confirmDelete(context, d),
+                onTap: () => _confirmDelete(context, ref, d),
                 behavior: HitTestBehavior.opaque,
                 child: SizedBox(
                   height: Space.tapMin,
@@ -107,12 +122,15 @@ class RecordDetailScreen extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context, SessionDetail d) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    SessionDetail d,
+  ) async {
     final t = context.tokens;
     final ok = await showConfirmSheet(
       context,
@@ -132,7 +150,14 @@ class RecordDetailScreen extends StatelessWidget {
         ),
       ],
     );
-    if (ok && context.mounted) context.pop();
+    if (!ok) return;
+    // **삭제는 서버가 하고, 연쇄 무효화 결과도 서버가 준다** (§2-12).
+    // 목록·발견·추세가 같이 달라지므로 셋 다 무효화한다.
+    await ref.read(journalRepositoryProvider).deleteSession(d.sessionId);
+    ref.invalidate(sessionsProvider);
+    ref.invalidate(observationsProvider);
+    ref.invalidate(trendProvider);
+    if (context.mounted) context.pop();
   }
 }
 

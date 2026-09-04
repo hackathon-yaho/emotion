@@ -118,6 +118,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
 
+                  const SizedBox(height: Space.xxl - Space.xs),
+                  const Hairline(),
+                  _ToggleRow(
+                    label: '샘플 데이터',
+                    value: ref.watch(dataModeProvider) == DataMode.sample,
+                    onChanged: (v) => _setSampleMode(v),
+                  ),
+                  const Hairline(),
+                  const SizedBox(height: Space.md),
+                  Text(
+                    'Hume·백엔드를 타지 않고 준비된 데이터로 화면을 봅니다. '
+                    '실제 통화가 열리지 않아 요금이 발생하지 않습니다. '
+                    '주소에 ?sample=1 을 붙여도 같습니다.',
+                    style: AppType.sans(
+                      size: AppType.labelSize,
+                      color: t.faint,
+                      height: 1.7,
+                    ),
+                  ),
+
                   const SizedBox(height: Space.xxxl),
                   const Hairline(),
                   _Row(label: '로그아웃', onTap: _signOut, chevron: false),
@@ -172,9 +192,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ],
     );
     if (!ok) return;
-    // TODO(app): DELETE /api/account → 204 뒤에 초기화한다.
+    // **서버가 지운 뒤에 기기를 비운다.** 순서를 뒤집으면 토큰이 없어져
+    // 삭제 요청을 다시 보낼 수도 없다.
+    //
+    // `kakaoAuthCode`를 함께 보내면 백엔드가 카카오 연결까지 끊는다
+    // (v1.6 §2-3). 지금은 인가 코드를 받아오는 흐름이 없어 보내지 않는다 —
+    // 그래도 응답은 204이고 데이터는 지워진다.
+    try {
+      await ref.read(journalRepositoryProvider).deleteAccount();
+    } on Object {
+      // 실패하면 기기를 비우지 않는다 — 서버에 남은 데이터를 지울 방법이
+      // 사라지기 때문이다.
+      if (mounted) _showDeleteFailed();
+      return;
+    }
     await ref.read(appSessionProvider).reset();
     if (mounted) context.go(Routes.onboarding);
+  }
+
+  void _showDeleteFailed() {
+    final t = context.tokens;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: t.lift,
+        content: Text(
+          '지금은 지울 수 없습니다. 잠시 후 다시 시도해 주세요.',
+          style: AppType.sans(size: AppType.captionSize, color: t.paper),
+        ),
+      ),
+    );
+  }
+
+  /// 샘플 모드 전환 — **불러온 데이터를 전부 버린다.**
+  ///
+  /// 출처가 바뀌었는데 캐시가 남으면 실제 데이터와 샘플이 한 화면에서
+  /// 섞인다. 그게 가장 위험한 상태다.
+  void _setSampleMode(bool on) {
+    ref.read(dataModeProvider.notifier).state =
+        on ? DataMode.sample : DataMode.live;
+    ref.invalidate(meProvider);
+    ref.invalidate(observationsProvider);
+    ref.invalidate(sessionsProvider);
+    ref.invalidate(trendProvider);
   }
 }
 

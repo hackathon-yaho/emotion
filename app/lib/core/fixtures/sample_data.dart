@@ -1,7 +1,8 @@
+import '../models/live_models.dart';
 import '../models/observation_models.dart';
 import '../models/record_models.dart';
+import '../models/session_models.dart';
 import '../models/trend_models.dart';
-import '../../shared/widgets/tag_gap_bars.dart';
 
 /// 화면을 그려 보기 위한 **샘플 데이터**.
 ///
@@ -204,15 +205,87 @@ abstract final class Sample {
     highlights: const [
       TrendHighlight(from: '2026-09-06', to: '2026-09-07', reason: 'gap_exceeded'),
     ],
+    // v1.4 §2-8 — 같은 응답에 실려 온다. 별도 호출이 아니다.
+    userAvgGap: 0.72,
+    tagGaps: const [
+      TagGap(tag: '회의', occurrences: 7, tagAvgGap: 1.31),
+      TagGap(tag: '주말', occurrences: 4, tagAvgGap: 1.16),
+      TagGap(tag: '야근', occurrences: 4, tagAvgGap: 0.98),
+      TagGap(tag: '팀장', occurrences: 3, tagAvgGap: 0.88),
+      TagGap(tag: '가족', occurrences: 4, tagAvgGap: 0.65),
+    ],
   );
 
-  static const userAvgGap = 0.72;
+  /// `GET /api/me` — 신규 계정이 아니라 **며칠 써 본 계정**이다. 샘플 화면이
+  /// 빈 상태로만 보이면 확인할 게 없다.
+  static final me = Me(
+    profileId: 'prof_sample',
+    joinedAt: DateTime.parse('2026-08-16T09:00:00Z'),
+    sessionCount: 12,
+    thresholdMode: 'personal',
+    demoMode: false,
+    openSession: null,
+  );
 
-  static const tagGaps = <TagGap>[
-    TagGap(tag: '회의', occurrences: 7, tagAvgGap: 1.31),
-    TagGap(tag: '주말', occurrences: 4, tagAvgGap: 1.16),
-    TagGap(tag: '야근', occurrences: 4, tagAvgGap: 0.98),
-    TagGap(tag: '팀장', occurrences: 3, tagAvgGap: 0.88),
-    TagGap(tag: '가족', occurrences: 4, tagAvgGap: 0.65),
-  ];
+  /// `POST /api/session/start` — **Hume 토큰이 가짜다.**
+  ///
+  /// 샘플 모드의 존재 이유가 여기다. 이 값으로는 EVI에 붙지 못하므로
+  /// 실수로 실제 통화가 열려 과금되는 일이 없다. 앱은 샘플 모드에서 EVI
+  /// 연결을 아예 시도하지 않는다.
+  static final sessionStart = SessionStart(
+    sessionId: '00000000-0000-4000-8000-000000000001',
+    humeAccessToken: 'sample-not-a-real-token',
+    humeTokenExpiresAt: DateTime.now().add(const Duration(minutes: 30)),
+    thresholdMode: 'personal',
+    gapThreshold: 0.90,
+    softWrapSec: 300,
+    hardCutSec: 420,
+    demoMode: true,
+    humeConfigId: 'sample-config',
+    livePollIntervalSec: 2,
+  );
+
+  static final sessionResume = SessionResume(
+    sessionId: '00000000-0000-4000-8000-000000000001',
+    humeAccessToken: 'sample-not-a-real-token',
+    resumedChatGroupId: 'sample-chat-group',
+    remainingSec: 282,
+    thresholdMode: 'personal',
+    gapThreshold: 0.90,
+    demoMode: true,
+    humeConfigId: 'sample-config',
+  );
+
+  /// 데모 모드 패널에 실리는 턴. 갭이 임계를 넘은 턴이라 **되묻는 상태**를
+  /// 확인할 수 있다 (FR-022).
+  static LiveTurn liveTurn(int index) => LiveTurn(
+        turnIndex: index,
+        textValence: 0.70,
+        voiceValence: -0.62,
+        gap: 1.32,
+        gapTriggered: true,
+      );
+
+  /// 기간별 추세. **7일은 30일에서 잘라 쓴다** — 표본을 따로 두면 두 화면이
+  /// 서로 다른 이야기를 하게 된다.
+  static Trend trendOf(String range) {
+    if (range == TrendRange.d7) {
+      final last7 = trend.points.length <= 7
+          ? trend.points
+          : trend.points.sublist(trend.points.length - 7);
+      final from = last7.first.date;
+      return Trend(
+        range: range,
+        timezone: trend.timezone,
+        points: last7,
+        // 7일 창 밖의 음영은 버린다 — 없는 구간을 그리면 안 된다.
+        highlights: trend.highlights
+            .where((h) => h.from.compareTo(from) >= 0)
+            .toList(growable: false),
+        userAvgGap: trend.userAvgGap,
+        tagGaps: trend.tagGaps,
+      );
+    }
+    return trend;
+  }
 }

@@ -89,9 +89,12 @@ class ApiClient {
   }) =>
       _send(() => _dio.delete<dynamic>(path), parse);
 
-  /// 본문 없는 204 응답용 (예: `DELETE /api/account`).
-  Future<void> deleteNoContent(String path) =>
-      _send<void>(() => _dio.delete<dynamic>(path), (_) {});
+  /// 204(본문 없음) 응답용.
+  ///
+  /// `body`는 `DELETE /api/account`처럼 **본문이 선택인** 경우에만 쓴다
+  /// (계약 v1.6 §2-3 — 카카오 연결 해제용 인가 코드).
+  Future<void> deleteNoContent(String path, {Object? body}) =>
+      _send<void>(() => _dio.delete<dynamic>(path, data: body), (_) {});
 
   Future<T> _send<T>(
     Future<Response<dynamic>> Function() call,

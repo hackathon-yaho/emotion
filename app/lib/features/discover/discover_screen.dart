@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/fixtures/sample_data.dart';
 import '../../core/models/observation_models.dart';
+import '../../core/models/paged.dart';
+import '../../core/providers.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/widgets/async_view.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/hairline.dart';
 import '../../shared/widgets/meta_row.dart';
@@ -22,18 +25,17 @@ import '../../shared/widgets/small_label.dart';
 /// 관찰이 0건이면 안내 문구만 띄우고 **가짜 관찰을 만들지 않는다** (FR-052).
 /// 빈 상태에는 **명조를 쓰지 않는다** — 명조는 실제로 발견된 문장에만 쓰는
 /// 서체다 (design-system §7-11).
-class DiscoverScreen extends StatefulWidget {
-  const DiscoverScreen({super.key, this.isEmpty = false, this.isLoading = false});
-
-  final bool isEmpty;
-  final bool isLoading;
+class DiscoverScreen extends ConsumerStatefulWidget {
+  const DiscoverScreen({super.key});
 
   @override
-  State<DiscoverScreen> createState() => _DiscoverScreenState();
+  ConsumerState<DiscoverScreen> createState() => _DiscoverScreenState();
 }
 
-class _DiscoverScreenState extends State<DiscoverScreen> {
+class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   /// 관찰당 1회, `agree`/`disagree`. **취소·이유 입력은 없다** (spec F7-08).
+  ///
+  /// 화면에 남기는 것은 눌린 상태뿐이고, 값은 서버가 기록한다.
   final _answers = <String, String>{};
 
   @override
@@ -59,8 +61,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Widget _body(BuildContext context) {
-    if (widget.isLoading) {
-      return const Column(
+    return AsyncView<Paged<Observation>>(
+      value: ref.watch(observationsProvider),
+      loading: const Column(
         children: [
           Hairline(),
           Padding(
@@ -74,27 +77,37 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           ),
           Hairline(),
         ],
-      );
-    }
-
-    if (widget.isEmpty) {
-      return const EmptyState(
+      ),
+      isEmpty: (d) => d.isEmpty,
+      empty: const EmptyState(
         message: '아직 발견한 것이 없습니다. 대화가 쌓이면 여기에 보입니다.',
         detail: '같은 이야기가 세 번 이상 나오고, 그때 목소리가 평소와 달라야 발견으로 칩니다.',
-      );
-    }
-
-    return Column(
-      children: [
-        for (final o in Sample.observations)
-          _ObservationRow(
-            observation: o,
-            answer: _answers[o.observationId],
-            onAnswer: (v) => setState(() => _answers[o.observationId] = v),
-          ),
-        const Hairline(),
-      ],
+      ),
+      onRetry: () => ref.invalidate(observationsProvider),
+      data: (d) => Column(
+        children: [
+          for (final o in d.items)
+            _ObservationRow(
+              observation: o,
+              answer: _answers[o.observationId],
+              onAnswer: (v) => _answer(o.observationId, v),
+            ),
+          const Hairline(),
+        ],
+      ),
     );
+  }
+
+  /// F7-08 — 누른 즉시 화면을 바꾸고 서버에 보낸다.
+  ///
+  /// **실패해도 되돌리지 않는다.** 피드백은 지표 수집이라(§1.4) 한 건이
+  /// 유실되는 것보다 사용자가 누른 것이 취소되는 편이 나쁘다.
+  void _answer(String observationId, String value) {
+    setState(() => _answers[observationId] = value);
+    ref
+        .read(journalRepositoryProvider)
+        .sendFeedback(observationId, agree: value == 'agree')
+        .ignore();
   }
 }
 

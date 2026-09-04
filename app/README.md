@@ -98,6 +98,58 @@ http://localhost:3000/
 - **카카오 SDK를 넣지 않습니다.** `kakao_flutter_sdk` 2.0.1은 웹에서 `loginWithKakaoAccount()`·`issueAccessToken()`이 전부 예외를 던지고, `authorize()`도 `window.location.href`로 페이지를 넘긴 뒤 빈 문자열을 돌려줍니다. 웹에서 SDK가 하는 일은 URL 조립뿐입니다
 - **경로 전략은 해시 라우팅을 유지합니다.** path 전략으로 바꾸면 Redirect URI를 다시 등록해야 하고 `404.html` 폴백도 필요해집니다
 
+## 데이터는 어디서 오나
+
+화면은 **`JournalRepository` 하나만** 봅니다. `Sample`도 `ApiClient`도 직접 보지 않습니다. 구현이 둘이라 화면 코드를 고치지 않고 갈아끼웁니다.
+
+| 모드 | 구현 | 무엇을 타나 |
+| --- | --- | --- |
+| `live` (기본) | `ApiJournalRepository` | 백엔드 (계약 §2) |
+| `sample` | `SampleJournalRepository` | **아무것도 안 탄다** — 준비된 데이터 |
+
+### 샘플 모드 — 있는 이유는 Hume 과금입니다
+
+**실제 Hume API를 켜 두고 테스트할 수 없습니다.** EVI는 통화 시간만큼 돈이 나가므로, 화면·흐름을 확인할 때마다 실제 세션을 열면 무료 한도가 개발 중에 사라집니다. 샘플 모드는
+
+- 백엔드가 없어도 **11개 화면이 다 그려지고**,
+- `startSession()`이 **가짜 Hume 토큰**(`sample-not-a-real-token`)을 주므로 앱이 EVI에 붙지 못하고 — 실수로 통화가 열릴 수 없습니다,
+- `live()`가 **대본대로** 12초 뒤 위기 신호를 올려 **S07을 실제 위기 발화 없이** 확인할 수 있습니다.
+
+켜는 방법 셋 중 아무거나 씁니다.
+
+```bash
+# ① 빌드 인자
+flutter run -d chrome --dart-define=SAMPLE_DATA=true
+```
+
+```
+② 주소에 붙이기 (배포된 URL에서도 됩니다 — 다시 빌드할 필요가 없습니다)
+   https://hackathon-yaho.github.io/emotion/?sample=1
+
+③ S06 설정 → 시연 → 샘플 데이터
+```
+
+**팀원이 백엔드 없이 전체 화면을 볼 때는 ②가 가장 빠릅니다.** 배포 워크플로는 repo variable `SAMPLE_DATA`를 읽으므로, 필요하면 배포 전체를 샘플로 돌릴 수도 있습니다.
+
+> **샘플 데이터를 발표 근거로 쓰지 않습니다** (PRD §12). 화면 확인·시연 리허설 전용입니다. 시뮬레이션 그래프는 "직접 만드신 거죠?" 한 마디에 발견 기능 전체를 연출로 격하시킵니다.
+
+### 프로바이더
+
+`core/providers.dart`가 단일 출처입니다. 화면은 `ref.watch`만 합니다.
+
+| 프로바이더 | 쓰는 화면 |
+| --- | --- |
+| `meProvider` | S01(이어하기 판단) |
+| `observationsProvider` | S01 · S03 |
+| `evidenceProvider(id)` | S03-1 |
+| `trendRangeProvider` · `trendProvider` | S04 |
+| `sessionsProvider` | S01 · S05 |
+| `sessionDetailProvider(id)` | S05-1 |
+| `activeSessionProvider` · `liveSignalProvider` | S02 |
+| `lastSessionEndProvider` | S02-1 |
+
+**로딩·빈 상태·오류는 `AsyncView`가 한 곳에서 처리합니다.** 특히 **오류를 빈 상태로 바꿔 말하지 않습니다** — "아직 발견한 것이 없습니다"는 사실 주장이라, 못 불러온 것을 그렇게 적으면 거짓이 됩니다.
+
 ## 구조
 
 ```
@@ -114,12 +166,18 @@ lib/
 │  ├─ network/endpoints.dart 계약서 §2 경로
 │  ├─ storage/token_storage.dart JWT · 온보딩 플래그 (secure storage)
 │  ├─ models/               계약서 §2 응답 타입 (null 규칙 포함)
-│  └─ providers.dart        Riverpod 프로바이더
-│  └─ fixtures/            화면용 샘플 데이터 (발표 근거로 쓰지 않는다)
+│  ├─ data/journal_repository.dart  화면이 데이터를 얻는 유일한 경로
+│  ├─ data/api_journal_repository.dart     실제 백엔드
+│  ├─ data/sample_journal_repository.dart  샘플 모드 (Hume·백엔드 안 탐)
+│  ├─ providers.dart        Riverpod 프로바이더 — 화면별 데이터
+│  └─ fixtures/             샘플 데이터 (발표 근거로 쓰지 않는다)
 ├─ features/                화면 11개 (S00~S07) — 전부 구현됨
 └─ shared/widgets/
+   ├─ async_view.dart       로딩·빈 상태·오류 한 곳에서
    ├─ two_line_chart.dart   두 선 그래프 · 날짜 축 · 범례 (F9-01·02)
    ├─ tag_gap_bars.dart     이야기별 갭 막대 (F9-03)
+   ├─ tab_pill.dart         하단 탭 알약 칩 (결정 24)
+   ├─ app_frame.dart        넓은 화면 폭 규칙 — 여기 한 곳에서만 (§2)
    ├─ ring_pair.dart        S02의 어긋난 두 링
    ├─ doubled_text.dart     「두 겹」 — 그림자 한 겹으로
    ├─ kakao_button.dart     카카오 규격 (우리 규칙의 예외)
@@ -152,8 +210,9 @@ lib/
 | 산세리프 서체 | 문서상 Pretendard지만 Google Fonts에 없어 **Noto Sans KR로 대체** 중입니다(캔버스와 동일). `fonts/`에 넣고 `pubspec.yaml`의 fonts 항목을 켠 뒤 `AppType.sans`만 바꾸면 전 화면에 적용됩니다 |
 | 제품 이름 | 미확정(PRD §14-6). Dart 패키지명 `voice_journal`, 번들 ID `com.hackathonyaho.voiceJournal`은 임시입니다. 확정되면 `main.dart`의 `title`과 `web/index.html`·`manifest.json`을 함께 고칩니다. **커스텀 도메인이 정해지면 백엔드에 알립니다** — 허용 오리진이 환경변수 한 줄이라 재배포 없이 들어갑니다 |
 | 카카오 로그인 | 흐름은 확정(인가 코드)이지만 **키가 없어 아직 구현하지 않았습니다.** `onboarding_screen.dart`는 여전히 TODO입니다. **변수명이 `KAKAO_JS_KEY`로 남을지 `KAKAO_REST_KEY`가 될지는 백엔드 확인 1건에 달려 있습니다** — 정해지면 `env.dart`와 `app-web.yml`을 같이 고칩니다 |
-| 데이터 연결 | 화면은 `core/fixtures/sample_data.dart`의 **샘플로 그립니다.** API가 붙으면 프로바이더로 바꿉니다 — 샘플은 발표 근거로 쓰지 않습니다(PRD §12) |
-| EVI 음성 | `web_socket_channel`·`record`·`audioplayers`를 넣어두었고 서비스는 아직 없습니다. 다음 작업입니다 |
+| ~~데이터 연결~~ | ✅ 해결 — 화면이 `JournalRepository`를 봅니다. 기본은 실제 API이고, 샘플은 **샘플 모드에서만** 나옵니다(위 「데이터는 어디서 오나」) |
+| 로그인 | 흐름은 확정(인가 코드)이고 **계약 v1.6 §2-1도 확정**인데 카카오 키가 없어 아직 구현하지 않았습니다. `POST /api/auth/kakao` 호출은 그래서 리포지토리에 없습니다 |
+| EVI 음성 | `web_socket_channel`·`record`·`audioplayers`를 넣어두었고 **서비스는 아직 없습니다.** 세션 수립·폴링·종료까지는 실제로 돌고, `humeAccessToken`으로 EVI에 붙는 것이 다음 작업입니다 |
 
 ## 디자인 캔버스
 

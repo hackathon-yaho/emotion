@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/fixtures/sample_data.dart';
 import '../../core/models/trend_models.dart';
+import '../../core/providers.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/widgets/async_view.dart';
 import '../../shared/widgets/doubled_text.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/hairline.dart';
@@ -22,23 +24,14 @@ import '../../shared/widgets/two_line_chart.dart';
 ///
 /// 제목에 **「두 겹」**을 쓴다 — 그래프의 두 선이 이미 두 겹이라 제목이 그것을
 /// 예고한다 (design-system §1).
-class TrendScreen extends StatefulWidget {
-  const TrendScreen({super.key, this.isEmpty = false, this.isLoading = false});
-
-  final bool isEmpty;
-  final bool isLoading;
+class TrendScreen extends ConsumerWidget {
+  const TrendScreen({super.key});
 
   @override
-  State<TrendScreen> createState() => _TrendScreenState();
-}
-
-class _TrendScreenState extends State<TrendScreen> {
-  String _range = TrendRange.d30;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = context.tokens;
-    final trend = Sample.trend;
+    final range = ref.watch(trendRangeProvider);
+    final trend = ref.watch(trendProvider);
 
     return ScreenScaffold(
       child: Column(
@@ -58,44 +51,59 @@ class _TrendScreenState extends State<TrendScreen> {
                   const DoubledText('말한 내용과 목소리'),
                   const SizedBox(height: Space.xl),
                   _RangePicker(
-                    current: _range,
-                    onPick: (r) => setState(() => _range = r),
+                    current: range,
+                    onPick: (r) =>
+                        ref.read(trendRangeProvider.notifier).state = r,
                   ),
                   const SizedBox(height: Space.xl),
 
-                  if (widget.isLoading)
-                    const SkeletonLines(widths: [1, 1, 1, 1], gap: 50)
-                  else if (widget.isEmpty)
-                    const EmptyState(
+                  AsyncView<Trend>(
+                    value: trend,
+                    loading: const SkeletonLines(widths: [1, 1, 1, 1], gap: 50),
+                    isEmpty: (d) => d.points.isEmpty,
+                    empty: const EmptyState(
                       message:
                           '아직 그릴 기록이 없습니다.\n대화가 쌓이면 말한 내용과 목소리를 나란히 보여드립니다.',
-                    )
-                  else ...[
-                    TwoLineChart(
-                      points: trend.points,
-                      highlights: trend.highlights,
-                      onHighlightTap: () => context.push(
-                        Routes.recordDetailOf(Sample.sessions.first.sessionId),
-                      ),
                     ),
-                    ChartDateAxis(points: trend.points),
-                    const SizedBox(height: Space.xl),
-                    const ChartLegend(showShade: true),
-                    const SizedBox(height: Space.lg),
-                    Text(
-                      '음영 구간에서 두 선이 가장 크게 벌어졌습니다. 눌러서 그날 대화를 볼 수 있습니다.',
-                      style: AppType.sans(
-                        size: AppType.captionSize,
-                        color: t.faint,
-                        height: 1.7,
-                      ),
-                    ),
+                    onRetry: () => ref.invalidate(trendProvider),
+                    data: (d) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TwoLineChart(
+                          points: d.points,
+                          highlights: d.highlights,
+                          // 음영 구간의 **시작 날짜**로 간다. 계약은 세션 id를
+                          // 주지 않으므로 날짜로 상세를 찾는다.
+                          onHighlightTap: () => _openHighlight(context, ref, d),
+                        ),
+                        ChartDateAxis(points: d.points),
+                        const SizedBox(height: Space.xl),
+                        const ChartLegend(showShade: true),
+                        const SizedBox(height: Space.lg),
+                        Text(
+                          '음영 구간에서 두 선이 가장 크게 벌어졌습니다. 눌러서 그날 대화를 볼 수 있습니다.',
+                          style: AppType.sans(
+                            size: AppType.captionSize,
+                            color: t.faint,
+                            height: 1.7,
+                          ),
+                        ),
 
-                    const SizedBox(height: Space.xxl),
-                    const Hairline(),
-                    const SizedBox(height: Space.xl),
-                    const _TagGapSection(),
-                  ],
+                        // F9-03은 조건을 만족하는 태그가 없으면 `[]`로 온다.
+                        // **없으면 절을 통째로 그리지 않는다** — 빈 막대를
+                        // 그리지 않는다 (§7 결정 11).
+                        if (d.tagGaps.isNotEmpty && d.userAvgGap != null) ...[
+                          const SizedBox(height: Space.xxl),
+                          const Hairline(),
+                          const SizedBox(height: Space.xl),
+                          _TagGapSection(
+                            rows: d.tagGaps,
+                            userAvgGap: d.userAvgGap!,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -106,13 +114,29 @@ class _TrendScreenState extends State<TrendScreen> {
   }
 }
 
+/// 음영 구간을 눌렀을 때 — **그 구간의 첫 날 기록으로** 간다.
+///
+/// 계약 §2-8의 `highlights`는 세션 id를 주지 않는다. 날짜로 목록에서 찾고,
+/// 못 찾으면 아무 데도 가지 않는다 — 엉뚱한 대화를 열면 근거가 거짓이 된다.
+Future<void> _openHighlight(BuildContext context, WidgetRef ref, Trend d) async {
+  if (d.highlights.isEmpty) return;
+  final day = d.highlights.first.from;
+  final list = await ref.read(journalRepositoryProvider).sessions();
+  final match = list.items.where((s) => s.startedAt.toIso8601String().startsWith(day));
+  if (match.isEmpty || !context.mounted) return;
+  context.push(Routes.recordDetailOf(match.first.sessionId));
+}
+
 /// F9-03 이야기별 갭.
 ///
-/// 데이터 경로가 계약에 아직 없다 — `docs/request/backend/tag-gap-endpoint.md`.
+/// `GET /api/trend`의 `tagGaps`·`userAvgGap`으로 온다 (계약 v1.4 §2-8).
 /// 관찰의 evidence로는 **3회 이상이지만 1.5배 미만인 태그**가 오지 않아
-/// 막대의 비교 대상이 사라진다.
+/// 막대의 비교 대상이 사라진다 — 그래서 별도 필드가 필요했다.
 class _TagGapSection extends StatelessWidget {
-  const _TagGapSection();
+  const _TagGapSection({required this.rows, required this.userAvgGap});
+
+  final List<TagGap> rows;
+  final double userAvgGap;
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +149,7 @@ class _TagGapSection extends StatelessWidget {
           children: [
             const Expanded(child: SmallLabel('이야기별 갭')),
             Text(
-              '내 평균 ${Sample.userAvgGap.toStringAsFixed(2)} · 점선은 ×1.5',
+              '내 평균 ${userAvgGap.toStringAsFixed(2)} · 점선은 ×1.5',
               style: AppType.sans(
                 size: AppType.labelSize,
                 color: t.faint,
@@ -135,10 +159,7 @@ class _TagGapSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: Space.lg),
-        const TagGapBars(
-          rows: Sample.tagGaps,
-          userAvgGap: Sample.userAvgGap,
-        ),
+        TagGapBars(rows: rows, userAvgGap: userAvgGap),
         const SizedBox(height: Space.lg),
         Text(
           '세 번 이상 나온 이야기만 셉니다. 점선을 넘으면 발견이 됩니다.',

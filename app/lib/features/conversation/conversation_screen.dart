@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/models/session_models.dart';
+import '../../core/providers.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
@@ -34,7 +37,7 @@ enum TalkState {
 /// 간격·크기·투명도만 상태에 반응한다 — 색이 감정에 따라 변하면 사용자가
 /// "화면이 어두워졌네"로 읽어 사실상 갭 노출이 된다(FR-030).
 /// `demoMode == true`일 때만 예외다.
-class ConversationScreen extends StatefulWidget {
+class ConversationScreen extends ConsumerStatefulWidget {
   const ConversationScreen({
     super.key,
     this.initial = TalkState.listening,
@@ -54,10 +57,10 @@ class ConversationScreen extends StatefulWidget {
   final bool openCrisis;
 
   @override
-  State<ConversationScreen> createState() => _ConversationScreenState();
+  ConsumerState<ConversationScreen> createState() => _ConversationScreenState();
 }
 
-class _ConversationScreenState extends State<ConversationScreen> {
+class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   late TalkState _state = widget.initial;
 
   @override
@@ -68,6 +71,86 @@ class _ConversationScreenState extends State<ConversationScreen> {
         if (mounted) onCrisisSignal(true);
       });
     }
+    // 상태를 고정해 보는 프로토타입 모드에서는 세션을 열지 않는다.
+    if (!widget.showStatePicker) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+    }
+  }
+
+  /// 세션 시작 (§2-4) 또는 이어하기 (§2-5-1).
+  ///
+  /// **EVI 연결은 아직 없다.** 여기서 받은 `humeAccessToken`으로 붙는 것이
+  /// 다음 작업이고, 지금은 세션 수립·폴링·종료까지만 실제로 돈다. 샘플
+  /// 모드에서는 토큰이 가짜라 붙을 수도 없다 — 의도한 것이다.
+  Future<void> _open() async {
+    final repo = ref.read(journalRepositoryProvider);
+    ref.read(inConversationProvider.notifier).state = true;
+    setState(() => _state = TalkState.connecting);
+    try {
+      final open = await repo.me().then((m) => m.openSession);
+      if (open != null) {
+        final r = await repo.resumeSession(open.sessionId);
+        if (!mounted) return;
+        // 이어하기는 새 7분을 주지 않는다 (NFR-06) — 남은 시간을 그대로 쓴다.
+        ref.read(activeSessionProvider.notifier).state = _asStart(r);
+        setState(() => _state = TalkState.resumed);
+        return;
+      }
+      final s = await repo.startSession();
+      if (!mounted) return;
+      ref.read(activeSessionProvider.notifier).state = s;
+      setState(() => _state = TalkState.listening);
+    } catch (_) {
+      if (!mounted) return;
+      // 원인별 문구는 F2-04 — 여기서는 "시작할 수 없다"로 모은다.
+      setState(() => _state = TalkState.cannotStart);
+    }
+  }
+
+  /// 이어하기 응답을 세션 값으로 맞춘다 — 폴링 간격은 §2-5-1에 없어 기본 2초.
+  SessionStart _asStart(SessionResume r) => SessionStart(
+        sessionId: r.sessionId,
+        humeAccessToken: r.humeAccessToken,
+        humeTokenExpiresAt: DateTime.now().add(const Duration(minutes: 30)),
+        thresholdMode: r.thresholdMode,
+        gapThreshold: r.gapThreshold,
+        softWrapSec: 300,
+        hardCutSec: r.remainingSec,
+        demoMode: r.demoMode,
+        humeConfigId: r.humeConfigId,
+        livePollIntervalSec: 2,
+      );
+
+  /// 대화 마치기 (§2-6) — 요약을 들고 S02-1로 간다.
+  Future<void> _end() async {
+    final session = ref.read(activeSessionProvider);
+    ref.read(inConversationProvider.notifier).state = false;
+    if (session == null) {
+      if (mounted) context.go(Routes.summary);
+      return;
+    }
+    try {
+      final end = await ref
+          .read(journalRepositoryProvider)
+          .endSession(session.sessionId);
+      ref.read(lastSessionEndProvider.notifier).state = end;
+    } catch (_) {
+      // 종료 호출이 실패해도 화면은 넘긴다 — 대화는 이미 끝났고, 서버는
+      // 타임아웃으로 정리한다 (§2-6 `endReason: timeout`).
+    }
+    ref.read(activeSessionProvider.notifier).state = null;
+    // 기록·추세가 한 건 늘었다.
+    ref.invalidate(sessionsProvider);
+    ref.invalidate(trendProvider);
+    ref.invalidate(meProvider);
+    if (mounted) context.go(Routes.summary);
+  }
+
+  @override
+  void dispose() {
+    // 화면을 벗어나면 폴링이 멈추도록 세션을 놓는다.
+    ref.read(inConversationProvider.notifier).state = false;
+    super.dispose();
   }
 
   /// S07은 `crisisDetected`의 **false → true 전이에서 한 번만** 띄운다
@@ -150,6 +233,12 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Widget _body(BuildContext context, {required bool sidePanel}) {
     final t = context.tokens;
     final r = _ring;
+
+    // 위기 신호 — 전이에서 한 번만 (§2-13).
+    ref.listen(liveSignalProvider, (_, next) {
+      final v = next.valueOrNull;
+      if (v != null) onCrisisSignal(v.crisisDetected);
+    });
 
     final main = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -258,13 +347,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
         ),
 
         if (r.cta == null)
-          OutlineAction(
-            label: '대화 마치기',
-            height: 56,
-            onPressed: () => context.go(Routes.summary),
-          )
+          OutlineAction(label: '대화 마치기', height: 56, onPressed: _end)
         else
-          FilledAction(label: r.cta!, height: 56, onPressed: () {}),
+          FilledAction(label: r.cta!, height: 56, onPressed: _open),
         const SizedBox(height: 40),
       ],
     );
