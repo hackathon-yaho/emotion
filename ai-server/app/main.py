@@ -27,7 +27,7 @@ from .llm import batch as batch_call
 from .llm import respond as respond_call
 from .rules import crisis, gap as gap_rules, tags as tag_rules, valence
 from .session import SessionStore, SessionUnauthorized
-from .telemetry import configure, error_log, turn_log
+from .telemetry import configure, error_log, session_ref, turn_log
 
 app = FastAPI(title="emotion ai-server", version="0.1.0")
 
@@ -98,7 +98,7 @@ async def chat_completions(
             custom_session_id, history_user_turns=body.user_turn_count()
         )
     except SessionUnauthorized as exc:
-        error_log(f"clm_unauthorized:{exc.reason}", sid=custom_session_id)
+        error_log(f"clm_unauthorized:{exc.reason}", sessionRef=session_ref(custom_session_id))
         raise HTTPException(status_code=401, detail=exc.reason) from exc
 
     ctx_ms = int((time.monotonic() - started) * 1000)
@@ -121,7 +121,7 @@ async def chat_completions(
             known_tags=known_tags,
             model=_cfg.ai_model_analyze,
             timeout_ms=_cfg.ai_analyze_timeout_ms,
-            api_key=_cfg.anthropic_api_key,
+            api_key=_cfg.openai_api_key,
         )
         if not analysis.degraded:
             if len(_analyze_cache) >= ANALYZE_CACHE_MAX:
@@ -178,7 +178,7 @@ async def chat_completions(
     )
 
     turn_log(
-        sid=custom_session_id,
+        sessionRef=session_ref(custom_session_id),
         turnIndex=user_idx,
         ctxMs=ctx_ms,
         analyzeMs=analyze_ms,
@@ -208,7 +208,7 @@ async def chat_completions(
                 flags=flags,
                 model=_cfg.ai_model_respond,
                 effort=_cfg.ai_respond_effort,
-                api_key=_cfg.anthropic_api_key,
+                api_key=_cfg.openai_api_key,
             ):
                 collected.append(piece)
                 yield sse.content_chunk(custom_session_id, piece)
@@ -251,7 +251,7 @@ async def observations(
             payload=payload,
             model=_cfg.ai_model_observe,
             effort=_cfg.ai_observe_effort,
-            api_key=_cfg.anthropic_api_key,
+            api_key=_cfg.openai_api_key,
         )
     except batch_call.Rejected as exc:
         return JSONResponse(
@@ -271,7 +271,7 @@ async def summaries(
         summary = await batch_call.summarize(
             turns=payload.get("turns") or [],
             model=_cfg.ai_model_summary,
-            api_key=_cfg.anthropic_api_key,
+            api_key=_cfg.openai_api_key,
         )
     except batch_call.Rejected as exc:
         return JSONResponse(

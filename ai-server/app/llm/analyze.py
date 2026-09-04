@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -94,26 +95,26 @@ async def run(
         if prompts_dir
         else llm.system_prompt("analyze")
     )
-    kwargs = llm.build_kwargs(model=model, max_tokens=400, temperature=0.0)
-
-    import json as _json
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+    ]
+    kwargs = llm.build_kwargs(
+        model=model, max_tokens=400, temperature=0.0, json_output=True
+    )
 
     async def _call() -> Analysis:
         try:
-            msg = await llm.client(api_key).messages.create(
-                system=system,
-                messages=[
-                    {"role": "user", "content": _json.dumps(payload, ensure_ascii=False)}
-                ],
-                **kwargs,
-            )
+            completion = await llm.create(messages, kwargs, api_key)
         except llm.LLMRefusal:
             return Analysis.empty("refusal")
-        return parse(llm.parse_json(llm.text_of(msg)))
+        return parse(llm.parse_json(llm.text_of(completion)))
 
     try:
         return await asyncio.wait_for(_call(), timeout=timeout_ms / 1000)
     except asyncio.TimeoutError:
         return Analysis.empty("timeout")
+    except llm.LLMRefusal:
+        return Analysis.empty("refusal")
     except Exception:
         return Analysis.empty("failed")

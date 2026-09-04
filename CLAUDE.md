@@ -81,7 +81,7 @@ git pull && grep -L "상태: ✅" docs/request/{내 역할}/*.md   # README.md�
 ## 현재 상태 (2026-09-04)
 
 - **앱 프레임워크 확정(2026-09-03)**: **Flutter — 웹·모바일 앱 모두 지원, 배포·제출·시연은 웹.** 빌드·렌더링·EVI 세션 수립까지 실측했고 **마이크 음성 왕복은 미검증**이다 — 근거와 전환 조건은 PRD §14-4
-- **AI 스택 확정(2026-09-03)**: **Python 3.12 / FastAPI / Anthropic SDK.** 모델은 환경변수(분석 `claude-haiku-4-5` · 응답 `claude-sonnet-5` · 문장화 `claude-opus-5`, TC-12 후 조정). 설계 단일 출처 `docs/02-architecture/ai-pipeline.md`
+- **AI 스택 확정(2026-09-03)**: **Python 3.12 / FastAPI / OpenAI SDK**(LLM 벤더는 2026-09-05 Anthropic에서 교체). 모델은 환경변수(분석 `gpt-5.6-luna` · 응답 `gpt-5.6-terra` · 관찰 `gpt-5.6-sol` · 요약 `gpt-5.6-luna`, TC-12 후 조정). 설계 단일 출처 `docs/02-architecture/ai-pipeline.md`
 - **착수 전 확정 항목**: ~~매핑표(§14-1)~~ ✅ · ~~위기 키워드(§14-2)~~ ✅ (`ai-server/rules/`) · Hume 플랜 실측(§14-3, 백엔드) · 고정 임계값(§14-5) — 절차 확정, 수치는 20쌍 측정 후
 - **누락 문서 3개**: `decisions.md`, `voice-emotion-stack-options.md`, `selected-topic.md` — PRD가 참조하지만 저장소에 없음. `docs/00-context/`에 올릴 것
 - **계약은 v1.4(2026-09-04).** `api-contract.md`가 인터페이스 단일 출처이며, 변경 이력 표에 v1.0~v1.4의 무엇을 왜 바꿨는지가 있다
@@ -89,6 +89,6 @@ git pull && grep -L "상태: ✅" docs/request/{내 역할}/*.md   # README.md�
   - `request/ai/integration-test-path.md` (백엔드 → AI) — 양쪽이 로컬이면 AI서버가 백엔드에 도달하지 못해 통합 검증이 성립하지 않는다. 임시 터널로 뚫을 시점·순서 협의. **단위 개발은 안 막는다**
   - `request/ai/turn-index-numbering.md` (백엔드 → AI, 2026-09-04) — 이어하기 재연결 후 `turnIndex` 채번. **유실 자체는 백엔드가 `occurred_at` 판별로 이미 막았고**, 남은 확인은 `occurredAt`이 발화 시각이며 재시도에서 불변인지다(그 가드의 유일한 전제)
 - **`ai-server/` 엔드포인트 4종 구현 완료(2026-09-05). 테스트 161건 통과** — `/chat/completions`(Hume CLM, SSE) · `/internal/observations` · `/internal/summaries` · `/healthz`. 규칙 계층·세션 캐시·턴 적재·LLM 호출·로깅이 전부 서 있다
-- **다만 실제 연결은 셋 다 미검증이다** — Hume(Config 없음) · Anthropic(키 없음) · 백엔드(터널 전). 목으로만 확인돼 있다
+- **다만 실제 연결은 셋 다 미검증이다** — Hume(Config 없음) · OpenAI(키 없음) · 백엔드(터널 전). 목으로만 확인돼 있다
 - `ai-server/`에는 프롬프트 4종(analyze·respond·observe·summary)·규칙 데이터 4종·내부 API 고정 JSON 10건(`eval/fixtures/internal/`)·`Makefile`이 있다
 - **AI서버 통합 준비 목표는 9/6**이다(`response/backend/integration-test-path.md`). 9/5 `app/rules/` 순수 함수 + 테스트 → 9/6 세션 조회·CLM SSE·턴 적재

@@ -3,9 +3,15 @@
 설계: docs/02-architecture/ai-pipeline.md §2.3·§2.5·§8
 
 **LLM SDK를 import하는 곳은 `app/llm/` 안뿐이다.** 밖에서 import하면 리뷰에서 반려한다
-(ai-server/README.md 경계). 그래야 "어디서 모델을 부르는가"가 한 곳으로 모인다.
+(ai-server/README.md 경계). 벤더를 바꿀 때 고쳐야 하는 범위가 이 폴더로 한정된다 —
+2026-09-05에 Anthropic에서 OpenAI로 옮길 때 실제로 그랬다.
 
 프롬프트 전문은 `prompts/*.system.md`가 단일 출처다. 문서에는 요지만 둔다(PRD §9.3).
+
+## 파라미터를 방어적으로 다루는 이유
+
+모델마다 받는 파라미터가 다르고 문서에 다 적혀 있지도 않다. 그래서 **거부당하면 한 번
+배우고 다시 붙이지 않는다.** 첫 호출에서 400을 맞아도 대화가 죽지 않는다.
 """
 
 from __future__ import annotations
@@ -16,28 +22,28 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI, BadRequestError
 
-from ..telemetry import error_log
+from ..telemetry import error_log, log
 
 DEFAULT_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
 
-# sonnet-5·opus-5는 샘플링 파라미터를 받지 않는다(400). haiku-4-5는 받는다.
-_NO_SAMPLING = ("sonnet-5", "opus-5")
-
-# effort 파라미터를 서버가 거부하면 한 번만 배우고 다시 붙이지 않는다.
-_effort_supported = True
+# 서버가 거부한 파라미터. 프로세스 수명 동안 기억해 다시 붙이지 않는다.
+_unsupported: set[str] = set()
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
+
+# 400 메시지에서 문제 파라미터를 찾을 때 볼 후보들.
+_TUNABLE = ("reasoning_effort", "temperature", "response_format", "max_completion_tokens")
 
 
 class LLMRefusal(Exception):
     """모델이 응답을 거부했다. 발화 내용을 담지 않는다."""
 
 
-@lru_cache(maxsize=1)
-def client(api_key: str = "") -> AsyncAnthropic:
-    return AsyncAnthropic(api_key=api_key) if api_key else AsyncAnthropic()
+@lru_cache(maxsize=4)
+def client(api_key: str = "") -> AsyncOpenAI:
+    return AsyncOpenAI(api_key=api_key) if api_key else AsyncOpenAI()
 
 
 @lru_cache(maxsize=16)
@@ -54,38 +60,67 @@ def build_kwargs(
     max_tokens: int,
     temperature: float | None = None,
     effort: str | None = None,
+    json_output: bool = False,
 ) -> dict[str, Any]:
-    """모델별로 받는 파라미터가 달라서 여기서 갈라 준다."""
-    kwargs: dict[str, Any] = {"model": model, "max_tokens": max_tokens}
-    if temperature is not None and not any(m in model for m in _NO_SAMPLING):
+    """호출 파라미터. 이미 거부당한 것은 처음부터 붙이지 않는다."""
+    kwargs: dict[str, Any] = {"model": model}
+    if "max_completion_tokens" not in _unsupported:
+        kwargs["max_completion_tokens"] = max_tokens
+    else:
+        kwargs["max_tokens"] = max_tokens
+    if temperature is not None and "temperature" not in _unsupported:
         kwargs["temperature"] = temperature
-    if effort and _effort_supported:
-        kwargs["extra_body"] = {"output_config": {"effort": effort}}
+    if effort and "reasoning_effort" not in _unsupported:
+        kwargs["reasoning_effort"] = effort
+    if json_output and "response_format" not in _unsupported:
+        kwargs["response_format"] = {"type": "json_object"}
     return kwargs
 
 
-def drop_effort(kwargs: dict[str, Any]) -> dict[str, Any]:
-    """400을 맞으면 effort를 빼고 한 번 더 시도한다. 이후 호출은 아예 안 붙인다."""
-    global _effort_supported
-    _effort_supported = False
-    out = dict(kwargs)
-    body = out.get("extra_body")
-    if isinstance(body, dict):
-        body.pop("output_config", None)
-        if not body:
-            out.pop("extra_body")
+def _offending_param(message: str) -> str | None:
+    lowered = message.lower()
+    for name in _TUNABLE:
+        if name in lowered:
+            return name
+    return None
+
+
+def learn_unsupported(exc: BadRequestError, kwargs: dict[str, Any]) -> dict[str, Any] | None:
+    """400을 보고 문제 파라미터를 빼낸다. 뺄 게 없으면 None.
+
+    모델 라인업이 바뀌어도 서버가 죽지 않게 하려는 장치다. 어떤 파라미터가 거부됐는지만
+    로그에 남기고, 요청 본문은 남기지 않는다.
+    """
+    name = _offending_param(str(exc))
+    if name is None or name not in kwargs:
+        return None
+    _unsupported.add(name)
+    log("llm_param_dropped", status=name)
+    out = {k: v for k, v in kwargs.items() if k != name}
+    if name == "max_completion_tokens":
+        out["max_tokens"] = kwargs[name]
     return out
 
 
-def text_of(message: Any) -> str:
+async def create(messages: list[dict[str, Any]], kwargs: dict[str, Any], api_key: str):
+    """비스트리밍 호출. 파라미터가 거부되면 한 번만 고쳐서 다시 시도한다."""
+    try:
+        return await client(api_key).chat.completions.create(messages=messages, **kwargs)
+    except BadRequestError as exc:
+        retry = learn_unsupported(exc, kwargs)
+        if retry is None:
+            raise
+        return await client(api_key).chat.completions.create(messages=messages, **retry)
+
+
+def text_of(completion: Any) -> str:
     """응답에서 텍스트만 뽑는다. 거부는 예외로 올린다."""
-    if getattr(message, "stop_reason", None) == "refusal":
+    choice = completion.choices[0]
+    if getattr(choice.message, "refusal", None):
         raise LLMRefusal("refusal")
-    parts = []
-    for block in getattr(message, "content", []) or []:
-        if getattr(block, "type", None) == "text":
-            parts.append(block.text)
-    return "".join(parts).strip()
+    if getattr(choice, "finish_reason", None) == "content_filter":
+        raise LLMRefusal("content_filter")
+    return (choice.message.content or "").strip()
 
 
 def parse_json(raw: str) -> dict[str, Any] | None:

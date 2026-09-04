@@ -10,11 +10,12 @@ from app.backend_client import BackendClient, build_turn_payload
 from app.llm import analyze as analyze_call
 from app.llm import client as llm
 from app.llm import respond as respond_call
-from app.telemetry import log, turn_log
+from app.telemetry import log, session_ref, turn_log
 
 BASE = "http://backend.test"
 URL = f"{BASE}/internal/turns"
 SID = "550e8400-e29b-41d4-a716-446655440000"
+REF = session_ref(SID)
 
 
 def payload(**kw):
@@ -119,23 +120,54 @@ def test_응답_메시지에_프로소디가_섞이면_막는다():
         )
 
 
+def test_시스템_프롬프트가_맨_앞에_붙는다():
+    msgs = respond_call.build_messages(
+        [{"role": "user", "content": "안녕"}], {"crisis": False}, "너는 …"
+    )
+    assert msgs[0]["role"] == "system"
+    assert msgs[-1]["content"].startswith("[상태]")
+
+
 # ── 모델별 파라미터 (§2.5) ────────────────────────────────────────
 
 
-def test_sonnet은_temperature를_받지_않는다():
-    """sonnet-5·opus-5에 샘플링 파라미터를 보내면 400이 난다."""
-    k = llm.build_kwargs(model="claude-sonnet-5", max_tokens=300, temperature=0.0)
-    assert "temperature" not in k
-
-
-def test_haiku는_temperature를_받는다():
-    k = llm.build_kwargs(model="claude-haiku-4-5", max_tokens=400, temperature=0.0)
+def test_기본_파라미터가_붙는다():
+    k = llm.build_kwargs(
+        model="gpt-5.6-luna", max_tokens=400, temperature=0.0, effort="low",
+        json_output=True,
+    )
+    assert k["model"] == "gpt-5.6-luna"
+    assert k["max_completion_tokens"] == 400
     assert k["temperature"] == 0.0
+    assert k["reasoning_effort"] == "low"
+    assert k["response_format"] == {"type": "json_object"}
 
 
-def test_effort는_extra_body로_간다():
-    k = llm.build_kwargs(model="claude-sonnet-5", max_tokens=300, effort="low")
-    assert k["extra_body"]["output_config"]["effort"] == "low"
+def test_거부당한_파라미터를_빼고_다시_만든다():
+    """모델 라인업이 바뀌어도 첫 호출의 400으로 서버가 죽지 않아야 한다."""
+    from openai import BadRequestError
+
+    kwargs = llm.build_kwargs(model="m", max_tokens=300, effort="low")
+    exc = BadRequestError.__new__(BadRequestError)
+    Exception.__init__(exc, "Unsupported parameter: 'reasoning_effort' is not supported")
+
+    retry = llm.learn_unsupported(exc, kwargs)
+    assert retry is not None and "reasoning_effort" not in retry
+
+    # 한 번 배우면 다음부터는 처음부터 안 붙인다
+    again = llm.build_kwargs(model="m", max_tokens=300, effort="low")
+    assert "reasoning_effort" not in again
+    llm._unsupported.discard("reasoning_effort")
+
+
+def test_모르는_400은_그대로_올린다():
+    """아무 파라미터나 빼면 원인을 못 찾는다."""
+    from openai import BadRequestError
+
+    kwargs = llm.build_kwargs(model="m", max_tokens=300)
+    exc = BadRequestError.__new__(BadRequestError)
+    Exception.__init__(exc, "insufficient_quota")
+    assert llm.learn_unsupported(exc, kwargs) is None
 
 
 # ── 분석 결과 파싱 (§2.3) ─────────────────────────────────────────
@@ -172,22 +204,55 @@ def test_같은_발화는_같은_캐시_키다():
 
 def test_전사는_로그에_실리지_않는다():
     """정책이 아니라 장치다. 실수로 넘겨도 버려진다."""
-    out = turn_log(sid=SID, turnIndex=3, transcript="오늘 완전 괜찮았어요")
+    out = turn_log(sessionRef=REF, turnIndex=3, transcript="오늘 완전 괜찮았어요")
     assert "transcript" not in out
 
 
 def test_화이트리스트에_없는_필드는_버린다():
-    out = log("test", sid=SID,매칭된표현="죽고싶")
-    assert set(out) <= {"event", "sid"}
+    out = log("test", sessionRef=REF, 매칭된표현="죽고싶")
+    assert set(out) <= {"event", "sessionRef"}
 
 
 def test_허용된_지표는_남는다():
-    out = turn_log(sid=SID, gap=1.32, gapTriggered=True, crisisBy="rule")
+    out = turn_log(sessionRef=REF, gap=1.32, gapTriggered=True, crisisBy="rule")
     assert out["gap"] == 1.32 and out["crisisBy"] == "rule"
 
 
 def test_오류_로그에도_발화가_없다():
     from app.telemetry import error_log
 
-    out = error_log("analyze_timeout", sid=SID, transcript="비밀")
+    out = error_log("analyze_timeout", sessionRef=REF, transcript="비밀")
     assert "transcript" not in out and out["reason"] == "analyze_timeout"
+
+
+# ── sessionId는 비밀과 동급이다 (계약 §1-1) ──────────────────────
+
+
+def test_sessionId를_어떤_이름으로도_로그에_못_넣는다():
+    """이 값이 곧 CLM 인증 수단이다. 로그를 본 사람이 그 세션인 척 CLM을 부를 수 있다."""
+    out = log(
+        "test",
+        sid=SID,
+        sessionId=SID,
+        session_id=SID,
+        custom_session_id=SID,
+        customSessionId=SID,
+    )
+    assert SID not in json.dumps(out, ensure_ascii=False)
+    assert set(out) == {"event"}
+
+
+def test_sessionRef는_원본을_복원할_수_없다():
+    ref = session_ref(SID)
+    assert SID not in ref
+    assert len(ref) == 8
+
+
+def test_같은_세션은_같은_참조를_갖는다():
+    """로그·오류를 한 세션으로 묶는 데는 이걸로 충분하다."""
+    assert session_ref(SID) == session_ref(SID)
+    assert session_ref(SID) != session_ref("다른-세션-아이디")
+
+
+def test_세션이_없으면_대시다():
+    assert session_ref(None) == "-" and session_ref("") == "-"

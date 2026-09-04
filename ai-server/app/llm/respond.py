@@ -12,7 +12,10 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, AsyncIterator
+
+from openai import BadRequestError
 
 from ..telemetry import error_log
 from . import client as llm
@@ -48,24 +51,35 @@ def build_flags(
 
 
 def build_messages(
-    history: list[dict[str, str]], flags: dict[str, Any]
+    history: list[dict[str, str]], flags: dict[str, Any], system: str = ""
 ) -> list[dict[str, str]]:
-    """대화 이력(텍스트만) + 플래그 블록.
+    """시스템 프롬프트 + 대화 이력(텍스트만) + 플래그 블록.
 
     플래그는 마지막 user 메시지 뒤에 별도 블록으로 붙인다. 이력 자체를 건드리면
     다음 턴에 Hume이 보내는 이력과 어긋난다.
     """
-    import json as _json
-
     llm.assert_no_prosody(history)
-    messages = list(history)
+    messages: list[dict[str, str]] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.extend(history)
     messages.append(
-        {
-            "role": "user",
-            "content": "[상태]\n" + _json.dumps(flags, ensure_ascii=False),
-        }
+        {"role": "user", "content": "[상태]\n" + json.dumps(flags, ensure_ascii=False)}
     )
     return messages
+
+
+async def _iter(messages: list[dict[str, str]], kwargs: dict[str, Any], api_key: str):
+    stream = await llm.client(api_key).chat.completions.create(
+        messages=messages, stream=True, **kwargs
+    )
+    async for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        piece = getattr(delta, "content", None)
+        if piece:
+            yield piece
 
 
 async def stream(
@@ -83,32 +97,35 @@ async def stream(
         if prompts_dir
         else llm.system_prompt("respond")
     )
-    messages = build_messages(history, flags)
+    messages = build_messages(history, flags, system)
     kwargs = llm.build_kwargs(model=model, max_tokens=300, effort=effort)
 
+    sent = False
     try:
-        async with llm.client(api_key).messages.stream(
-            system=system, messages=messages, **kwargs
-        ) as s:
-            async for chunk in s.text_stream:
-                if chunk:
-                    yield chunk
+        async for piece in _iter(messages, kwargs, api_key):
+            sent = True
+            yield piece
         return
-    except TypeError:
-        # effort를 서버가 안 받는 경우. 한 번만 배우고 다시 시도한다.
-        kwargs = llm.drop_effort(kwargs)
+    except BadRequestError as exc:
+        if sent:
+            error_log("respond_failed_midstream")
+            return
+        retry = llm.learn_unsupported(exc, kwargs)
+        if retry is None:
+            error_log("respond_bad_request")
+            yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
+            return
+        kwargs = retry
     except Exception:
-        error_log("respond_failed")
-        yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
+        # 이미 말을 시작했다면 정형 문장을 덧붙이지 않는다 — 문장이 겹쳐 들린다.
+        error_log("respond_failed_midstream" if sent else "respond_failed")
+        if not sent:
+            yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
         return
 
     try:
-        async with llm.client(api_key).messages.stream(
-            system=system, messages=messages, **kwargs
-        ) as s:
-            async for chunk in s.text_stream:
-                if chunk:
-                    yield chunk
+        async for piece in _iter(messages, kwargs, api_key):
+            yield piece
     except Exception:
         error_log("respond_failed")
         yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK

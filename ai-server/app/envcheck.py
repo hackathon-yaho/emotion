@@ -17,8 +17,8 @@ from .config import settings
 REQUIRED = [
     ("INTERNAL_SHARED_SECRET", "internal_shared_secret", True,
      "백엔드와의 내부 API 전부 (계약 §3-1)"),
-    ("ANTHROPIC_API_KEY", "anthropic_api_key", True,
-     "분석·응답·관찰·요약 — 없으면 정형 문장만 나간다"),
+    ("OPENAI_API_KEY", "openai_api_key", True,
+     "분석, 응답, 관찰, 요약. 없으면 정형 문장만 나간다"),
 ]
 
 INTEGRATION = [

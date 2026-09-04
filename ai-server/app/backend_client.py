@@ -17,7 +17,7 @@ from typing import Any
 
 import httpx
 
-from .telemetry import error_log, log
+from .telemetry import error_log, log, session_ref
 
 BACKOFF_MS = (200, 600, 1800)
 
@@ -56,7 +56,7 @@ class BackendClient:
         4xx는 재시도하지 않는다 — 우리가 잘못 보낸 것이고 다시 보내도 같다.
         5xx·타임아웃만 지수 백오프로 재시도한다.
         """
-        sid = payload.get("sessionId")
+        ref = session_ref(payload.get("sessionId"))
         turn_index = payload.get("turnIndex")
 
         for attempt in range(self._retries + 1):
@@ -66,7 +66,7 @@ class BackendClient:
                 if attempt >= self._retries:
                     error_log(
                         "turn_post_failed",
-                        sid=sid,
+                        sessionRef=ref,
                         turnIndex=turn_index,
                         retries=attempt,
                         status="timeout",
@@ -77,14 +77,14 @@ class BackendClient:
 
             if resp.status_code < 300:
                 if attempt:
-                    log("turn_post_recovered", sid=sid, turnIndex=turn_index, retries=attempt)
+                    log("turn_post_recovered", sessionRef=ref, turnIndex=turn_index, retries=attempt)
                 return True
 
             if resp.status_code < 500:
                 # 우리가 잘못 보냈다. 다시 보내도 같으므로 기록만 남기고 진행한다.
                 error_log(
                     "turn_post_rejected",
-                    sid=sid,
+                    sessionRef=ref,
                     turnIndex=turn_index,
                     status=resp.status_code,
                 )
@@ -93,7 +93,7 @@ class BackendClient:
             if attempt >= self._retries:
                 error_log(
                     "turn_post_failed",
-                    sid=sid,
+                    sessionRef=ref,
                     turnIndex=turn_index,
                     retries=attempt,
                     status=resp.status_code,

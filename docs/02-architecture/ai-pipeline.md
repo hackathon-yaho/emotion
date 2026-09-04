@@ -22,7 +22,7 @@
 | AI-03 | 응답 스트림 형식 | **순수 대화 텍스트만. 메타 태그 없음** | 텍스트 valence·태그·위기 판정을 전부 분석 호출로 옮겨, `<v>`·`<m>`류가 Hume TTS로 새는 실패 모드를 **구조적으로 제거** |
 | AI-04 | 텍스트 valence 산출 수단 | **경량 LLM 호출 (전사만 입력, 구조화 출력)** + 전사 해시 캐시 | 가장 빨리 붙고, 동일 전사에 대해 캐시로 결정성 확보. 로컬 한국어 감성 모델은 인터페이스만 열어둔다 (§2.4) |
 | AI-05 | 추측 실행(speculative respond) | **기본 OFF.** TC-12(p95 2초) 미달 시 플래그로 ON | 정확성 먼저, 최적화는 측정 후 |
-| AI-06 | LLM 모델 (초기값, 전부 환경변수) | 분석 `claude-haiku-4-5` · 응답 `claude-sonnet-5` · 문장화·요약 `claude-opus-5` | 분석은 지연 예산 400ms, 응답은 한국어 품질과 TTFT의 균형, 배치는 지연이 없으니 최상위. §2.6 |
+| AI-06 | LLM 모델 (초기값, 전부 환경변수) | **2026-09-05 OpenAI로 전환** — 분석 `gpt-5.6-luna` · 응답 `gpt-5.6-terra` · 관찰 `gpt-5.6-sol` · 요약 `gpt-5.6-luna` | 분석은 지연 예산 400ms, 응답은 한국어 품질과 TTFT의 균형, 배치는 지연이 없으니 최상위. §2.6 |
 | AI-07 | 48종 → valence 매핑 | **긍정 18 / 부정 21 / 중립 9, 균일 가중치 ±1** | PRD §14-1 해소. 자유도 최소화(20쌍 과적합 방지). §3 |
 | AI-08 | 위기 키워드 규칙 | **직접 표현(Tier A)만 규칙 감지, 간접·절망 표현(Tier B)은 LLM 판정 힌트** | PRD §14-2 해소. 공개 자료 기반. §5 |
 | AI-09 | 고정 임계값 | **20쌍 측정 후 결정. 개발용 임시값은 `.env`에만** (코드 상수 금지) | PRD §14-5. 결정 절차는 §4.3 |
@@ -110,7 +110,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 모델 | `AI_MODEL_ANALYZE` (초기 `claude-haiku-4-5`), temperature 0 |
+| 모델 | `AI_MODEL_ANALYZE` (초기 `gpt-5.6-luna`), temperature 0, `response_format: json_object` |
 | 입력 | `transcript`(이번 턴), `recent`(직전 최대 4턴의 **텍스트만**), `known_tags`(이 세션에서 이미 통과한 태그) |
 | **입력에 없는 것** | prosody 점수 · 음성 valence · 갭 · 임계값 · 세션 메타. **어떤 형태의 음성 정보도 없다** (FR-025) |
 | 출력 (구조화, 스키마 강제) | `{ "text_valence": -1.0~1.0, "tags": [최대 3], "crisis": bool, "crisis_reason": string\|null, "advice_requested": bool }` |
@@ -132,7 +132,7 @@ class TextAnalyzer(Protocol):
 
 | 항목 | 내용 |
 | --- | --- |
-| 모델 | `AI_MODEL_RESPOND` (초기 `claude-sonnet-5`), adaptive thinking, `effort: low`, 스트리밍 |
+| 모델 | `AI_MODEL_RESPOND` (초기 `gpt-5.6-terra`), `reasoning_effort: low`, 스트리밍 |
 | 입력 | 시스템 프롬프트 + 대화 이력(텍스트만, Hume이 준 전체 이력에서 `system` role 제거) + **플래그 블록** |
 | 플래그 블록 | `gapTriggered`, `crisis`(+`crisisBy`), `softWrap`, `adviceRequested`, `elapsedMin`. **수치는 없다** |
 | 출력 | 대화 텍스트. 1~3문장, 구어체. 메타 태그·JSON·마크다운 없음 |
@@ -140,7 +140,7 @@ class TextAnalyzer(Protocol):
 | 실패 | 호출 실패·`stop_reason: refusal` → 정형 응답 1문장으로 대체, `ops_error_log`. 위기 플래그가 켜져 있으면 정형 응답에도 109 안내 포함 |
 | 전문 | `ai-server/prompts/respond.system.md` |
 
-**주의 — 모델 파라미터**: `claude-sonnet-5`·`claude-opus-5`는 `temperature` 등 샘플링 파라미터를 받지 않는다(400). 응답의 일관성은 프롬프트로 잡는다. `claude-haiku-4-5`는 temperature 0을 받는다.
+**주의 — 모델 파라미터**: 모델마다 받는 파라미터가 다르고 문서에 다 적혀 있지도 않다. 그래서 `app/llm/client.py`가 **400을 맞으면 문제 파라미터를 빼고 한 번만 다시 시도하고, 그 사실을 프로세스 수명 동안 기억한다.** 모델 라인업이 바뀌어도 첫 호출의 400으로 서버가 죽지 않는다. 분석 호출은 temperature 0을 받는다.
 
 ## 2.6 지연 예산 (NFR-01 p95 2초)
 
@@ -153,7 +153,7 @@ class TextAnalyzer(Protocol):
 
 - 우리가 통제하는 구간은 ②③⑤이고 목표 합계 **≤ 1.0초**. Hume 양단(STT 확정·TTS 첫 바이트)이 나머지를 쓴다.
 - 턴마다 구간별 지연을 계측해 로그(발화 내용 없이)로 남긴다. TC-12의 수치는 여기서 나온다.
-- **p95가 깨지면** 순서대로: ① `AI_MODEL_RESPOND`를 `claude-haiku-4-5`로 ② 추측 실행 ON(§2.7) ③ 분석 타임아웃 축소(300ms). 세 개를 한 번에 바꾸지 않는다.
+- **p95가 깨지면** 순서대로: ① `AI_MODEL_RESPOND`를 `gpt-5.6-luna`로 ② 추측 실행 ON(§2.7) ③ 분석 타임아웃 축소(300ms). 세 개를 한 번에 바꾸지 않는다.
 
 ## 2.7 추측 실행 (speculative respond, 기본 OFF)
 
@@ -356,7 +356,7 @@ user 턴과 assistant 턴의 번호는 **user 턴 처리 시점에 둘 다 미�
 | 항목 | 내용 |
 | --- | --- |
 | 입력 | 계약 §3-3 그대로 — `tag, occurrences, tagAvgGap, userAvgGap, ratio`. 원본 대화 없음 |
-| 모델 | `AI_MODEL_OBSERVE` (초기 `claude-opus-5`), `effort: medium` |
+| 모델 | `AI_MODEL_OBSERVE` (초기 `gpt-5.6-sol`), `reasoning_effort: medium` |
 | 프롬프트 요지 | 숫자를 문장으로. **숫자를 쓰지 않는다**("7번"·"1.8배" 금지 — 정확한 수치는 evidence 카드가 보여준다). 없는 사실·원인 추정·조언 금지. 1문장 |
 | 사후 검사 (`observe_guard`) | ① 문장에 아라비아 숫자가 있으면 폐기 ② `tag` 문자열이 없으면 폐기 ③ 금칙어(진단명·약물) 있으면 폐기 ④ 2문장 이상이면 폐기 |
 | 실패 | **관찰을 만들지 않는다.** 템플릿 대체 없음(계약 §3-3). 200 대신 `422 SENTENCE_REJECTED` |
@@ -369,7 +369,7 @@ user 턴과 assistant 턴의 번호는 **user 턴 처리 시점에 둘 다 미�
 | --- | --- |
 | 입력 | 계약 §3-5 그대로 — `sessionId`, `turns[].{role, transcript}`. **valence·갭·태그는 오지 않는다** |
 | 호출 조건 | `endReason`이 `user_end`·`soft_wrap`·`hard_cut`일 때만. `timeout`(F2-06 스케줄러)은 백엔드가 호출하지 않고 `summary: null`로 닫는다 |
-| 모델 | `AI_MODEL_SUMMARY` (초기 `claude-haiku-4-5`), 동기 · 타임아웃 `AI_SUMMARY_TIMEOUT_MS`(초기 2500 — 계약의 3초 안쪽에서 끝내기 위해 여유를 둔다) |
+| 모델 | `AI_MODEL_SUMMARY` (초기 `gpt-5.6-luna`), 동기 · 타임아웃 `AI_SUMMARY_TIMEOUT_MS`(초기 2500 — 계약의 3초 안쪽에서 끝내기 위해 여유를 둔다) |
 | 프롬프트 | `prompts/summary.system.md` |
 | 실패 | `422 SUMMARY_REJECTED`(사후 검사 실패) 또는 5xx. 백엔드는 재시도 없이 `summary: null` |
 
@@ -410,9 +410,11 @@ LLM 호출 지점을 AI서버 하나로 모으는 쪽을 택했다. 백엔드가
 
 # 10. 관측·로깅 (NFR-07, FR-092)
 
-턴마다 구조화 로그 1건: `sid, turnIndex, latency{ctx, analyze, respond_ttft, respond_total, post}, analyze_hit(cache), gapTriggered, crisisBy, tagsKept, tagsDropped, model{analyze, respond}, tokens{in,out}`.
+턴마다 구조화 로그 1건: `sessionRef, turnIndex, latency{ctx, analyze, respond_ttft, respond_total, post}, analyze_hit(cache), gapTriggered, crisisBy, tagsKept, tagsDropped, model{analyze, respond}, tokens{in,out}`.
 
-**절대 넣지 않는 것**: `transcript`, 응답 텍스트, 매칭된 위기 표현, 폐기된 태그 문자열. 로그 필드명 화이트리스트로 강제하고, 테스트가 로그 출력에 한글 문장이 섞이지 않는지 검사한다.
+**절대 넣지 않는 것**: `transcript`, 응답 텍스트, 매칭된 위기 표현, 폐기된 태그 문자열, **`sessionId` 원본**.
+
+`sessionId`는 §4 CLM 인증 수단이라 계약 §1-1이 "비밀과 동급"으로 규정한다 — 로그를 본 사람이 그 세션인 척 CLM을 부를 수 있다. 대신 **`sessionRef` = `SHA-256(sessionId)[:8]`** 을 쓴다(백엔드와 같은 방식이라 양쪽 로그를 한 세션으로 맞춰 볼 수 있다). 화이트리스트에서 빼는 것만으로는 다음에 다른 이름으로 넘기면 다시 새므로, **`sid`·`sessionId`·`session_id`·`customSessionId`·`custom_session_id`를 이름 단위로 거부**한다 (2026-09-05, `request/ai/integration-round-1.md` 2번). 로그 필드명 화이트리스트로 강제하고, 테스트가 로그 출력에 한글 문장이 섞이지 않는지 검사한다.
 
 ---
 
@@ -495,11 +497,11 @@ AI_SESSION_LOOKUP_CONNECT_RETRY=1   # 연결 단계 실패에만. 4xx·5xx 응�
 AI_SESSION_REFETCH_IDLE_SEC=60      # 이 시간 이상 유휴면 세션 컨텍스트 재조회 (§7.2 이어하기 감지)
 
 # LLM
-ANTHROPIC_API_KEY=
-AI_MODEL_ANALYZE=claude-haiku-4-5
-AI_MODEL_RESPOND=claude-sonnet-5
-AI_MODEL_OBSERVE=claude-opus-5
-AI_MODEL_SUMMARY=claude-haiku-4-5
+OPENAI_API_KEY=
+AI_MODEL_ANALYZE=gpt-5.6-luna
+AI_MODEL_RESPOND=gpt-5.6-terra
+AI_MODEL_OBSERVE=gpt-5.6-sol
+AI_MODEL_SUMMARY=gpt-5.6-luna
 AI_ANALYZE_TIMEOUT_MS=400
 AI_SUMMARY_TIMEOUT_MS=2500          # 계약 §3-5의 3초 안쪽에서 끝낸다
 AI_SPECULATIVE_RESPOND=false
@@ -523,4 +525,7 @@ AI_VOICE_VALENCE_MIN_MASS=0.05      # P+N 이 이 값 미만이면 voice_valence
 | AI-16 | 이어하기를 **유휴 간격**으로 감지한다 | 재연결은 AI서버에 보이지 않는다. 거짓 양성 비용은 조회 1회, 거짓 음성 비용은 인덱스 어긋남. §7.2 | 2026-09-04 |
 | AI-17 | 세션 조회 실패 시 **fail-closed**(요청서의 fail-open 철회) | fail-open은 "백엔드 장애 시간 = 인증 무방비 시간". 백엔드가 죽으면 새 세션도 안 생기므로 잃는 가용성이 없다. §7.1 | 2026-09-04 |
 | AI-18 | 통합 테스트에 **fail-open 개발 스위치를 만들지 않는다** | 개발 편의 스위치는 배포까지 따라간다. 타임아웃 상향(`.env`)으로 대신한다. `response/backend/integration-test-path.md` | 2026-09-04 |
-| AI-19 | 요약 모델은 `claude-haiku-4-5` | 입력이 짧고 출력이 1문장이며 비실시간이다. 3초 예산 안에서 여유를 확보하는 쪽이 품질보다 이득이 크다. §8.2 | 2026-09-04 |
+| AI-19 | 요약 모델은 저비용 모델 | 입력이 짧고 출력이 1문장이며 비실시간이다. 3초 예산 안에서 여유를 확보하는 쪽이 품질보다 이득이 크다. §8.2 | 2026-09-04 |
+| AI-20 | **LLM 벤더를 Anthropic → OpenAI로 교체** | 팀 결정(2026-09-05). 설계·프롬프트·가드는 벤더 중립이라 바뀌지 않았고, 고친 범위는 `app/llm/` 4개 파일과 환경변수뿐이다 — LLM 호출을 한 계층에 가둔 §12 경계가 실제로 값을 했다 | 2026-09-05 |
+| AI-22 | 로그의 세션 식별자를 **해시(`sessionRef`)로** 바꾼다 | 화이트리스트에 `sid`를 넣어 둔 탓에 인증 수단이 로그로 샜다(통합 1차에서 백엔드가 30분에 7건 발견). 이름 단위로 거부해 재발을 막는다. §10 | 2026-09-05 |
+| AI-21 | 파라미터 거부를 **런타임에 학습**한다 | 모델마다 받는 파라미터가 다르고 문서에 다 적혀 있지 않다. 400을 맞으면 그 파라미터를 빼고 한 번 다시 시도하고 기억한다 — 라인업 변경이 서비스 중단으로 번지지 않게 | 2026-09-05 |

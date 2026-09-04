@@ -36,15 +36,17 @@ async def observe(
         if prompts_dir
         else llm.system_prompt("observe")
     )
-    kwargs = llm.build_kwargs(model=model, max_tokens=200, effort=effort)
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+    ]
+    kwargs = llm.build_kwargs(
+        model=model, max_tokens=200, effort=effort, json_output=True
+    )
 
     try:
-        msg = await llm.client(api_key).messages.create(
-            system=system,
-            messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-            **kwargs,
-        )
-        body = llm.parse_json(llm.text_of(msg)) or {}
+        completion = await llm.create(messages, kwargs, api_key)
+        body = llm.parse_json(llm.text_of(completion)) or {}
     except llm.LLMRefusal:
         raise Rejected(["refusal"])
     except Exception:
@@ -76,15 +78,17 @@ async def summarize(
     )
     payload = {"turns": turns}
     llm.assert_no_prosody(payload)
-    kwargs = llm.build_kwargs(model=model, max_tokens=200, temperature=0.0)
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+    ]
+    kwargs = llm.build_kwargs(
+        model=model, max_tokens=200, temperature=0.0, json_output=True
+    )
 
     try:
-        msg = await llm.client(api_key).messages.create(
-            system=system,
-            messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-            **kwargs,
-        )
-        body = llm.parse_json(llm.text_of(msg)) or {}
+        completion = await llm.create(messages, kwargs, api_key)
+        body = llm.parse_json(llm.text_of(completion)) or {}
     except llm.LLMRefusal:
         raise Rejected(["refusal"])
     except Exception:

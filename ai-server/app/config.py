@@ -31,14 +31,14 @@ class Settings(BaseSettings):
     ai_session_lookup_connect_retry: int = 1
     ai_session_refetch_idle_sec: int = 60
 
-    # LLM
-    anthropic_api_key: str = ""
-    ai_model_analyze: str = "claude-haiku-4-5"
-    ai_model_respond: str = "claude-sonnet-5"
+    # LLM (2026-09-05 OpenAI로 전환)
+    openai_api_key: str = ""
+    ai_model_analyze: str = "gpt-5.6-luna"
+    ai_model_respond: str = "gpt-5.6-terra"
     ai_respond_effort: str = "low"
-    ai_model_observe: str = "claude-opus-5"
+    ai_model_observe: str = "gpt-5.6-sol"
     ai_observe_effort: str = "medium"
-    ai_model_summary: str = "claude-haiku-4-5"
+    ai_model_summary: str = "gpt-5.6-luna"
     ai_analyze_timeout_ms: int = 400
     ai_summary_timeout_ms: int = 2500
     ai_speculative_respond: bool = False

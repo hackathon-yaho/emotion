@@ -20,7 +20,7 @@ from typing import Any
 import httpx
 
 from .rules import turns as turn_rules
-from .telemetry import error_log
+from .telemetry import error_log, session_ref
 
 CACHE_TAIL_SEC = 30 * 60  # 이어하기 창 (계약 §2-5-1)
 
@@ -179,7 +179,7 @@ class SessionStore:
             except SessionUnauthorized as exc:
                 if exc.reason == "session_ended":
                     raise
-                error_log(f"session_refetch_failed:{exc.reason}", sid=session_id)
+                error_log(f"session_refetch_failed:{exc.reason}", sessionRef=session_ref(session_id))
                 cached.fetched_at = now
                 return cached
 

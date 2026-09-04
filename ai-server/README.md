@@ -1,6 +1,6 @@
 # ai-server — Hume CLM 엔드포인트 · valence · 갭 · 위기 규칙 · 프롬프트
 
-담당: **AI**. 스택 **Python 3.12 · FastAPI · uvicorn · Anthropic SDK** (2026-09-03 확정 — Hume CLM 공식 예제 `evi-python-clm-sse`와 같은 형태).
+담당: **AI**. 스택 **Python 3.12 · FastAPI · uvicorn · OpenAI SDK** (2026-09-03 확정 — Hume CLM 공식 예제 `evi-python-clm-sse`와 같은 형태. **LLM 벤더는 2026-09-05 Anthropic에서 교체**).
 
 **설계의 단일 출처는 [`../docs/02-architecture/ai-pipeline.md`](../docs/02-architecture/ai-pipeline.md)다.** 이 README는 실행 안내와 이 폴더의 규칙만 둔다.
 
@@ -42,7 +42,8 @@
 ```bash
 cd ai-server
 uv sync --extra dev          # 또는 pip install -e ".[dev]"
-cp .env.example .env         # 값 채우기 (ANTHROPIC_API_KEY, INTERNAL_SHARED_SECRET, BACKEND_BASE_URL)
+cp .env.example .env         # 값 채우기 (OPENAI_API_KEY, INTERNAL_SHARED_SECRET)
+python -m app.envcheck       # 들어갔는지 확인 — 시크릿은 마스킹해서 보여준다
 uv run uvicorn app.main:app --port 8100 --reload
 ```
 
@@ -84,7 +85,7 @@ make eval     # 20쌍 · 위기 합성 세트 · 태그 · 관찰 문장 → eva
 
 **첫 Hume 연결에서 요청 뼈대가 `eval/capture/shape/`에 남는다.** 문서만 보고 짠 파서라 실제 모양을 한 번은 봐야 하고, 안 남기면 무료 할당량(월 5분)을 한 번 더 써야 한다. 발화·점수 값은 담기지 않으므로(키 이름과 타입만) 기본으로 켜 둔다.
 
-**아직 못 한 검증**: Hume 실제 연결(Config가 없다), Anthropic 실제 호출(키가 없다),
+**아직 못 한 검증**: Hume 실제 연결(Config가 없다), OpenAI 실제 호출(키가 없다),
 백엔드 실제 연결(터널 전). 이 셋은 목으로만 검증돼 있다.
 
 ## 구조

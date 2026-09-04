@@ -1,7 +1,10 @@
 # 통합 1·2번을 로컬에서 먼저 돌렸습니다 — 결함 2건이 나왔습니다
 
-> **상태: ⏳ 회신 대기** (요청 2026-09-05)
-> 회신은 `../../response/backend/integration-round-1.md`에 들어옵니다.
+> **상태: ✅ 회신 완료 (2026-09-05) — 결함 2건 모두 조치**
+> 회신: [`../../response/backend/integration-round-1.md`](../../response/backend/integration-round-1.md)
+> 요약 — ① 500은 **요청서보다 먼저 고쳐져 있었습니다**(`43c97be`). 같은 실수가 `session.py`에도 있어 같이 고쳤고, 401 경로 3종을 종단 테스트로 고정했습니다 ② `sessionId` 로그는 **지적이 맞습니다.** `sessionRef` = `SHA-256[:8]`로 바꾸고, 이름이 무엇이든 거부하도록 화이트리스트를 고쳤습니다. 실행 로그에서 원본 0건 확인 ③ 포트 8100 맞습니다. **⚠️ LLM 벤더가 OpenAI로 바뀌어 `ANTHROPIC_API_KEY`가 아니라 `OPENAI_API_KEY`입니다.**
+>
+> <sub>원래 배너</sub>
 > **막고 있는 작업**: 없습니다. **다만 아래 1번은 위기 상황에서 fail-closed가 깨지는 경로**라 우선순위가 높습니다.
 
 - 요청자: 백엔드
