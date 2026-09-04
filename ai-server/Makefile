@@ -3,10 +3,11 @@
 
 PY ?= uv run
 
-.PHONY: help install test lint run eval clean env
+.PHONY: help install test lint run eval clean env secret
 
 help:
 	@echo "make env      .env 확인 — 시크릿은 마스킹해서 보여준다"
+	@echo "make secret N=KEY_NAME   .env 에 시크릿 넣기 (화면·기록에 안 남는다)"
 	@echo "make install  의존성 설치 (uv sync --extra dev)"
 	@echo "make test     단위 테스트 — rules/ 전부 + 경계 검사"
 	@echo "make lint     ruff"
@@ -15,6 +16,9 @@ help:
 
 env:
 	$(PY) python -m app.envcheck
+
+secret:
+	$(PY) python -m app.setsecret $(N)
 
 install:
 	uv sync --extra dev

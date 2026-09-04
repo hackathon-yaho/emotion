@@ -1,7 +1,12 @@
 # .env 에 시크릿 한 줄을 넣는다. 값은 화면에도, 명령 기록에도 남지 않는다.
 #
-#   .\scripts\set-secret.ps1 INTERNAL_SHARED_SECRET
-#   .\scripts\set-secret.ps1 GOOGLE_API_KEY
+# ★ 이 머신은 PowerShell 실행 정책이 .ps1 을 막는다. 아래 형태로 부른다.
+#
+#   powershell -ExecutionPolicy Bypass -File .\scripts\set-secret.ps1 INTERNAL_SHARED_SECRET
+#
+# ★ 더 간단한 길: Python 쪽을 쓰면 실행 정책과 무관하다. 그쪽을 권한다.
+#
+#   .\.venv\Scripts\python.exe -m app.setsecret INTERNAL_SHARED_SECRET
 #
 # 왜 이 스크립트인가 — 시크릿을 채팅·이슈·명령 인자로 넘기면 그 기록에 남는다.
 # Read-Host -AsSecureString 은 입력이 화면에 찍히지 않고, PowerShell 기록에도
@@ -54,8 +59,10 @@ if ($value -match '^\s*["'']' -or $value -match '["'']\s*$') {
     Write-Host "값의 앞이나 뒤에 따옴표가 있습니다. 따옴표는 빼고 넣으세요." -ForegroundColor Yellow
     exit 1
 }
-if ($value -match '^\S+=') {
-    Write-Host "'이름=값' 통째로 붙여넣으신 것 같습니다. 값만 넣으세요." -ForegroundColor Yellow
+# '=' 가 있다는 것만으로 거부하지 않는다 — openssl rand -base64 32 는 = 로 끝나고,
+# 그게 INTERNAL_SHARED_SECRET 의 형식이다. 넣으려는 키 이름으로 시작할 때만 거부한다.
+if ($value.ToUpper().StartsWith("$($Name.ToUpper())=")) {
+    Write-Host "'$Name=값' 통째로 붙여넣으신 것 같습니다. 값만 넣으세요." -ForegroundColor Yellow
     exit 1
 }
 if ($value -match '\r|\n') {

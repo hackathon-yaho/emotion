@@ -64,12 +64,17 @@ make lint     # ruff
 make eval     # 20쌍 · 위기 합성 세트 · 태그 · 관찰 문장 → eval/reports/
 ```
 
-**시크릿은 스크립트로 넣는다.** 값이 화면에도 명령 기록에도 남지 않는다.
+**시크릿은 도구로 넣는다.** 값이 화면에도 셸 명령 기록에도 남지 않는다.
 
 ```powershell
-.\scripts\set-secret.ps1 INTERNAL_SHARED_SECRET
-.\scripts\set-secret.ps1 GOOGLE_API_KEY
+.\.venv\Scripts\python.exe -m app.setsecret INTERNAL_SHARED_SECRET
+.\.venv\Scripts\python.exe -m app.setsecret GOOGLE_API_KEY
 ```
+
+**PowerShell 스크립트(`scripts/set-secret.ps1`)도 같은 일을 하지만 기본 경로가 아니다.**
+Windows 실행 정책이 `.ps1`을 막는 머신에서는 `PSSecurityException`이 나서 한 줄도 돌지
+않는다. 굳이 쓰려면 `powershell -ExecutionPolicy Bypass -File .\scripts\set-secret.ps1 NAME`
+형태로 부른다. **Python 쪽은 실행 정책과 무관하므로 그쪽을 쓴다.**
 
 `make help`가 전체 명령을 보여준다. **README의 명령과 `Makefile`이 다르면 `Makefile`이 맞다.**
 
