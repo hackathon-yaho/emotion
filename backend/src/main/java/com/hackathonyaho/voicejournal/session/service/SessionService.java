@@ -73,7 +73,7 @@ public class SessionService {
     /** 열린 세션을 남겨두면 동시 세션이 되고, 그 세션은 배치에서도 영영 빠진다. */
     private void closeOpenSessions(UUID profileId) {
         for (VoiceSession open : sessionRepository.findByProfileIdAndEndedAtIsNull(profileId)) {
-            closeAsTimeout(open);
+            closeAsTimeout(open, lastActivityAt(open));
         }
     }
 
@@ -113,8 +113,9 @@ public class SessionService {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND, "session already ended");
         }
 
-        int remainingSec = policy.getHardCutSec() - usedSec(session);
-        if (remainingSec <= 0 || Instant.now().isAfter(resumableUntil(session))) {
+        Instant last = lastActivityAt(session);
+        int remainingSec = policy.getHardCutSec() - usedSec(session, last);
+        if (remainingSec <= 0 || Instant.now().isAfter(last.plus(policy.getResumeWindow()))) {
             throw new BusinessException(ErrorCode.SESSION_NOT_RESUMABLE, "resume window passed");
         }
 
@@ -143,7 +144,7 @@ public class SessionService {
                 session.getId(),
                 session.isOpen() ? "open" : "ended",
                 session.getStartedAt(),
-                usedSec(session),
+                usedSec(session, lastActivityAt(session)),
                 turnStats.lastTurnIndex(sessionId),
                 session.getThresholdMode(),
                 session.getGapThreshold(),
@@ -159,12 +160,16 @@ public class SessionService {
     @Transactional(readOnly = true)
     public MeResponse.OpenSession openSession(UUID profileId) {
         return sessionRepository.findFirstByProfileIdAndEndedAtIsNullOrderByStartedAtDesc(profileId)
-                .map(session -> new MeResponse.OpenSession(
-                        session.getId(),
-                        session.getStartedAt(),
-                        usedSec(session),
-                        Math.max(0, policy.getHardCutSec() - usedSec(session)),
-                        resumableUntil(session)))
+                .map(session -> {
+                    Instant last = lastActivityAt(session);
+                    int used = usedSec(session, last);
+                    return new MeResponse.OpenSession(
+                            session.getId(),
+                            session.getStartedAt(),
+                            used,
+                            Math.max(0, policy.getHardCutSec() - used),
+                            last.plus(policy.getResumeWindow()));
+                })
                 .orElse(null);
     }
 
@@ -179,8 +184,9 @@ public class SessionService {
         Instant now = Instant.now();
         int closed = 0;
         for (VoiceSession session : sessionRepository.findByEndedAtIsNull()) {
-            if (now.isAfter(resumableUntil(session))) {
-                closeAsTimeout(session);
+            Instant last = lastActivityAt(session);
+            if (now.isAfter(last.plus(policy.getResumeWindow()))) {
+                closeAsTimeout(session, last);
                 closed++;
             }
         }
@@ -188,8 +194,8 @@ public class SessionService {
     }
 
     /** 요약을 만들지 않는다 — 아무도 보고 있지 않은 세션이고, 건당 3초가 스케줄러를 막는다. */
-    private void closeAsTimeout(VoiceSession session) {
-        int used = usedSec(session);
+    private void closeAsTimeout(VoiceSession session, Instant lastActivityAt) {
+        int used = usedSec(session, lastActivityAt);
         session.end(TIMEOUT, session.getStartedAt().plusSeconds(used), used);
         baselineRepository.findById(session.getProfileId()).ifPresent(UserBaseline::countSession);
     }
@@ -201,16 +207,20 @@ public class SessionService {
      * 오지 않으므로 벽시계로 재면, 5분 뒤 이어하기를 시도한 사용자에게 잔여 시간이
      * 0이 되어 TC-22가 깨진다.
      */
-    private int usedSec(VoiceSession session) {
-        Instant last = turnStats.lastActivityAt(session.getId(), session.getStartedAt());
-        long used = Duration.between(session.getStartedAt(), last).toSeconds();
+    private int usedSec(VoiceSession session, Instant lastActivityAt) {
+        long used = Duration.between(session.getStartedAt(), lastActivityAt).toSeconds();
         return (int) Math.max(0, Math.min(used, policy.getHardCutSec()));
     }
 
-    /** 중단(마지막 발화) 후 30분. 이 시각이 곧 스케줄러의 정리 시점이다 (계약 §2-2). */
-    private Instant resumableUntil(VoiceSession session) {
-        return turnStats.lastActivityAt(session.getId(), session.getStartedAt())
-                .plus(policy.getResumeWindow());
+    /**
+     * <b>호출자가 한 번 읽어 돌려쓴다.</b> 이 값 하나로 {@code usedSec}·잔여 시간·이어하기
+     * 창이 전부 결정되는데, 필요할 때마다 다시 읽으면 같은 요청 안에서 DB 왕복이 세 번
+     * 나고 <b>그 사이에 턴이 들어오면 세 값이 서로 어긋난다.</b>
+     *
+     * <p>이어하기 창은 이 시각 + 30분이고, 그게 곧 스케줄러의 정리 시점이다 (계약 §2-2).
+     */
+    private Instant lastActivityAt(VoiceSession session) {
+        return turnStats.lastActivityAt(session.getId(), session.getStartedAt());
     }
 
     private VoiceSession mine(UUID profileId, UUID sessionId) {
