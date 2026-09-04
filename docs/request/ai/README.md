@@ -13,6 +13,7 @@ AI 개발자에게 요청할 사항을 문서로 정리하는 폴더입니다.
 
 | 문서 | 상태 | 막고 있던 작업 |
 | --- | --- | --- |
+| [hume-config-setup.md](hume-config-setup.md) | ⏳ **회신 대기** (2026-09-05) | **TC-02와 통합 3번 전체.** Config의 `language_model`이 `null`이라 **CLM이 안 붙어 있다** — 이대로면 Hume 내장 LLM이 대답하고 우리 AI서버가 한 번도 안 불린다. 그 밖에 비활성 120초·영어 음성·nudges 3초 |
 | [latency-diagnosis.md](latency-diagnosis.md) | ⏳ **회신 대기** (2026-09-05) | 없음. **유료 티어·NFR-01 결정이 걸려 있다** — 분석 호출에만 `reasoning_effort`가 안 붙고(`analyze.py:104`), SDK 기본 재시도가 429를 지연으로 가리고 있다. 둘 다 재측정 요청 |
 | [integration-round-1.md](integration-round-1.md) | ✅ **회신 완료** (2026-09-05) | ~~통합 1·2차에서 결함 2건 — fail-closed 경로 500, 로그에 `sessionId` 평문~~ → 500은 선제 수정 완료(`43c97be`), `sessionId`는 `sessionRef` 해시로 교체. 회신 `../../response/backend/integration-round-1.md` |
 | [hume-account-setup.md](hume-account-setup.md) | ✅ **회신 완료** (2026-09-05) | ~~Hume 계정 소유·결제 주체, 콘솔 실측 4건, 공유 시크릿 전달 경로~~ → 계정 소유 수락, **Creator 권장**(490분에서 Starter보다 싸다), 실측은 가입 후. 회신 `../../response/backend/hume-account-setup.md` |
