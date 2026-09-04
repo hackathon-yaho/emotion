@@ -49,15 +49,12 @@
   </div>
 
   <div style="padding: 36px 44px 0 44px; position: relative">
-    <svg width="812" height="374" viewBox="0 0 812 374" fill="none" style="display: block">
+    <svg width="812" height="320" viewBox="0 0 812 320" fill="none" style="display: block">
       <rect x="{{chart.hl.x}}" y="16" width="{{chart.hl.w}}" height="288" fill="var(--shade)"></rect>
       <line x1="40" y1="160" x2="796" y2="160" stroke="var(--line)" stroke-width="1"></line>
       <text x="0" y="20" fill="var(--faint)" font-size="12" font-family="'Noto Sans KR', sans-serif">+1</text>
       <text x="10" y="164" fill="var(--faint)" font-size="12" font-family="'Noto Sans KR', sans-serif">0</text>
       <text x="0" y="308" fill="var(--faint)" font-size="12" font-family="'Noto Sans KR', sans-serif">−1</text>
-      <sc-for list="{{chart.ticks}}" as="k" hint-placeholder-count="8">
-        <text x="{{k.x}}" y="332" fill="var(--faint)" font-size="12" text-anchor="middle" font-family="'Noto Sans KR', sans-serif">{{k.d}}</text>
-      </sc-for>
       <sc-for list="{{chart.textSegs}}" as="d" hint-placeholder-count="2">
         <path d="{{d.p}}" stroke="var(--cool)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
       </sc-for>
@@ -75,6 +72,12 @@
       </sc-for>
     </svg>
 
+    <div style="position: relative; height: 24px; margin-top: 10px">
+      <sc-for list="{{chart.ticks}}" as="k" hint-placeholder-count="8">
+        <span style="position: absolute; left: {{k.left}}px; width: 60px; text-align: center; font-size: 12px; color: var(--faint)">{{k.d}}</span>
+      </sc-for>
+    </div>
+
     <sc-if value="{{hasHover}}" hint-placeholder-val="{{ true }}">
       <div style="position: absolute; left: {{hover.boxX}}px; top: 56px; background: var(--lift); border: 1px solid var(--line); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; pointer-events: none; min-width: 168px">
         <p class="lab" style="margin: 0">{{hover.d}}</p>
@@ -86,7 +89,7 @@
     </sc-if>
   </div>
 
-  <div style="display: flex; align-items: center; gap: 26px; padding: 0 44px 0 44px">
+  <div style="display: flex; align-items: center; gap: 26px; padding: 18px 44px 0 44px">
     <div style="display: flex; align-items: center; gap: 8px"><span style="width: 16px; height: 2px; background: var(--cool)"></span><span style="font-size: 13px; color: var(--muted)">말한 내용</span></div>
     <div style="display: flex; align-items: center; gap: 8px"><span style="width: 16px; height: 2px; background: var(--warm)"></span><span style="font-size: 13px; color: var(--muted)">목소리</span></div>
     <div style="display: flex; align-items: center; gap: 8px"><span style="width: 16px; height: 8px; background: var(--shade)"></span><span style="font-size: 13px; color: var(--muted)">두 선이 벌어진 구간</span></div>
@@ -101,15 +104,21 @@
       <p class="lab" style="margin: 0">이야기별 갭 · 세 번 이상 나온 이야기만</p>
       <p style="margin: 0; font-size: 13px; color: var(--faint)">내 평균 {{bars.avg}} · 점선은 ×1.5, 넘으면 발견이 됩니다</p>
     </div>
-    <svg width="812" height="{{bars.h}}" viewBox="0 0 812 {{bars.h}}" fill="none" style="display: block">
-      <line x1="{{bars.avgX}}" y1="0" x2="{{bars.avgX}}" y2="{{bars.h}}" stroke="var(--line)" stroke-width="1"></line>
-      <line x1="{{bars.thX}}" y1="0" x2="{{bars.thX}}" y2="{{bars.h}}" stroke="var(--faint)" stroke-width="1" stroke-dasharray="2 4"></line>
-      <sc-for list="{{bars.rows}}" as="b" hint-placeholder-count="5">
-        <text x="0" y="{{b.ty}}" fill="var(--muted)" font-size="14" font-family="'Noto Sans KR', sans-serif">{{b.label}}</text>
-        <rect x="{{bars.x0}}" y="{{b.by}}" width="{{b.w}}" height="6" rx="2" fill="{{b.fill}}"></rect>
-        <text x="812" y="{{b.ty}}" fill="{{b.vfill}}" font-size="13" text-anchor="end" font-family="'Noto Sans KR', sans-serif">{{b.v}}</text>
-      </sc-for>
-    </svg>
+    <div style="position: relative">
+      <span style="position: absolute; left: {{bars.avgLeft}}px; top: 0; bottom: 0; width: 1px; background: var(--line)"></span>
+      <span style="position: absolute; left: {{bars.thLeft}}px; top: 0; bottom: 0; width: 1px; border-left: 1px dashed var(--faint)"></span>
+      <div style="display: flex; flex-direction: column; gap: 18px; position: relative">
+        <sc-for list="{{bars.rows}}" as="b" hint-placeholder-count="5">
+          <div style="display: flex; align-items: center; gap: 16px; height: 18px">
+            <span style="width: 120px; flex-shrink: 0; font-size: 14px; color: var(--muted)">{{b.label}}</span>
+            <span style="flex-grow: 1; display: flex; align-items: center">
+              <span style="width: {{b.w}}px; height: 6px; border-radius: 2px; background: {{b.fill}}"></span>
+            </span>
+            <span style="width: 44px; flex-shrink: 0; text-align: right; font-size: 13px; color: {{b.fill}}">{{b.v}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -173,21 +182,27 @@ class Component extends DCLogic {
     ];
   }
 
+  /// 막대는 HTML로 그린다 — SVG <text> 안의 홀은 렌더되지 않는다.
   buildBars(width, labelW) {
     const avg = 0.72; const th = avg * 1.5;
     const rows = this.tagRows();
     const maxV = Math.max(th, ...rows.map((r) => r.gap)) * 1.12;
-    const x0 = labelW; const plotW = width - labelW - 48;
-    const sx = (v) => x0 + (v / maxV) * plotW;
-    const rowH = 36;
+    const gap = 16; const valueW = 44;
+    const plotW = width - labelW - gap * 2 - valueW;
+    const barW = (v) => (v / maxV) * plotW;
+    const left = (v) => labelW + gap + barW(v);
     return {
-      avg: avg.toFixed(2), h: rows.length * rowH, x0: x0,
-      avgX: sx(avg).toFixed(1), thX: sx(th).toFixed(1),
-      rows: rows.map((r, i) => {
+      avg: avg.toFixed(2),
+      avgLeft: left(avg).toFixed(1),
+      thLeft: left(th).toFixed(1),
+      rows: rows.map((r) => {
         const hit = r.n >= 3 && r.gap >= th;
-        return { label: r.tag + ' · ' + r.n + '회', ty: (i * rowH + 21).toFixed(0), by: (i * rowH + 13).toFixed(0),
-          w: (sx(r.gap) - x0).toFixed(1), v: r.gap.toFixed(2),
-          fill: hit ? 'var(--paper)' : 'var(--faint)', vfill: hit ? 'var(--paper)' : 'var(--faint)' };
+        return {
+          label: r.tag + ' · ' + r.n + '회',
+          w: barW(r.gap).toFixed(1),
+          v: r.gap.toFixed(2),
+          fill: hit ? 'var(--paper)' : 'var(--faint)'
+        };
       })
     };
   }
@@ -232,8 +247,15 @@ class Component extends DCLogic {
 
     const every = Math.max(1, Math.ceil(rows.length / 8));
     const ticks = [];
-    rows.forEach((r, i) => { if (i % every === 0 || i === rows.length - 1) ticks.push({ x: x(i).toFixed(1), d: r.d }); });
-    if (ticks.length >= 2 && (x(rows.length - 1) - parseFloat(ticks[ticks.length - 2].x)) < 40) ticks.splice(ticks.length - 2, 1);
+    rows.forEach((r, i) => {
+      if (i % every === 0 || i === rows.length - 1) {
+        // HTML 스팬은 폭 60에 가운데 정렬 — 점 아래 중앙에 오도록 30을 뺀다
+        ticks.push({ left: (x(i) - 30).toFixed(1), d: r.d });
+      }
+    });
+    if (ticks.length >= 2 && (x(rows.length - 1) - parseFloat(ticks[ticks.length - 2].left) - 30) < 40) {
+      ticks.splice(ticks.length - 2, 1);
+    }
 
     const hi = this.state.hover;
     const hr = hi === null || hi === undefined || hi >= rows.length ? null : rows[hi];

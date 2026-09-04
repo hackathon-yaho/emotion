@@ -226,15 +226,12 @@
           <div style="display: flex; flex-direction: column; padding: 36px 0 0 0; gap: 24px">
             <p class="dbl serif" style="margin: 0; font-size: 24px; line-height: 1.4">말한 내용과 목소리</p>
             <sc-if value="{{listNormal}}" hint-placeholder-val="{{ true }}">
-              <svg width="342" height="216" viewBox="0 0 342 216" fill="none" style="display: block">
+              <svg width="342" height="188" viewBox="0 0 342 188" fill="none" style="display: block">
                 <rect x="{{chart.hl.x}}" y="8" width="{{chart.hl.w}}" height="168" fill="var(--shade)" onClick="{{openRecord}}" style="cursor: pointer"></rect>
                 <line x1="24" y1="92" x2="336" y2="92" stroke="var(--line)" stroke-width="1"></line>
                 <text x="0" y="12" fill="var(--faint)" font-size="12" font-family="'Noto Sans KR', sans-serif">+1</text>
                 <text x="4" y="96" fill="var(--faint)" font-size="12" font-family="'Noto Sans KR', sans-serif">0</text>
                 <text x="0" y="180" fill="var(--faint)" font-size="12" font-family="'Noto Sans KR', sans-serif">−1</text>
-                <sc-for list="{{chart.ticks}}" as="k" hint-placeholder-count="4">
-                  <text x="{{k.x}}" y="204" fill="var(--faint)" font-size="12" text-anchor="middle" font-family="'Noto Sans KR', sans-serif">{{k.d}}</text>
-                </sc-for>
                 <sc-for list="{{chart.textSegs}}" as="d" hint-placeholder-count="2">
                   <path d="{{d.p}}" stroke="var(--cool)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                 </sc-for>
@@ -245,6 +242,11 @@
                   <circle cx="{{p.x}}" cy="{{p.y}}" r="4" fill="{{p.fill}}"></circle>
                 </sc-for>
               </svg>
+              <div style="position: relative; height: 18px">
+                <sc-for list="{{chart.ticks}}" as="k" hint-placeholder-count="4">
+                  <span style="position: absolute; left: {{k.left}}px; width: 50px; text-align: center; font-size: 12px; color: var(--faint)">{{k.d}}</span>
+                </sc-for>
+              </div>
               <div style="display: flex; gap: 22px">
                 <div style="display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 2px; background: var(--cool)"></span><span style="font-size: 13px; color: var(--muted)">말한 내용</span></div>
                 <div style="display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 2px; background: var(--warm)"></span><span style="font-size: 13px; color: var(--muted)">목소리</span></div>
@@ -257,15 +259,21 @@
                   <p class="lab" style="margin: 0">이야기별 갭</p>
                   <p style="margin: 0; font-size: 12px; color: var(--faint)">내 평균 {{bars.avg}} · 점선은 ×1.5</p>
                 </div>
-                <svg width="342" height="{{bars.h}}" viewBox="0 0 342 {{bars.h}}" fill="none" style="display: block">
-                  <line x1="{{bars.avgX}}" y1="0" x2="{{bars.avgX}}" y2="{{bars.h}}" stroke="var(--line)" stroke-width="1"></line>
-                  <line x1="{{bars.thX}}" y1="0" x2="{{bars.thX}}" y2="{{bars.h}}" stroke="var(--faint)" stroke-width="1" stroke-dasharray="2 4"></line>
-                  <sc-for list="{{bars.rows}}" as="b" hint-placeholder-count="5">
-                    <text x="0" y="{{b.ty}}" fill="var(--muted)" font-size="13" font-family="'Noto Sans KR', sans-serif">{{b.label}}</text>
-                    <rect x="{{bars.x0}}" y="{{b.by}}" width="{{b.w}}" height="6" rx="2" fill="{{b.fill}}"></rect>
-                    <text x="342" y="{{b.ty}}" fill="{{b.vfill}}" font-size="12" text-anchor="end" font-family="'Noto Sans KR', sans-serif">{{b.v}}</text>
-                  </sc-for>
-                </svg>
+                <div style="position: relative">
+                  <span style="position: absolute; left: {{bars.avgLeft}}px; top: 0; bottom: 0; width: 1px; background: var(--line)"></span>
+                  <span style="position: absolute; left: {{bars.thLeft}}px; top: 0; bottom: 0; width: 1px; border-left: 1px dashed var(--faint)"></span>
+                  <div style="display: flex; flex-direction: column; gap: 16px; position: relative">
+                    <sc-for list="{{bars.rows}}" as="b" hint-placeholder-count="5">
+                      <div style="display: flex; align-items: center; gap: 12px; height: 16px">
+                        <span style="width: 96px; flex-shrink: 0; font-size: 13px; color: var(--muted)">{{b.label}}</span>
+                        <span style="flex-grow: 1; display: flex; align-items: center">
+                          <span style="width: {{b.w}}px; height: 6px; border-radius: 2px; background: {{b.fill}}"></span>
+                        </span>
+                        <span style="width: 36px; flex-shrink: 0; text-align: right; font-size: 12px; color: {{b.fill}}">{{b.v}}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
                 <p style="margin: 0; font-size: 12px; line-height: 1.7; color: var(--faint); text-wrap: pretty">세 번 이상 나온 이야기만 셉니다. 점선을 넘으면 발견이 됩니다.</p>
               </div>
             </sc-if>
@@ -405,7 +413,8 @@ class Component extends DCLogic {
     const ticks = [];
     rows.forEach((r, i) => {
       const marked = run !== null && (i === run.from || i === run.to);
-      if (i === 0 || i === rows.length - 1 || marked) ticks.push({ x: x(i).toFixed(1), d: r.d });
+      // HTML 스팬(폭 50, 가운데 정렬)이 점 아래 중앙에 오도록 25를 뺀다
+      if (i === 0 || i === rows.length - 1 || marked) ticks.push({ left: (x(i) - 25).toFixed(1), d: r.d });
     });
     return { textSegs: segs('t'), voiceSegs: segs('v'), dots: dots, ticks: ticks, hl: hl };
   }
@@ -421,24 +430,26 @@ class Component extends DCLogic {
     ];
   }
 
+  // 막대는 HTML로 그린다 — SVG <text> 안의 홀은 렌더되지 않는다.
   buildBars(width, labelW) {
     const avg = 0.72; const th = avg * 1.5;
     const rows = this.tagRows();
     const maxV = Math.max(th, ...rows.map((r) => r.gap)) * 1.12;
-    const x0 = labelW; const plotW = width - labelW - 44;
-    const sx = (v) => x0 + (v / maxV) * plotW;
-    const rowH = 36;
+    const gap = 12; const valueW = 36;
+    const plotW = width - labelW - gap * 2 - valueW;
+    const barW = (v) => (v / maxV) * plotW;
+    const left = (v) => labelW + gap + barW(v);
     return {
-      avg: avg.toFixed(2), h: rows.length * rowH, x0: x0,
-      avgX: sx(avg).toFixed(1), thX: sx(th).toFixed(1),
-      rows: rows.map((r, i) => {
+      avg: avg.toFixed(2),
+      avgLeft: left(avg).toFixed(1),
+      thLeft: left(th).toFixed(1),
+      rows: rows.map((r) => {
         const hit = r.n >= 3 && r.gap >= th;
         return {
           label: r.tag + ' · ' + r.n + '회',
-          ty: (i * rowH + 21).toFixed(0), by: (i * rowH + 13).toFixed(0),
-          w: (sx(r.gap) - x0).toFixed(1), v: r.gap.toFixed(2),
-          fill: hit ? 'var(--paper)' : 'var(--faint)',
-          vfill: hit ? 'var(--paper)' : 'var(--faint)'
+          w: barW(r.gap).toFixed(1),
+          v: r.gap.toFixed(2),
+          fill: hit ? 'var(--paper)' : 'var(--faint)'
         };
       })
     };
