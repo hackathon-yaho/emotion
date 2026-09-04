@@ -60,6 +60,8 @@ Phase 문서(`phase-1~7`)가 **무엇을 만드는지**라면, 이 문서는 **�
 
 | 항목 | 상태 | 내용 |
 | --- | --- | --- |
+| **카카오 개발자 앱** | ✅ **확정 (2026-09-04)** | **콘솔 생성·소유·등록 전부 백엔드.** 동의항목은 **회원번호만**. 앱에 **JS 키 전달**과 **등록할 주소 확정**이 남았다 — `../../docs/request/app/kakao-web-login.md` (⏳). **이게 Phase 1의 F1-01을 막는다** |
+| 스케줄러·시크릿·테스트 | ✅ 확정 (2026-09-04) | 주기 **5분** · 시크릿 **등급 분리**(`TRANSCRIPT_ENC_KEY`만 오프라인 사본) · **통합 테스트까지, 실DB는 compose 재사용** |
 | 언어·빌드·패키지 | ✅ 확정 (2026-09-04) | Java 21 · Spring Boot 3.4.5 · Gradle Groovy · `com.hackathonyaho.voicejournal` |
 | 로컬 인프라 | ✅ 확정 | docker-compose Postgres 16 (개발) / Supabase (배포) |
 | 배포 플랫폼 | ✅ 확정 | Render Free + cron 10분 킵얼라이브. **AI서버와 별도 계정**(워크스페이스당 750시간) |
@@ -97,7 +99,9 @@ Phase 문서(`phase-1~7`)가 **무엇을 만드는지**라면, 이 문서는 **�
 | 앱 | 백엔드 주소 (`API_BASE_URL`) | 통합 시 터널 URL → 배포 후 정식 도메인 |
 | AI | `X-Internal-Secret` 값 | 통합 시작할 때. 저장소에 넣지 않는다 |
 | AI | `GET /internal/sessions/{id}` 실동작 | Phase 2 — **CLM 인증이라 AI 개발을 막는다** |
-| AI → 백엔드 | **Hume API 키 + `config_id`** | **계정을 AI가 소유하므로 둘 다 AI가 준다.** 받으면 환경변수(`HUME_API_KEY`·`HUME_CONFIG_ID`)에 넣는다. 저장소에 넣지 않는다 |
+| AI → 백엔드 | **Hume API 키 + Secret 키 + `config_id`** | **계정을 AI가 소유하므로 셋 다 AI가 준다.** 단기 토큰 발급에 **API 키와 Secret 키가 짝으로** 필요하다. `HUME_API_KEY`·`HUME_SECRET_KEY`·`HUME_CONFIG_ID`. 저장소에 넣지 않는다 |
+| 백엔드 → 앱 | **카카오 JS 키** | 콘솔은 백엔드가 소유한다. repo variable `KAKAO_JS_KEY`에 들어간다 |
+| 앱 → 백엔드 | **등록할 주소** (사이트 도메인 · `redirect_uri` · 로컬 개발 포트) | 카카오 콘솔 등록은 백엔드가 하지만 **주소는 앱 배포 주소**다. 콘솔은 와일드카드를 안 받아 로컬 포트를 하나 고정해야 한다 |
 | AI → 백엔드 | ~~`turnIndex` 채번 확인~~ ✅ (2026-09-04) | **회신 완료.** 카운터를 `lastTurnIndex`로 시드하므로 0에서 시작하는 경로가 없고, `occurredAt` 규칙은 **계약 v1.5**에 명시됐다 |
 | 앱 | `GET /api/session/{id}/live` | **Phase 3** — S02가 이걸로 완성된다 |
 | 앱 | `tagGaps`·`userAvgGap` (F9-03, P1) | Phase 5 — 계약 v1.4로 확정됨 |

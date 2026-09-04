@@ -16,7 +16,7 @@
 - [ ] **그 사용자의 열린 세션을 먼저 닫는다** (`end_reason: 'timeout'`) — 동시 세션 문제를 별도 잠금 없이 해결(F2-06 부수 효과)
 - [ ] `user_baseline` 조회 → **`session_count >= 5` AND `avg_gap IS NOT NULL`이면 `personal`, 아니면 `fixed`** (F3-04). `voice_session.threshold_mode`에 기록
 - [ ] **적용 임계값을 `voice_session.gap_threshold`에 스냅샷** (2026-09-04 신설) — 아래 주의
-- [ ] Hume 단기 액세스 토큰 발급 (백엔드 환경변수의 API 키로)
+- [ ] Hume 단기 액세스 토큰 발급 — **`HUME_API_KEY` + `HUME_SECRET_KEY`** 로 Hume의 토큰 엔드포인트를 호출한다. **두 값 모두 AI에게서 받는다**(계정을 AI가 소유, `request/ai/hume-account-setup.md`)
 - [ ] 응답 조립 — **필드는 계약 §2-4가 단일 출처다**(v1.4). 아래는 계약이 정하지 않은 백엔드 쪽 판단만 적는다
 
 | 필드 | 백엔드가 정하는 것 |
