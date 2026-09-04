@@ -169,6 +169,8 @@ lib/
 │  ├─ data/journal_repository.dart  화면이 데이터를 얻는 유일한 경로
 │  ├─ data/api_journal_repository.dart     실제 백엔드
 │  ├─ data/sample_journal_repository.dart  샘플 모드 (Hume·백엔드 안 탐)
+│  ├─ voice/evi_service.dart  Hume EVI 소켓 — 프로토콜·실패 처리
+│  ├─ voice/mic.dart · speaker.dart  마이크(PCM16 스트림) · 재생 큐
 │  ├─ providers.dart        Riverpod 프로바이더 — 화면별 데이터
 │  └─ fixtures/             샘플 데이터 (발표 근거로 쓰지 않는다)
 ├─ features/                화면 11개 (S00~S07) — 전부 구현됨
@@ -209,27 +211,49 @@ lib/
 | ~~F9-03 이야기별 갭~~ | ✅ 해결 — 계약 **v1.4** §2-8에서 `GET /api/trend`가 `tagGaps`·`userAvgGap`을 함께 줍니다(상위 7개, 3회 미만은 서버가 걸러냄, `range` 종속). **아직 앱 코드에 반영하지 않았습니다** |
 | 산세리프 서체 | 문서상 Pretendard지만 Google Fonts에 없어 **Noto Sans KR로 대체** 중입니다(캔버스와 동일). `fonts/`에 넣고 `pubspec.yaml`의 fonts 항목을 켠 뒤 `AppType.sans`만 바꾸면 전 화면에 적용됩니다 |
 | 제품 이름 | 미확정(PRD §14-6). Dart 패키지명 `voice_journal`, 번들 ID `com.hackathonyaho.voiceJournal`은 임시입니다. 확정되면 `main.dart`의 `title`과 `web/index.html`·`manifest.json`을 함께 고칩니다. **커스텀 도메인이 정해지면 백엔드에 알립니다** — 허용 오리진이 환경변수 한 줄이라 재배포 없이 들어갑니다 |
-| 카카오 로그인 | 흐름은 확정(인가 코드)이지만 **키가 없어 아직 구현하지 않았습니다.** `onboarding_screen.dart`는 여전히 TODO입니다. **변수명이 `KAKAO_JS_KEY`로 남을지 `KAKAO_REST_KEY`가 될지는 백엔드 확인 1건에 달려 있습니다** — 정해지면 `env.dart`와 `app-web.yml`을 같이 고칩니다 |
+| 카카오 로그인 | 흐름·계약(v1.6 §2-1)·키 이름(**`KAKAO_REST_KEY`**) 다 확정인데 **값이 없어 아직 구현하지 않았습니다.** `onboarding_screen.dart`는 여전히 TODO입니다 — repo variable이 등록되면 인가 URL 조립부터 붙입니다 |
 | ~~데이터 연결~~ | ✅ 해결 — 화면이 `JournalRepository`를 봅니다. 기본은 실제 API이고, 샘플은 **샘플 모드에서만** 나옵니다(위 「데이터는 어디서 오나」) |
 | 로그인 | 흐름은 확정(인가 코드)이고 **계약 v1.6 §2-1도 확정**인데 카카오 키가 없어 아직 구현하지 않았습니다. `POST /api/auth/kakao` 호출은 그래서 리포지토리에 없습니다 |
-| EVI 음성 | `web_socket_channel`·`record`·`audioplayers`를 넣어두었고 **서비스는 아직 없습니다.** 세션 수립·폴링·종료까지는 실제로 돌고, `humeAccessToken`으로 EVI에 붙는 것이 다음 작업입니다 |
+| EVI 음성 | 구현했습니다(`core/voice/`, 테스트 17건). **마이크 음성 왕복만 미검증** — 토큰이 `session/start`에서만 나와 백엔드가 붙는 날 확인합니다 |
 
 ## 디자인 캔버스
 
 `design/`에 아트보드 작업 파일이 있습니다. 재생성·구현 규칙은 [`design/README.md`](design/README.md).
 
-## EVI 연결 메모 (공식 예제 실측, 2026-09-03)
+## 음성 (EVI) — 구현했습니다
 
 ```
 wss://api.hume.ai/v0/evi/chat?access_token={humeAccessToken}&config_id={humeConfigId}&custom_session_id={sessionId}
 ```
 
-- `access_token` — 계약서 §2-4의 `humeAccessToken`
-- `config_id` — `session/start` 응답의 `humeConfigId` (계약 v1.3 §2-4)
-- `custom_session_id` — 예제에 없어 우리가 추가합니다 (spec F2-02, CLM 계약 §4)
-- **`session_settings`에 `language_model_api_key`를 넣지 않습니다** — 웹 번들에 노출되므로, CLM 인증은 AI서버가 `custom_session_id`를 백엔드로 검증하는 방식입니다 (`ai-pipeline.md` AI-11)
-- 연결 성공 시 `chat_metadata`로 `chat_group_id`가 옵니다 → F2-07 이어하기의 `resumedChatGroupId` 원천
-- **공식 예제의 오류 처리는 그대로 쓰지 않습니다.** 인증 실패·마이크 거부에서 처리되지 않은 예외를 던져 F2-04 수용 기준("어떤 경우에도 앱이 멈추지 않는다")을 못 지킵니다
+`core/voice/`에 있습니다. `EviService`가 소켓·프로토콜, `Mic`이 마이크, `Speaker`가 재생입니다. **셋 다 인터페이스라 테스트에서 갈아끼웁니다** — `test/evi_test.dart` 17건이 가짜 소켓으로 핸드셰이크·수신·실패·종료를 검증합니다.
+
+| 값 | 출처 |
+| --- | --- |
+| `access_token` | `session/start` 응답의 `humeAccessToken` (**단기 토큰**) |
+| `config_id` | 같은 응답의 `humeConfigId` (v1.3 §2-4) |
+| `custom_session_id` | `sessionId` — AI서버가 이 값으로 세션을 검증합니다 (계약 §4) |
+| `resumed_chat_group_id` | 이어하기일 때만 (F2-07) |
+
+### 코드에 못 박아 둔 것
+
+- **Hume 키를 앱에 두지 않습니다** (FR-013). 소켓에 들어가는 것은 백엔드가 발급한 단기 토큰뿐입니다
+- **`language_model_api_key`를 `session_settings`에 넣지 않습니다** — 웹 번들에 노출됩니다. CLM 인증은 AI서버가 `custom_session_id`를 검증하는 방식입니다 (계약 §4). **테스트가 이 문자열이 나가지 않는지 확인합니다**
+- **프로소디를 파싱하지 않습니다.** `user_message`에 48종 점수가 실려 오지만 앱은 텍스트만 꺼냅니다 — 사건 클래스에 점수를 담을 자리 자체가 없습니다. 들고 있으면 언젠가 화면에 나옵니다 (FR-030·031)
+- **음성을 파일로 쓰지 않습니다** (FR-041). `record`의 `startStream`으로 바이트를 받아 소켓으로만 보내고, 재생 조각은 메모리에서 버립니다. `start(path:)` 계열을 쓰면 그 순간 규칙이 깨집니다
+- **어떤 실패에서도 예외를 밖으로 던지지 않습니다** (F2-04 수용 기준). 전부 `EviFailed`로 내려가고 화면이 원인별 문구를 고릅니다 — 마이크 거부만 사용자가 고칠 수 있으므로 문구가 다릅니다
+- **분류하지 못한 오류를 `auth`로 뭉개지 않습니다.** "다시 시도"가 소용없는 상황에서 다시 시도를 권하게 됩니다
+- **소켓을 먼저 열고 마이크를 나중에 켭니다.** 순서를 뒤집으면 인증 실패인데도 마이크 권한 창이 먼저 떠서 사용자가 원인을 오해합니다
+- **`user_interruption`에서 재생 큐를 비웁니다.** 안 비우면 사용자가 끊었는데도 AI가 계속 말합니다
+- **자막을 쌓지 않습니다** (design-system §6-1). 사용자 발화만 3초간 띄우고, AI 발화는 텍스트로 그리지 않습니다 — 소리로 듣는 것을 글로 또 보여주면 채팅앱이 됩니다
+
+### 아직 검증되지 않은 것
+
+**마이크 음성 왕복은 실측하지 못했습니다** (PRD §14-4에 남아 있는 항목). 카카오 키도 백엔드도 없어 실제 세션을 열 수 없고, **Hume 토큰은 `session/start`에서만 나옵니다.** 프로토콜·상태 전이·실패 경로는 테스트로 덮었지만, **브라우저에서 실제 소리가 오가는 것은 백엔드가 붙는 날 확인해야 합니다.**
+
+웹에서 쓰는 형식은 16kHz · 모노 · PCM16(`linear16`)이고, `record_web`이 AudioWorklet으로 스트림을 줍니다(`assets/packages/record_web/assets/js/record.worklet.js` — 빌드에 포함되는 것 확인했습니다). 마이크는 **HTTPS나 localhost에서만** 열립니다 — Pages는 HTTPS라 문제없습니다.
+
+**샘플 모드에서는 소켓을 아예 열지 않습니다.** 토큰이 가짜라 붙지도 못하지만, 시도 자체를 하지 않아야 실수로 실제 통화가 열릴 여지가 없습니다.
 
 ---
 

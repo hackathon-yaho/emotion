@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/session_models.dart';
 import '../../core/providers.dart';
+import '../../core/voice/evi_event.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
@@ -63,6 +66,11 @@ class ConversationScreen extends ConsumerStatefulWidget {
 class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   late TalkState _state = widget.initial;
 
+  /// 방금 들은 사용자 발화 — 잠깐만 띄운다 (design-system §6-1).
+  String? _heard;
+  Timer? _heardTimer;
+  StreamSubscription<EviEvent>? _eviSub;
+
   @override
   void initState() {
     super.initState();
@@ -77,34 +85,112 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     }
   }
 
-  /// 세션 시작 (§2-4) 또는 이어하기 (§2-5-1).
+  /// 세션 시작 (§2-4) 또는 이어하기 (§2-5-1) → **EVI 연결** (F2-02).
   ///
-  /// **EVI 연결은 아직 없다.** 여기서 받은 `humeAccessToken`으로 붙는 것이
-  /// 다음 작업이고, 지금은 세션 수립·폴링·종료까지만 실제로 돈다. 샘플
-  /// 모드에서는 토큰이 가짜라 붙을 수도 없다 — 의도한 것이다.
+  /// 순서가 중요하다 — 세션을 먼저 세우고 그 응답의 단기 토큰으로 소켓을
+  /// 연다. 앱에는 Hume 키가 없다 (FR-013).
+  ///
+  /// **샘플 모드에서는 소켓을 열지 않는다.** 토큰이 가짜라 붙지도 못하지만,
+  /// 시도 자체를 하지 않아야 실수로 실제 통화가 열릴 여지가 없다.
   Future<void> _open() async {
     final repo = ref.read(journalRepositoryProvider);
     ref.read(inConversationProvider.notifier).state = true;
     setState(() => _state = TalkState.connecting);
     try {
       final open = await repo.me().then((m) => m.openSession);
+      final SessionStart session;
       if (open != null) {
         final r = await repo.resumeSession(open.sessionId);
         if (!mounted) return;
         // 이어하기는 새 7분을 주지 않는다 (NFR-06) — 남은 시간을 그대로 쓴다.
-        ref.read(activeSessionProvider.notifier).state = _asStart(r);
-        setState(() => _state = TalkState.resumed);
-        return;
+        session = _asStart(r);
+        // 이전 대화 맥락은 이 값으로 복원된다. 백엔드가 아직 null만 주므로
+        // (`request/app/chat-group-id.md`) 같은 세션 안에서 받은 값을 쓴다.
+        ref.read(chatGroupIdProvider.notifier).state =
+            r.resumedChatGroupId.isEmpty ? null : r.resumedChatGroupId;
+      } else {
+        session = await repo.startSession();
+        if (!mounted) return;
       }
-      final s = await repo.startSession();
-      if (!mounted) return;
-      ref.read(activeSessionProvider.notifier).state = s;
-      setState(() => _state = TalkState.listening);
+      ref.read(activeSessionProvider.notifier).state = session;
+      setState(() => _state = open != null
+          ? TalkState.resumed
+          : TalkState.listening);
+
+      if (ref.read(dataModeProvider) == DataMode.sample) return;
+      await _connectVoice(session);
     } catch (_) {
       if (!mounted) return;
       // 원인별 문구는 F2-04 — 여기서는 "시작할 수 없다"로 모은다.
       setState(() => _state = TalkState.cannotStart);
     }
+  }
+
+  /// EVI 소켓을 열고 사건을 화면 상태로 옮긴다.
+  Future<void> _connectVoice(SessionStart session) async {
+    final evi = ref.read(eviServiceProvider);
+    _eviSub?.cancel();
+    _eviSub = evi.events.listen(_onEvi);
+    await evi.start(
+      accessToken: session.humeAccessToken,
+      configId: session.humeConfigId,
+      sessionId: session.sessionId,
+      resumedChatGroupId: ref.read(chatGroupIdProvider),
+    );
+  }
+
+  /// EVI 사건 → 화면.
+  ///
+  /// **자막을 쌓지 않는다** (design-system §6-1) — 사용자 발화만 잠깐 띄우고
+  /// AI 발화는 텍스트로 그리지 않는다. 소리로 듣는 것을 글로 또 보여주면
+  /// 채팅앱이 된다.
+  void _onEvi(EviEvent e) {
+    if (!mounted) return;
+    switch (e) {
+      case EviConnected(:final chatGroupId):
+        // F2-07의 원천. 백엔드에 넘길 엔드포인트는 아직 없다.
+        if (chatGroupId != null) {
+          ref.read(chatGroupIdProvider.notifier).state = chatGroupId;
+        }
+        setState(() => _state = TalkState.listening);
+
+      case EviUserSpoke(:final text):
+        // 잠깐만 보여준다 — 다음 발화가 오거나 3초가 지나면 사라진다.
+        _showHeard(text);
+
+      case EviAssistantSpoke():
+        setState(() => _state = TalkState.speaking);
+
+      case EviAssistantDone():
+        setState(() => _state = TalkState.listening);
+
+      case EviUserInterruption():
+        setState(() => _state = TalkState.listening);
+
+      case EviClosed():
+        // 대화 중 끊긴 것이면 알린다. 우리가 끊은 경우는 이미 화면을 떠났다.
+        setState(() => _state = TalkState.networkLost);
+
+      case EviFailed(:final reason):
+        setState(() => _state = switch (reason) {
+              EviFailure.micDenied => TalkState.micDenied,
+              EviFailure.network => TalkState.networkLost,
+              EviFailure.auth => TalkState.cannotStart,
+              EviFailure.unknown => TalkState.cannotStart,
+            });
+    }
+  }
+
+  /// 방금 들은 말을 잠깐 띄운다 (§6-1 절충안).
+  void _showHeard(String text) {
+    _heardTimer?.cancel();
+    setState(() {
+      _heard = text;
+      _state = TalkState.listening;
+    });
+    _heardTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _heard = null);
+    });
   }
 
   /// 이어하기 응답을 세션 값으로 맞춘다 — 폴링 간격은 §2-5-1에 없어 기본 2초.
@@ -125,6 +211,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Future<void> _end() async {
     final session = ref.read(activeSessionProvider);
     ref.read(inConversationProvider.notifier).state = false;
+    // **마이크를 먼저 끈다.** 종료 호출이 느려도 그동안 소리가 나가지 않는다.
+    await _eviSub?.cancel();
+    _eviSub = null;
+    if (ref.read(dataModeProvider) == DataMode.live) {
+      await ref.read(eviServiceProvider).stop();
+    }
     if (session == null) {
       if (mounted) context.go(Routes.summary);
       return;
@@ -148,6 +240,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
   @override
   void dispose() {
+    _heardTimer?.cancel();
+    _eviSub?.cancel();
     // 화면을 벗어나면 폴링이 멈추도록 세션을 놓는다.
     ref.read(inConversationProvider.notifier).state = false;
     super.dispose();
@@ -278,10 +372,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 child: Column(
                   children: [
                     SmallLabel(r.label),
-                    if (r.caption != null) ...[
+                    // 실제 발화가 들어오면 대본 문구 대신 그것을 띄운다.
+                    // **AI 발화는 여기 오지 않는다** — 소리로만 듣는다 (§6-1).
+                    if ((_heard ?? r.caption) != null) ...[
                       const SizedBox(height: Space.lg + 2),
                       Text(
-                        r.caption!,
+                        _heard ?? r.caption!,
                         textAlign: TextAlign.center,
                         style: AppType.serif(
                           size: 22,

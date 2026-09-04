@@ -12,6 +12,9 @@ import 'models/record_models.dart';
 import 'models/session_models.dart';
 import 'models/trend_models.dart';
 import 'network/api_client.dart';
+import 'voice/evi_service.dart';
+import 'voice/mic.dart';
+import 'voice/speaker.dart';
 import 'storage/token_storage.dart';
 
 final tokenStorageProvider = Provider<TokenStorage>((_) => TokenStorage());
@@ -124,3 +127,23 @@ final liveSignalProvider = StreamProvider<LiveSignal>((ref) async* {
     await Future<void>.delayed(every);
   }
 });
+
+// ---------------------------------------------------------------------------
+// 음성 (EVI)
+// ---------------------------------------------------------------------------
+
+/// EVI 소켓. **샘플 모드에서는 만들지 않는다** — 붙을 토큰 자체가 가짜다.
+///
+/// 화면이 직접 만들지 않고 여기서 주는 이유는 테스트에서 갈아끼우기 위함이다.
+final eviServiceProvider = Provider.autoDispose<EviService>((ref) {
+  final service = EviService(mic: RecordMic(), speaker: AudioPlayersSpeaker());
+  ref.onDispose(service.dispose);
+  return service;
+});
+
+/// EVI가 준 `chat_group_id` (F2-07의 `resumedChatGroupId` 원천).
+///
+/// **백엔드에 넘길 경로가 아직 없다** — `docs/request/app/chat-group-id.md`의
+/// 3안(연결 직후 전송)으로 회신했고, 엔드포인트가 생기면 여기서 보낸다.
+/// 지금은 같은 세션 안에서 재연결할 때만 쓰인다.
+final chatGroupIdProvider = StateProvider<String?>((_) => null);

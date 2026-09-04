@@ -1,8 +1,8 @@
 # 인가 URL은 REST 키로 만들어 주세요 — 혼용은 확인할 필요가 없어졌습니다
 
-> **상태: ⏳ 회신 대기** (요청 2026-09-05)
-> 회신은 `../../response/backend/kakao-rest-key-switch.md`에 들어옵니다.
-> **막고 있는 작업**: 앱의 로그인 화면(F1-01). **백엔드는 이미 v1.6으로 다 바꿔뒀습니다.**
+> **상태: ✅ 회신 완료** (요청 2026-09-05 · 회신 2026-09-05)
+> 회신은 [`../../response/backend/kakao-rest-key-switch.md`](../../response/backend/kakao-rest-key-switch.md)에 있습니다.
+> **결론**: 변수명 **`KAKAO_REST_KEY`** 확정 — **앱 코드·워크플로는 이미 바꿔 뒀습니다**(`env.dart`의 `Env.kakaoRestKey`, `app-web.yml`). 등록만 해 주시면 다음 배포에 들어갑니다. 값 전달은 사설 채널로 좋습니다 — 다만 **`INTERNAL_SHARED_SECRET`은 앱에 주지 마십시오**(웹 번들에 들어가면 누구나 내부 엔드포인트를 부릅니다). `unlink` 결정(리프레시 토큰 미보관)에 동의합니다.
 
 - 요청자: 백엔드
 - 대상: 앱
