@@ -5,6 +5,7 @@ import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../shared/widgets/app_frame.dart';
 import '../../shared/widgets/hairline.dart';
 import '../../shared/widgets/outline_button.dart';
 import '../../shared/widgets/ring_pair.dart';
@@ -136,128 +137,153 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) => _body(
+        context,
+        // §2-1 예외 — 데모 수치는 좁은 화면에서 본문 아래, 넓은 화면에서
+        // 셸 오른쪽 패널로 간다.
+        sidePanel: widget.demoMode && AppFrame.hasSidePanel(c.maxWidth),
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context, {required bool sidePanel}) {
     final t = context.tokens;
     final r = _ring;
 
-    return ScreenScaffold(
-      topPadding: 40,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _BackButton(onTap: () => context.pop()),
-              const Spacer(),
-              if (widget.demoMode)
-                Text(
-                  'DEMO',
-                  style: AppType.sans(
-                    size: AppType.smallLabelSize,
-                    color: t.accent,
-                    height: 1.2,
-                    letterSpacing: 0.16 * AppType.smallLabelSize,
-                  ),
+    final main = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _BackButton(onTap: () => context.pop()),
+            const Spacer(),
+            if (widget.demoMode)
+              Text(
+                'DEMO',
+                style: AppType.sans(
+                  size: AppType.smallLabelSize,
+                  color: t.accent,
+                  height: 1.2,
+                  letterSpacing: 0.16 * AppType.smallLabelSize,
                 ),
-            ],
-          ),
+              ),
+          ],
+        ),
 
-          Expanded(
+        Expanded(
+          child: SizedBox(
+            width: double.infinity,
+            child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              RingPair(
+                size: r.size,
+                offset: r.offset,
+                coolOpacity: r.cool,
+                warmOpacity: r.warm,
+              ),
+              const SizedBox(height: 44),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 120),
+                child: Column(
+                  children: [
+                    SmallLabel(r.label),
+                    if (r.caption != null) ...[
+                      const SizedBox(height: Space.lg + 2),
+                      Text(
+                        r.caption!,
+                        textAlign: TextAlign.center,
+                        style: AppType.serif(
+                          size: 22,
+                          color: t.paper,
+                          height: 1.65,
+                        ),
+                      ),
+                    ],
+                    if (r.sub != null) ...[
+                      const SizedBox(height: Space.lg + 2),
+                      Text(
+                        r.sub!,
+                        textAlign: TextAlign.center,
+                        style: AppType.sans(
+                          size: AppType.captionSize,
+                          color: t.faint,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                    if (r.error != null) ...[
+                      const SizedBox(height: Space.lg + 2),
+                      Text(
+                        r.error!,
+                        textAlign: TextAlign.center,
+                        style: AppType.sans(
+                          size: AppType.bodySize,
+                          color: t.muted,
+                          height: 1.75,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            ),
+          ),
+        ),
+
+        if (widget.demoMode && !sidePanel) const _DemoPanel(),
+
+        if (r.nearEnd)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Space.md),
             child: SizedBox(
               width: double.infinity,
-              child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                RingPair(
-                  size: r.size,
-                  offset: r.offset,
-                  coolOpacity: r.cool,
-                  warmOpacity: r.warm,
+              child: Text(
+                '잠시 뒤 오늘 대화가 마무리됩니다',
+                textAlign: TextAlign.center,
+                style: AppType.sans(
+                  size: AppType.captionSize,
+                  color: t.faint,
+                  height: 1.5,
                 ),
-                const SizedBox(height: 44),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 120),
-                  child: Column(
-                    children: [
-                      SmallLabel(r.label),
-                      if (r.caption != null) ...[
-                        const SizedBox(height: Space.lg + 2),
-                        Text(
-                          r.caption!,
-                          textAlign: TextAlign.center,
-                          style: AppType.serif(
-                            size: 22,
-                            color: t.paper,
-                            height: 1.65,
-                          ),
-                        ),
-                      ],
-                      if (r.sub != null) ...[
-                        const SizedBox(height: Space.lg + 2),
-                        Text(
-                          r.sub!,
-                          textAlign: TextAlign.center,
-                          style: AppType.sans(
-                            size: AppType.captionSize,
-                            color: t.faint,
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
-                      if (r.error != null) ...[
-                        const SizedBox(height: Space.lg + 2),
-                        Text(
-                          r.error!,
-                          textAlign: TextAlign.center,
-                          style: AppType.sans(
-                            size: AppType.bodySize,
-                            color: t.muted,
-                            height: 1.75,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+              ),
+            ),
+          ),
+
+        if (widget.showStatePicker) _StatePicker(
+          current: _state,
+          onPick: (s) => setState(() => _state = s),
+        ),
+
+        if (r.cta == null)
+          OutlineAction(
+            label: '대화 마치기',
+            height: 56,
+            onPressed: () => context.go(Routes.summary),
+          )
+        else
+          FilledAction(label: r.cta!, height: 56, onPressed: () {}),
+        const SizedBox(height: 40),
+      ],
+    );
+
+    return ScreenScaffold(
+      topPadding: 40,
+      child: sidePanel
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: main),
+                const SizedBox(width: Space.xl),
+                const SizedBox(
+                  width: AppFrame.demoPanelWidth,
+                  child: _DemoPanel(side: true),
                 ),
               ],
-              ),
-            ),
-          ),
-
-          if (widget.demoMode) const _DemoPanel(),
-
-          if (r.nearEnd)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Space.md),
-              child: SizedBox(
-                width: double.infinity,
-                child: Text(
-                  '잠시 뒤 오늘 대화가 마무리됩니다',
-                  textAlign: TextAlign.center,
-                  style: AppType.sans(
-                    size: AppType.captionSize,
-                    color: t.faint,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-            ),
-
-          if (widget.showStatePicker) _StatePicker(
-            current: _state,
-            onPick: (s) => setState(() => _state = s),
-          ),
-
-          if (r.cta == null)
-            OutlineAction(
-              label: '대화 마치기',
-              height: 56,
-              onPressed: () => context.go(Routes.summary),
             )
-          else
-            FilledAction(label: r.cta!, height: 56, onPressed: () {}),
-          const SizedBox(height: 40),
-        ],
-      ),
+          : main,
     );
   }
 
@@ -298,23 +324,32 @@ class _Ring {
 
 /// F11-01 데모 모드 — `demoMode == true`일 때만 수치를 노출한다.
 class _DemoPanel extends StatelessWidget {
-  const _DemoPanel();
+  const _DemoPanel({this.side = false});
+
+  /// `true`면 셸 오른쪽 패널 (§2-1). `false`면 본문 아래 배지.
+  final bool side;
 
   @override
   Widget build(BuildContext context) {
+    const rows = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Hairline(),
+        _DemoRow(label: '말한 내용', value: '0.70'),
+        Hairline(),
+        _DemoRow(label: '목소리', value: '−0.62'),
+        Hairline(),
+        _DemoRow(label: '갭 · 트리거', value: '1.32 · 예', accent: true),
+        Hairline(),
+      ],
+    );
+
+    if (side) {
+      return const Align(alignment: Alignment.center, child: rows);
+    }
     return const Padding(
       padding: EdgeInsets.only(bottom: Space.xl - Space.xs),
-      child: Column(
-        children: [
-          Hairline(),
-          _DemoRow(label: '말한 내용', value: '0.70'),
-          Hairline(),
-          _DemoRow(label: '목소리', value: '−0.62'),
-          Hairline(),
-          _DemoRow(label: '갭 · 트리거', value: '1.32 · 예', accent: true),
-          Hairline(),
-        ],
-      ),
+      child: rows,
     );
   }
 }

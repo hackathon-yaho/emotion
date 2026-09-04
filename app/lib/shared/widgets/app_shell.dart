@@ -8,7 +8,8 @@ import '../../core/theme/typography.dart';
 /// 앱 셸 — 하단 탭 4개.
 ///
 /// **텍스트 + 밑줄이고 아이콘이 없다** (design-system §1: 활자가 일한다).
-/// 레이아웃은 모바일 폭 기준이고, 넓은 화면에서는 셸을 중앙에 고정한다 (§2).
+/// 레이아웃은 모바일 폭 기준이다. **넓은 화면에서 폭을 고정하는 일은 하지
+/// 않는다** — [AppFrame]이 모든 라우트에 한 번에 적용한다 (§2).
 class AppShell extends StatelessWidget {
   const AppShell({
     super.key,
@@ -21,12 +22,6 @@ class AppShell extends StatelessWidget {
   final AppTab currentTab;
   final ValueChanged<AppTab> onTabSelected;
 
-  /// 앱 셸 최대 폭 (§2). 420을 넘기면 한 손 UI가 늘어져 보인다.
-  static const maxWidth = 420.0;
-
-  /// 분기점 하나. `< 600` 전폭 / `>= 600` 중앙 고정 (§2).
-  static const breakpoint = 600.0;
-
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
@@ -37,17 +32,7 @@ class AppShell extends StatelessWidget {
       ],
     );
 
-    return Material(
-      color: t.bg,
-      child: LayoutBuilder(
-        builder: (context, c) {
-          if (c.maxWidth < breakpoint) return shell;
-          return Center(
-            child: SizedBox(width: maxWidth, child: shell),
-          );
-        },
-      ),
-    );
+    return Material(color: t.bg, child: shell);
   }
 }
 
