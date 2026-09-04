@@ -23,13 +23,35 @@
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="voice_journal">
+  <meta name="apple-mobile-web-app-title" content="보이스 저널">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon -->
+  <!-- Favicon · 앱 아이콘 — S02의 어긋난 두 링 (design-system §1).
+       차가운 링 = 말한 내용, 따뜻한 링 = 목소리. -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>voice_journal</title>
+  <!-- 브라우저 UI 색 — 시스템 설정을 따른다. manifest의 theme_color는
+       값을 하나만 가질 수 있어 여기서 갈라 준다. -->
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F5F2EC">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0D0D0C">
+
+  <style>
+    /*
+      부팅 전 배경 — **흰 플래시를 막는다.**
+
+      Flutter 웹은 CanvasKit을 받는 동안 빈 문서를 보여주는데, 기본 흰색이라
+      다크 테마에서 매번 화면이 번쩍인다(첫 로드에 gzip 3.6MB를 받는다).
+      토큰 값과 같은 색을 깔아 둔다 — design-system §4.
+    */
+    html, body { margin: 0; padding: 0; background-color: #F5F2EC; }
+    @media (prefers-color-scheme: dark) {
+      html, body { background-color: #0D0D0C; }
+    }
+  </style>
+
+  <!-- 제품 이름은 미확정이다 (PRD §14-6). 확정되면 이 제목과
+       manifest.json의 name·short_name, main.dart의 title을 함께 고친다. -->
+  <title>감정 케어 보이스 저널</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
