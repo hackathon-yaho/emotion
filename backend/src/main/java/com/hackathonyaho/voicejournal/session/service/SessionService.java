@@ -38,6 +38,7 @@ public class SessionService {
     private final ProfileRepository profileRepository;
     private final TurnStats turnStats;
     private final HumeTokenService humeTokenService;
+    private final SummaryClient summaryClient;
     private final SessionPolicy policy;
 
     // ── 시작 (F2-01) ────────────────────────────────────────────────
@@ -93,6 +94,8 @@ public class SessionService {
             session.end(endReason, now, (int) Duration.between(session.getStartedAt(), now).toSeconds());
             // F3-05(P1)가 아니라 종료의 기본 동작이다 — 잘려도 F3-04와 TC-07이 살아 있어야 한다.
             baselineRepository.findById(profileId).ifPresent(UserBaseline::countSession);
+            recalculateBaseline(profileId);
+            session.attachSummary(summaryClient.generate(sessionId));
         }
 
         return new SessionEndResponse(
@@ -198,6 +201,21 @@ public class SessionService {
         int used = usedSec(session, lastActivityAt);
         session.end(TIMEOUT, session.getStartedAt().plusSeconds(used), used);
         baselineRepository.findById(session.getProfileId()).ifPresent(UserBaseline::countSession);
+        recalculateBaseline(session.getProfileId());
+    }
+
+    /**
+     * F3-05 — <b>평균·표준편차만 여기서 재계산한다.</b> {@code session_count} 증가는
+     * 종료의 기본 동작이라 위에 따로 있다: F3-05는 P1(스코프 컷 7번)이고, 카운트까지
+     * 묶여 있으면 자르는 순간 <b>P0인 F3-04가 영영 fixed에 머물고 TC-07이 실패한다.</b>
+     *
+     * <p><b>전체 재계산이다</b>(증분 아님) — 세션 삭제(F10-01) 후 재계산과 같은 코드를
+     * 쓰기 위함이다. 갭이 NULL인 턴은 집계에서 빠진다.
+     */
+    private void recalculateBaseline(UUID profileId) {
+        TurnStats.Baseline stats = turnStats.baselineFor(profileId);
+        baselineRepository.findById(profileId)
+                .ifPresent(b -> b.updateGapStats(stats.avgGap(), stats.stddevGap()));
     }
 
     // ── 공통 ────────────────────────────────────────────────────────
@@ -221,6 +239,12 @@ public class SessionService {
      */
     private Instant lastActivityAt(VoiceSession session) {
         return turnStats.lastActivityAt(session.getId(), session.getStartedAt());
+    }
+
+    /** 다른 서비스도 같은 소유 검사를 쓴다 — 규칙이 두 벌이 되면 한쪽만 고쳐진다. */
+    @Transactional(readOnly = true)
+    public VoiceSession requireOwned(UUID profileId, UUID sessionId) {
+        return mine(profileId, sessionId);
     }
 
     private VoiceSession mine(UUID profileId, UUID sessionId) {

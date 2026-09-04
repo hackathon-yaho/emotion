@@ -46,6 +46,11 @@ app:
   internal:
     # AI서버 → 백엔드 인증 (계약 §3-1). 저장소에 넣지 않는다.
     shared-secret: ${INTERNAL_SHARED_SECRET}
+  ai:
+    # 백엔드 → AI서버 (계약 §3-5 요약 · Phase 4의 §3-3 관찰). AI 로컬 포트는 8000.
+    base-url: ${AI_SERVER_BASE_URL:http://localhost:8000}
+    # 요약은 종료 응답을 붙잡는 동기 호출이라 짧게 끊는다. 실패하면 summary: null이다.
+    summary-timeout-ms: 3000
   crypto:
     # 발화 암호화 키 (F5-02). base64(16/24/32바이트).
     # ⚠️ 잃으면 도그푸딩 발화 전체가 복호화 불가다 — 세 시크릿 중 이것만 오프라인 사본을 둔다.

@@ -31,6 +31,10 @@ app:
     config-id: cfg_test
   internal:
     shared-secret: test-internal-secret
+  ai:
+    # 테스트에서는 AI서버가 없다 — 뜨지 않는 포트로 두어 실패 경로(summary: null)를 탄다.
+    base-url: http://localhost:59999
+    summary-timeout-ms: 300
   crypto:
     # 테스트 전용 고정 키. 배포 키와 다르다.
     transcript-key: dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1leGFjdGx5ISE=

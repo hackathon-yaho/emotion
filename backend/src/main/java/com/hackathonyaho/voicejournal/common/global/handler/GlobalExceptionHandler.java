@@ -38,6 +38,27 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.VALIDATION_ERROR, traceId));
     }
 
+    /**
+     * 깨진 JSON·읽을 수 없는 본문. <b>500이 아니라 400이어야 한다</b> — 계약 §3-2에서
+     * AI서버는 5xx를 <b>3회 재시도</b>하는데, 본문이 깨진 요청은 몇 번을 보내도 같은
+     * 결과다. 재시도가 세 번 더 실패하고 로그만 세 배로 쌓이며, 원인이 "본문이 깨졌다"가
+     * 아니라 "백엔드가 죽었다"로 보인다.
+     *
+     * <p><b>예외 메시지를 로그에 넣지 않는다.</b> 파서 오류에는 본문 조각이 실릴 수 있고
+     * 그 조각이 곧 발화다(FR-092). Jackson이 기본으로 가리지만 설정 하나에 달린 방어를
+     * 믿지 않는다 — 종류만 남긴다.
+     */
+    @org.springframework.web.bind.annotation.ExceptionHandler(
+            org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(
+            org.springframework.http.converter.HttpMessageNotReadableException e) {
+        String traceId = newTraceId();
+        log.warn("[{}] VALIDATION_ERROR - unreadable body ({})", traceId,
+                e.getMostSpecificCause().getClass().getSimpleName());
+        return ResponseEntity.status(ErrorCode.VALIDATION_ERROR.getStatus())
+                .body(ErrorResponse.of(ErrorCode.VALIDATION_ERROR, traceId));
+    }
+
     @org.springframework.web.bind.annotation.ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception e) {
         String traceId = newTraceId();

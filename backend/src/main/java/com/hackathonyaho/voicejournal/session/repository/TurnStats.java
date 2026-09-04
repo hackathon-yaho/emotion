@@ -43,6 +43,26 @@ public class TurnStats {
                 BigDecimal.class, sessionId);
     }
 
+    /** F3-05 집계 결과. 둘 다 null일 수 있다 — 갭이 한 건도 없는 사용자다. */
+    public record Baseline(BigDecimal avgGap, BigDecimal stddevGap) {
+    }
+
+    /**
+     * 그 사용자의 <b>모든</b> 턴에서 다시 계산한다(증분 아님) — 세션 삭제(F10-01) 후
+     * 재계산과 같은 코드를 쓰기 위함이다. 갭이 NULL인 턴은 빠진다.
+     *
+     * <p>{@code stddev_samp}는 표본이 하나면 NULL이다. 그대로 둔다 — 표준편차가 없는
+     * 것과 0인 것은 뜻이 다르다.
+     */
+    public Baseline baselineFor(UUID profileId) {
+        return jdbc.queryForObject(
+                "select avg(t.gap), stddev_samp(t.gap) "
+                        + "from turn_log t join voice_session s on s.id = t.session_id "
+                        + "where s.profile_id = ? and t.gap is not null",
+                (rs, rowNum) -> new Baseline(rs.getBigDecimal(1), rs.getBigDecimal(2)),
+                profileId);
+    }
+
     /**
      * <b>마지막으로 말한 시각.</b> 앱이 죽으면 종료 신호가 오지 않으므로 서버가 아는
      * 마지막 활동은 이것뿐이다 — 이어하기 창과 F2-06 정리가 모두 여기서 갈린다.

@@ -4,20 +4,23 @@
 >
 > 의존: Phase 2의 `voice_session` · Phase 1의 `turn_log`·`turn_tag`·`user_baseline`·`crisis_event` 테이블
 >
-> 근거: `spec.md` F5-01~04, F6-03, F3-04·F3-05, F4-04·F11-01 · `api-contract.md` §3-1·§3-2·§2-13 (**v1.4**)
+> 근거: `spec.md` F5-01~04, F6-03, F3-04·F3-05, F4-04·F11-01 · `api-contract.md` §3-1·§3-2·§3-5·§2-13 (**v1.6**)
 >
+> **상태 (2026-09-05): 코드 완료 · 테스트 50건 통과 · 고정 픽스처 3종 실서버 검증.**
+> AI서버의 `ai-server/eval/fixtures/internal/` 파일을 그대로 `curl`로 보내 **202·저장·암호화까지 확인**했다. **`POST /internal/summaries` 호출도 붙였다**(Phase 2에서 미룬 것) — AI서버가 아직 없으므로 지금은 항상 실패 경로를 타고 `summary: null`이다.
+
 > **응답 필드는 여기 옮겨 적지 않는다.** 계약 §번호를 열어 보고, 여기서는 계약이 정하지 않은 백엔드 쪽 판단만 확인한다 — [README](README.md) "이 문서를 쓰는 법" 4번.
 
 > **이 Phase가 늦으면 그 기간의 로그는 영영 없다.** Phase 4~7은 나중에 만들어도 과거 턴을 다시 읽어 소급 처리되지만, 적재는 그 순간에만 가능하다 — `roadmap.md`.
 
 ## 3-1. 턴 로그 수신 — `POST /internal/turns` (F5-01)
 
-- [ ] 헤더 `X-Internal-Secret` 검증 → 401 `INTERNAL_AUTH_FAILED` (계약 §3-1)
-- [ ] 페이로드 수신 — **필드는 계약 §3-2가 단일 출처다**(v1.4)
-- [ ] `turn_log` 저장. **`transcript`는 암호화 컬럼(`transcript_enc`)으로**(3-2)
-- [ ] `tags`를 `turn_tag`에 저장 — **백엔드는 태그를 재검증하지 않는다**(3-3)
-- [ ] `crisis.detected == true`면 `crisis_event` 적재 — **발화 내용 없이**, `detected_by`는 `rule`/`llm`
-- [ ] **응답 202** (본문 없음). 처리를 기다리게 하지 않는다
+- [x] 헤더 `X-Internal-Secret` 검증 → 401 `INTERNAL_AUTH_FAILED` (계약 §3-1)
+- [x] 페이로드 수신 — **필드는 계약 §3-2가 단일 출처다**(v1.4)
+- [x] `turn_log` 저장. **`transcript`는 암호화 컬럼(`transcript_enc`)으로**(3-2)
+- [x] `tags`를 `turn_tag`에 저장 — **백엔드는 태그를 재검증하지 않는다**(3-3)
+- [x] `crisis.detected == true`면 `crisis_event` 적재 — **발화 내용 없이**, `detected_by`는 `rule`/`llm`
+- [x] **응답 202** (본문 없음). 처리를 기다리게 하지 않는다
 
 | 필드 | 규칙 |
 | --- | --- |
@@ -27,7 +30,7 @@
 | `crisis` | `turn_log`에 저장하지 않는다 — `crisis_event`로만. **`turn_id`를 넣지 않는다**(백엔드 절대 원칙 2번) |
 | `topProsody` | 상위 5개. `jsonb`로 그대로 |
 
-- [ ] **중복 적재 처리** — `unique (session_id, turn_index)` 위반을 **`occurred_at`으로 판별**한다. 둘 다 응답은 202
+- [x] **중복 적재 처리** — `unique (session_id, turn_index)` 위반을 **`occurred_at`으로 판별**한다. 둘 다 응답은 202
 
 ```
 unique (session_id, turn_index) 위반:
@@ -55,11 +58,11 @@ unique (session_id, turn_index) 위반:
 
 ## 3-2. 발화 텍스트 암호화 (F5-02)
 
-- [ ] **AES-GCM** + JPA `AttributeConverter`
-  - [ ] 엔티티 필드는 `String transcript` 그대로. 변환기가 저장 시 암호화, 조회 시 복호화
-  - [ ] 키는 **환경변수**(`TRANSCRIPT_ENC_KEY` 등). `INTERNAL_SHARED_SECRET`·Hume 키와 같은 자리
-  - [ ] `javax.crypto` 사용 — **의존성 추가 없음**
-- [ ] **키를 저장소 밖에 따로 보관** — 생성·보관 등급은 `phase-1-skeleton.md` 1-3-1. **세 시크릿 중 이것만 오프라인 사본을 둔다**
+- [x] **AES-GCM** + JPA `AttributeConverter`
+  - [x] 엔티티 필드는 `String transcript` 그대로. 변환기가 저장 시 암호화, 조회 시 복호화
+  - [x] 키는 **환경변수**(`TRANSCRIPT_ENC_KEY` 등). `INTERNAL_SHARED_SECRET`·Hume 키와 같은 자리
+  - [x] `javax.crypto` 사용 — **의존성 추가 없음**
+- [ ] **키를 저장소 밖에 따로 보관** — 생성·보관 등급은 `phase-1-skeleton.md` 1-3-1. **세 시크릿 중 이것만 오프라인 사본을 둔다** ← **배포용 키는 Phase 7에서 만든다.** 로컬 키는 `.env`에 생성해 뒀다
 
 > **왜 변환기인가** — 엔티티가 평문 `String`으로 남으므로 F7-07(관찰 근거 열람)·F9-05(대화 상세)가 **코드 수정 없이** 동작한다. 암호화를 서비스 코드에 흩으면 복호화를 빠뜨린 조회가 생기고, 그건 화면에 암호문이 뜨고 나서야 발견된다.
 
@@ -69,17 +72,17 @@ unique (session_id, turn_index) 위반:
 
 ## 3-3. 태그 저장 (F6-03)
 
-- [ ] `turn_tag`에 그대로 저장 (PK `(turn_id, tag)`)
-- [ ] 태그 0개인 턴도 **`turn_log`는 저장**한다 — F7 집계에서만 빠질 뿐 valence·갭 통계에는 포함(spec F6-03)
+- [x] `turn_tag`에 그대로 저장 (PK `(turn_id, tag)`)
+- [x] 태그 0개인 턴도 **`turn_log`는 저장**한다 — F7 집계에서만 빠질 뿐 valence·갭 통계에는 포함(spec F6-03)
 
 > **백엔드가 태그를 추가·수정·재검증하지 않는다**(계약 §3-2). 원문 대조(F6-02)는 AI서버가 이미 끝냈다. 여기서 한 번 더 거르면 **같은 규칙이 두 곳에 생기고, 어긋나는 순간 §1.4 "원문 외 태그 0건" 지표의 근거가 어디인지 알 수 없어진다.**
 
 ## 3-4. baseline 갱신 (F3-05)
 
-- [ ] **세션 종료 시** `user_baseline` 갱신 — 턴 적재 때마다가 아니다
-- [ ] **`avg_gap`·`stddev_gap`만 여기서 재계산한다.** `session_count` +1은 **세션 종료의 기본 동작**이고 F3-05가 아니다 (spec F3-05, 2026-09-04 분리) — 아래 주의
-- [ ] **갭이 NULL인 턴은 집계에서 제외**
-- [ ] **전체 재계산으로 한다** (증분 아님) — `data-model.md` 참조. 세션 삭제(F10-01) 후 재계산과 **같은 코드**를 쓴다
+- [x] **세션 종료 시** `user_baseline` 갱신 — 턴 적재 때마다가 아니다
+- [x] **`avg_gap`·`stddev_gap`만 여기서 재계산한다.** `session_count` +1은 **세션 종료의 기본 동작**이고 F3-05가 아니다 (spec F3-05, 2026-09-04 분리) — 아래 주의
+- [x] **갭이 NULL인 턴은 집계에서 제외**
+- [x] **전체 재계산으로 한다** (증분 아님) — `data-model.md` 참조. 세션 삭제(F10-01) 후 재계산과 **같은 코드**를 쓴다
 
 > `session_count`가 **5**에 도달하고 **`avg_gap`이 NULL이 아니면** 다음 세션의 `thresholdMode`가 `personal`로 바뀐다(F3-04). TC-07이 이 전환 로그를 확인한다.
 >
@@ -87,9 +90,11 @@ unique (session_id, turn_index) 위반:
 
 ## 3-5. 전송 실패 시 동작 (F5-04)
 
-- [ ] 수신 엔드포인트가 **느리게 응답하지 않는지** 확인 — 무거운 작업 금지. **p95 200ms 이내를 목표로 계측한다** (NFR-01·TC-12의 전체 예산 2초 중 이 구간의 몫)
-- [ ] 저장 실패는 `ops_error_log`에 적재. **발화 내용·`sessionId`를 로그에 남기지 않는다**
-- [ ] 대신 **`sessionRef = SHA-256(sessionId)[:8]`**을 남긴다(`data-model.md`) — 아래 주의
+- [x] 수신 엔드포인트가 **느리게 응답하지 않는지** 확인 — 무거운 작업 금지. **p95 200ms 이내를 목표로 계측한다** (NFR-01·TC-12의 전체 예산 2초 중 이 구간의 몫)
+  - **로컬 실측 20회: 중앙 17ms · p95 20ms.** 예산의 10%다
+  - 남은 위험은 Render Free 콜드 스타트다(Phase 2 2-2와 같은 이유). 다만 이 경로는 fire-and-forget이라 **느려도 대화가 끊기지 않는다** — `/internal/sessions`와 성격이 다르다
+- [x] 저장 실패는 `ops_error_log`에 적재. **발화 내용·`sessionId`를 로그에 남기지 않는다**
+- [x] 대신 **`sessionRef = SHA-256(sessionId)[:8]`**을 남긴다(`data-model.md`) — 아래 주의
 
 > 재시도 정책(3회)은 **발신 측(AI서버) 몫**이다. 백엔드가 할 일은 "빨리 202를 주고, 중복은 조용히 넘기는 것"뿐이다.
 
@@ -101,12 +106,12 @@ unique (session_id, turn_index) 위반:
 
 **S02에서만 호출된다.** 앱은 `livePollIntervalSec`(2초, Phase 2에서 내려줌) 간격으로 폴링하고 화면을 벗어나면 멈춘다.
 
-- [ ] 쿼리 `sinceTurnIndex` — 그 이후 턴만. 생략 시 세션 시작부터
-- [ ] 응답 — **필드는 계약 §2-13이 단일 출처다**
-- [ ] `crisisDetected` — **세션 단위 boolean.** `crisis_event`에 그 세션 행이 있는지(`EXISTS`)
-- [ ] **`profile.demo_mode`가 `false`면 `turns`는 항상 빈 배열**
-- [ ] `transcript`는 **포함하지 않는다**
-- [ ] 404 `SESSION_NOT_FOUND` / 403 `FORBIDDEN`
+- [x] 쿼리 `sinceTurnIndex` — 그 이후 턴만. 생략 시 세션 시작부터
+- [x] 응답 — **필드는 계약 §2-13이 단일 출처다**
+- [x] `crisisDetected` — **세션 단위 boolean.** `crisis_event`에 그 세션 행이 있는지(`EXISTS`)
+- [x] **`profile.demo_mode`가 `false`면 `turns`는 항상 빈 배열**
+- [x] `transcript`는 **포함하지 않는다**
+- [x] 404 `SESSION_NOT_FOUND` / 403 `FORBIDDEN`
 
 | 규칙 | 이유 |
 | --- | --- |
@@ -120,19 +125,19 @@ unique (session_id, turn_index) 위반:
 
 ## 완료 기준
 
-- 대화 한 번이 끝나면 `turn_log`에 그 턴들이 남아 있다
-- **DB를 직접 조회해도 평문 발화가 보이지 않는다** (F5-02 수용 기준)
-- 같은 턴을 두 번 보내도 행이 하나만 생기고 202가 온다
-- **같은 `turnIndex`로 `occurredAt`이 다른 턴을 보내면 행이 둘 다 남고 `ops_error_log`에 `TURN_INDEX_COLLISION`이 찍힌다** (유실 0건 · 조용하지 않음)
-- **통합 테스트에서 재시도 경로를 일부러 만들어 본다** — 저장은 성공시키고 **202 응답만 버려서** AI가 재시도하게 하고, `occurredAt`이 같아 중복으로 판정되는지 확인한다. AI가 제안한 시나리오이며(`response/backend/integration-test-path.md`), **그 가드가 실제로 도는 걸 한 번은 봐야 한다**
-- 터널 붙이기 전에 **`ai-server/eval/fixtures/internal/`의 고정 JSON으로 `curl` 선검증**한다 — `turns.user.request.json`·`turns.assistant.request.json`·`turns.user.degraded.request.json`(분석 실패 턴). 양쪽이 같은 파일을 쓰므로 "제 쪽에선 되는데요"가 안 생긴다
-- **TC-06** — 분석 호출 실패 턴(valence null, tags 빈 배열)이 정상 수신·저장된다
-- **TC-11** — 서버·스토리지 어디에도 **오디오 파일 0건**
-- **TC-15** — 원문에 없는 태그가 저장돼 있지 않다
-- **TC-26** — `demoMode == false` 계정의 `/live` 응답에서 `turns`가 **빈 배열**이고 `crisisDetected`는 정상 값이다
-- **TC-27** — 위기 감지 후 연속 폴링에서 앱이 S07을 **1회만** 띄울 수 있다(서버가 세션 단위 boolean을 준다)
-- `ops_error_log`·애플리케이션 로그에 `transcript`·`sessionId`가 찍히지 않고, **`sessionRef`로 같은 세션의 오류가 묶인다**
-- `api-spec.md`에서 `/internal/turns`·`/api/session/{id}/live`를 `구현 완료`로 갱신했다
+- ✅ 대화 한 번이 끝나면 `turn_log`에 그 턴들이 남아 있다
+- ✅ **DB를 직접 조회해도 평문 발화가 보이지 않는다** (F5-02 수용 기준) — 실서버에서 `select transcript_enc`로 확인, 엔티티로 읽으면 평문
+- ✅ 같은 턴을 두 번 보내도 행이 하나만 생기고 202가 온다
+- ✅ **같은 `turnIndex`로 `occurredAt`이 다른 턴을 보내면 행이 둘 다 남고 `ops_error_log`에 `TURN_INDEX_COLLISION`이 찍힌다** — 실서버에서 `sessionRef=a3a9e1ed requested=40 stored=60` 확인(발화·sessionId 없음)
+- ⏳ **통합 테스트에서 재시도 경로를 일부러 만들어 본다** — 저장은 성공시키고 **202 응답만 버려서** AI가 재시도하게 하고, `occurredAt`이 같아 중복으로 판정되는지 확인한다. AI가 제안한 시나리오이며(`response/backend/integration-test-path.md`), **그 가드가 실제로 도는 걸 한 번은 봐야 한다**
+- ✅ 터널 붙이기 전에 **`ai-server/eval/fixtures/internal/`의 고정 JSON으로 `curl` 선검증**한다 — 3종 전부 202, 저장·암호화 확인(2026-09-05). 원문 그대로: — `turns.user.request.json`·`turns.assistant.request.json`·`turns.user.degraded.request.json`(분석 실패 턴). 양쪽이 같은 파일을 쓰므로 "제 쪽에선 되는데요"가 안 생긴다
+- ✅ **TC-06** — 분석 호출 실패 턴(valence null, tags 빈 배열)이 정상 수신·저장된다
+- ✅ **TC-11** — 서버·스토리지 어디에도 **오디오 파일 0건** (계약에 필드가 없고 코드에 저장 경로가 없다)
+- ⏳ **TC-15** — 원문에 없는 태그가 저장돼 있지 않다 — **AI서버가 대조한다**(F6-02). 백엔드는 받은 대로 저장하므로 여기서 증명할 수 없고, 통합 후 실제 대화 로그로 확인한다
+- ✅ **TC-26** — `demoMode == false` 계정의 `/live` 응답에서 `turns`가 **빈 배열**이고 `crisisDetected`는 정상 값이다 — 실서버 확인
+- ✅ **TC-27** — 서버가 세션 단위 boolean을 준다 (앱의 1회 표시 자체는 앱 몫)
+- ✅ `ops_error_log`·애플리케이션 로그에 `transcript`·`sessionId`가 찍히지 않고, **`sessionRef`로 같은 세션의 오류가 묶인다** — 실서버 로그에서 발화 0건·sessionId 0건·태그 0건
+- ✅ `api-spec.md`에서 `/internal/turns`·`/api/session/{id}/live`를 `구현 완료`로 갱신했다
 
 ## 이 Phase에서 하지 않는 것
 

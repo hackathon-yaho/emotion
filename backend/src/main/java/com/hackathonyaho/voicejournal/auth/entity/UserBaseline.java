@@ -58,6 +58,13 @@ public class UserBaseline {
      * 세션 종료마다 1 증가한다. <b>F3-05(P1 통계 갱신)가 아니라 종료의 기본 동작이다</b> —
      * 스코프 컷으로 F3-05를 잘라도 P0인 F3-04와 TC-07이 살아 있어야 한다.
      */
+    /** F3-05. 전부 NULL일 수 있다 — 분석이 한 번도 성공하지 않은 사용자다(TC-06 반복). */
+    public void updateGapStats(BigDecimal avgGap, BigDecimal stddevGap) {
+        this.avgGap = avgGap;
+        this.stddevGap = stddevGap;
+        this.updatedAt = Instant.now();
+    }
+
     public void countSession() {
         this.sessionCount++;
         this.updatedAt = Instant.now();
