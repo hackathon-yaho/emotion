@@ -3,14 +3,18 @@
 
 PY ?= uv run
 
-.PHONY: help install test lint run eval clean
+.PHONY: help install test lint run eval clean env
 
 help:
+	@echo "make env      .env 확인 — 시크릿은 마스킹해서 보여준다"
 	@echo "make install  의존성 설치 (uv sync --extra dev)"
 	@echo "make test     단위 테스트 — rules/ 전부 + 경계 검사"
 	@echo "make lint     ruff"
 	@echo "make run      개발 서버 (포트 8100, reload)"
 	@echo "make eval     평가 세트 → eval/reports/"
+
+env:
+	$(PY) python -m app.envcheck
 
 install:
 	uv sync --extra dev
