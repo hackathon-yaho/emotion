@@ -261,7 +261,7 @@
 | 트리거 | S01 홈에서 `[오늘 이야기하기]` |
 | 입력 | JWT |
 | 처리 | ① `voice_session` 생성, `sessionId`는 **UUIDv4**(v1.3 — CLM 인증에 쓰이므로 128비트 미만 형식 금지) ② `user_baseline` 조회 → **임계 모드 결정(F3-04)** → **적용 임계값을 `voice_session.gap_threshold`에 스냅샷** ③ Hume 액세스 토큰·`humeConfigId`(환경변수, AI서버가 소유) 확인 ④ 반환 |
-| 출력 | `{ sessionId, humeAccessToken, humeTokenExpiresAt, humeConfigId, thresholdMode, gapThreshold, softWrapSec, hardCutSec, livePollIntervalSec, demoMode }` — 전체 스키마는 [api-contract.md](../02-architecture/api-contract.md) §2-4 (v1.3) |
+| 출력 | `{ sessionId, humeAccessToken, humeTokenExpiresAt, humeConfigId, thresholdMode, gapThreshold, softWrapSec, hardCutSec, livePollIntervalSec, demoMode }` — 전체 스키마는 [api-contract.md](../02-architecture/api-contract.md) §2-4 |
 | 예외 | Hume 토큰 발급 실패 → 대화 시작 차단 + 원인 안내 |
 | 수용 기준 | **Hume API 키가 앱 번들·네트워크 응답 어디에도 노출되지 않는다** |
 | 연관 | F2-02, F3-04, F11-01 |

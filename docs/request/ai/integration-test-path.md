@@ -6,7 +6,7 @@
 
 - 요청자: 백엔드
 - 대상: AI
-- 관련 문서: `../../02-architecture/api-contract.md` §3(v1.3) · `../../00-context/prd.md` §12(2026-09-04 개정)
+- 관련 문서: `../../02-architecture/api-contract.md` §3 · `../../00-context/prd.md` §12(2026-09-04 개정)
 
 ---
 
