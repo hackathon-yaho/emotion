@@ -11,10 +11,15 @@ import '../models/trend_models.dart';
 /// 화면은 `Sample`도 `ApiClient`도 직접 보지 않는다. 구현이 둘이라 — 실제
 /// API와 샘플 — 화면 코드를 고치지 않고 갈아끼울 수 있다.
 ///
-/// 로그인(`POST /api/auth/kakao`)은 여기 없다. 인가 코드를 받아오는 흐름이
-/// 아직 없고(카카오 키 미수령), 세션 게이트가 [AppSession]에 있어 인증만
-/// 따로 둔다.
 abstract interface class JournalRepository {
+  /// 로그인 (§2-1, v1.6). **인가 코드를 넘긴다** — 웹에서는 앱이 액세스
+  /// 토큰을 받을 수 없다. `redirectUri`는 인가 때 쓴 값과 **정확히 같아야**
+  /// 하고 서버가 등록 목록과 대조한다.
+  Future<AuthResult> authKakao({
+    required String kakaoAuthCode,
+    required String redirectUri,
+  });
+
   Future<Me> me();
 
   /// S03 발견 목록. §1-4 페이징.
@@ -44,7 +49,9 @@ abstract interface class JournalRepository {
 
   Future<SessionStart> startSession();
   Future<SessionResume> resumeSession(String sessionId);
-  Future<SessionEnd> endSession(String sessionId);
+  /// 세션 종료 (§2-5). `endReason`은 `user_end` | `soft_wrap` | `hard_cut`
+  /// 중 하나다 — **앱은 `timeout`·`resumed`를 보내지 않는다.**
+  Future<SessionEnd> endSession(String sessionId, {required String endReason});
 
   /// S02 폴링 — 위기 신호와 데모용 턴 (§2-13).
   Future<LiveSignal> live(String sessionId);

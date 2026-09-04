@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/models/live_models.dart';
 import '../../core/models/session_models.dart';
 import '../../core/providers.dart';
+import '../../core/session/app_session.dart';
+import '../../core/session/session_clock.dart';
 import '../../core/voice/evi_event.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
@@ -71,6 +74,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Timer? _heardTimer;
   StreamSubscription<EviEvent>? _eviSub;
 
+  /// F2-03 — 하드컷 60초 전 표시 · 하드컷 자동 종료.
+  Timer? _nearEndTimer;
+  Timer? _hardCutTimer;
+
   @override
   void initState() {
     super.initState();
@@ -116,6 +123,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       setState(() => _state = open != null
           ? TalkState.resumed
           : TalkState.listening);
+      _startClock(session.hardCutSec);
 
       if (ref.read(dataModeProvider) == DataMode.sample) return;
       await _connectVoice(session);
@@ -193,6 +201,43 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     });
   }
 
+  /// F2-03 — 하드컷을 향한 두 개의 타이머.
+  ///
+  /// **소프트 랩(5분)에는 아무것도 하지 않는다** — AI가 말로 유도하므로
+  /// UI가 개입하면 두 번 재촉하는 셈이다 (§7 결정 1).
+  void _startClock(int hardCutSec) {
+    _nearEndTimer?.cancel();
+    _hardCutTimer?.cancel();
+    _nearEndTimer = Timer(SessionClock.nearEndAfter(hardCutSec), () {
+      // 오류 상태를 덮어쓰지 않는다 — 연결이 끊긴 화면에 "마무리됩니다"가
+      // 뜨면 무슨 일이 일어난 건지 알 수 없다.
+      if (mounted && _isTalking) setState(() => _state = TalkState.nearEnd);
+    });
+    _hardCutTimer = Timer(SessionClock.hardCutAfter(hardCutSec), () {
+      if (mounted) _end(reason: SessionClock.reasonHardCut);
+    });
+  }
+
+  /// 데모 패널이 보여주는 **실측값**.
+  ///
+  /// `demoMode == false`인 세션에서는 서버가 `turns: []`를 준다 — 그건
+  /// "볼 권한이 없다"이지 "값이 없다"가 아니다 (§2-13). 그래서 비어 있으면
+  /// 패널이 값 대신 `—`를 쓴다. **샘플 수치를 대신 채우지 않는다** — 그러면
+  /// 시연에서 가짜 숫자를 읽게 된다.
+  LiveTurn? get _lastTurn =>
+      ref.watch(liveSignalProvider).valueOrNull?.turns.lastOrNull;
+
+  /// 대화가 진행 중인 상태인지 — 실패·거부 상태에서는 시계가 화면을 건드리지
+  /// 않는다.
+  bool get _isTalking => switch (_state) {
+        TalkState.listening ||
+        TalkState.speaking ||
+        TalkState.quiet ||
+        TalkState.resumed =>
+          true,
+        _ => false,
+      };
+
   /// 이어하기 응답을 세션 값으로 맞춘다 — 폴링 간격은 §2-5-1에 없어 기본 2초.
   SessionStart _asStart(SessionResume r) => SessionStart(
         sessionId: r.sessionId,
@@ -208,8 +253,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       );
 
   /// 대화 마치기 (§2-6) — 요약을 들고 S02-1로 간다.
-  Future<void> _end() async {
+  Future<void> _end({String reason = SessionClock.reasonUserEnd}) async {
     final session = ref.read(activeSessionProvider);
+    _nearEndTimer?.cancel();
+    _hardCutTimer?.cancel();
     ref.read(inConversationProvider.notifier).state = false;
     // **마이크를 먼저 끈다.** 종료 호출이 느려도 그동안 소리가 나가지 않는다.
     await _eviSub?.cancel();
@@ -224,13 +271,22 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     try {
       final end = await ref
           .read(journalRepositoryProvider)
-          .endSession(session.sessionId);
+          .endSession(session.sessionId, endReason: reason);
       ref.read(lastSessionEndProvider.notifier).state = end;
     } catch (_) {
       // 종료 호출이 실패해도 화면은 넘긴다 — 대화는 이미 끝났고, 서버는
       // 타임아웃으로 정리한다 (§2-6 `endReason: timeout`).
     }
     ref.read(activeSessionProvider.notifier).state = null;
+
+    // F1-02 — 대화 중에 JWT가 만료됐다면 **여기서** 내보낸다. 대화를 끊지
+    // 않기로 미뤄둔 처리다.
+    if (ref.read(pendingSignOutProvider)) {
+      ref.read(pendingSignOutProvider.notifier).state = false;
+      await ref.read(appSessionProvider).signOut();
+      return; // 게이트가 S00으로 보낸다 — 요약을 보여줄 자격이 없다.
+    }
+
     // 기록·추세가 한 건 늘었다.
     ref.invalidate(sessionsProvider);
     ref.invalidate(trendProvider);
@@ -241,6 +297,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   @override
   void dispose() {
     _heardTimer?.cancel();
+    _nearEndTimer?.cancel();
+    _hardCutTimer?.cancel();
     _eviSub?.cancel();
     // 화면을 벗어나면 폴링이 멈추도록 세션을 놓는다.
     ref.read(inConversationProvider.notifier).state = false;
@@ -319,10 +377,20 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         context,
         // §2-1 예외 — 데모 수치는 좁은 화면에서 본문 아래, 넓은 화면에서
         // 셸 오른쪽 패널로 간다.
-        sidePanel: widget.demoMode && AppFrame.hasSidePanel(c.maxWidth),
+        sidePanel: _showDemo && AppFrame.hasSidePanel(c.maxWidth),
       ),
     );
   }
+
+  /// 수치를 노출해도 되는지 — **FR-031의 유일한 예외**다 (F11-01).
+  ///
+  /// 셋 중 하나라도 켜져 있으면 노출한다: 주소의 `?demo=1`(시연용),
+  /// S06의 저장된 설정, 그리고 **서버가 그 세션을 데모로 표시한 경우**
+  /// (§2-4 `demoMode`) — 서버가 데모여야 `live`의 `turns`가 실제로 채워진다.
+  bool get _showDemo =>
+      widget.demoMode ||
+      ref.watch(demoModeProvider) ||
+      (ref.watch(activeSessionProvider)?.demoMode ?? false);
 
   Widget _body(BuildContext context, {required bool sidePanel}) {
     final t = context.tokens;
@@ -418,7 +486,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           ),
         ),
 
-        if (widget.demoMode && !sidePanel) const _DemoPanel(),
+        if (_showDemo && !sidePanel) _DemoPanel(turn: _lastTurn),
 
         if (r.nearEnd)
           Padding(
@@ -458,9 +526,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               children: [
                 Expanded(child: main),
                 const SizedBox(width: Space.xl),
-                const SizedBox(
+                SizedBox(
                   width: AppFrame.demoPanelWidth,
-                  child: _DemoPanel(side: true),
+                  child: _DemoPanel(turn: _lastTurn, side: true),
                 ),
               ],
             )
@@ -503,33 +571,46 @@ class _Ring {
   final bool nearEnd;
 }
 
-/// F11-01 데모 모드 — `demoMode == true`일 때만 수치를 노출한다.
+/// F11-01 데모 모드 — 노출 판정은 [_ConversationScreenState._showDemo]가 한다.
+///
+/// **수치는 `GET /api/session/{id}/live`가 준 실측값이다** (§2-13). 값이 없으면
+/// `—`를 쓴다 — 샘플 숫자를 대신 채우면 시연에서 가짜를 읽는다.
 class _DemoPanel extends StatelessWidget {
-  const _DemoPanel({this.side = false});
+  const _DemoPanel({required this.turn, this.side = false});
+
+  final LiveTurn? turn;
 
   /// `true`면 셸 오른쪽 패널 (§2-1). `false`면 본문 아래 배지.
   final bool side;
 
+  static String _v(double? value) =>
+      value == null ? '—' : value.toStringAsFixed(2).replaceFirst('-', '−');
+
   @override
   Widget build(BuildContext context) {
-    const rows = Column(
+    final t = turn;
+    final rows = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Hairline(),
-        _DemoRow(label: '말한 내용', value: '0.70'),
-        Hairline(),
-        _DemoRow(label: '목소리', value: '−0.62'),
-        Hairline(),
-        _DemoRow(label: '갭 · 트리거', value: '1.32 · 예', accent: true),
-        Hairline(),
+        const Hairline(),
+        _DemoRow(label: '말한 내용', value: _v(t?.textValence)),
+        const Hairline(),
+        _DemoRow(label: '목소리', value: _v(t?.voiceValence)),
+        const Hairline(),
+        _DemoRow(
+          label: '갭 · 트리거',
+          value: t == null
+              ? '—'
+              : '${_v(t.gap)} · ${t.gapTriggered ? '예' : '아니오'}',
+          accent: true,
+        ),
+        const Hairline(),
       ],
     );
 
-    if (side) {
-      return const Align(alignment: Alignment.center, child: rows);
-    }
-    return const Padding(
-      padding: EdgeInsets.only(bottom: Space.xl - Space.xs),
+    if (side) return Align(alignment: Alignment.center, child: rows);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.xl - Space.xs),
       child: rows,
     );
   }

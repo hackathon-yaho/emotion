@@ -133,6 +133,30 @@ flutter run -d chrome --dart-define=SAMPLE_DATA=true
 
 > **샘플 데이터를 발표 근거로 쓰지 않습니다** (PRD §12). 화면 확인·시연 리허설 전용입니다. 시뮬레이션 그래프는 "직접 만드신 거죠?" 한 마디에 발견 기능 전체를 연출로 격하시킵니다.
 
+### 로그인 (F1-01) — 값만 기다립니다
+
+```
+① S00 "카카오로 시작하기" → 인가 URL로 페이지 이동
+   https://kauth.kakao.com/oauth/authorize?client_id={KAKAO_REST_KEY}&redirect_uri={등록값}&response_type=code
+② 동의 → 등록된 Redirect URI로 복귀 (?code=...)
+③ 앱 시작 시 Uri.base의 code를 POST /api/auth/kakao
+④ JWT 저장 → 게이트 통과 → 홈
+⑤ 주소창의 ?code= 를 지운다 (history.replaceState)
+```
+
+- **`redirectUri`는 인가 때 쓴 값과 문자 단위로 같아야 합니다.** `KakaoLogin.redirectUriFrom`이 파일명·쿼리·해시를 떼어 등록값(`.../emotion/`, `http://localhost:3000/`)과 같은 모양을 만듭니다 — **끝의 빈 조각을 안 버려 `//`가 되던 버그를 테스트가 잡았습니다.** 어긋나면 400만 나오고 원인이 보이지 않는 자리입니다
+- **⑤를 빼먹으면 새로고침이 같은 코드를 다시 보내 400입니다** — 인가 코드는 1회용입니다. 지운 뒤에 로그인을 완료합니다
+- **키가 없으면 버튼이 조용히 죽지 않습니다.** 눌렀는데 아무 일도 없으면 버그로 보이므로 문구로 안내합니다
+- 샘플 모드에서는 카카오에 가지 않고 그 자리에서 통과시킵니다
+
+### 세션 길이 (F2-03)
+
+`session/start`가 주는 `hardCutSec`으로 타이머 두 개를 겁니다 — **60초 전** 조용한 표시, **하드컷**에서 자동 종료(`endReason: hard_cut`). **소프트 랩(5분)에는 화면이 아무것도 하지 않습니다** — AI가 말로 유도하므로 UI가 개입하면 두 번 재촉합니다(§7 결정 1). 이어하기는 잔여 시간이 들어오므로 **1분 이하로 남았으면 표시를 즉시** 띄웁니다(60을 빼서 음수가 되면 표시가 통째로 빠집니다).
+
+### JWT 만료 (F1-02)
+
+`ApiClient.onTokenExpired`가 `inConversationProvider`를 봅니다. **대화 중이면 내보내지 않고** 표시만 해두었다가(`pendingSignOutProvider`) 대화가 끝난 뒤에 로그아웃합니다 — 7분 안에 만료가 겹치는 일은 드물지만, 겹쳤을 때 화면이 로그인으로 튀면 하던 말이 사라집니다.
+
 ### 프로바이더
 
 `core/providers.dart`가 단일 출처입니다. 화면은 `ref.watch`만 합니다.
@@ -146,7 +170,11 @@ flutter run -d chrome --dart-define=SAMPLE_DATA=true
 | `sessionsProvider` | S01 · S05 |
 | `sessionDetailProvider(id)` | S05-1 |
 | `activeSessionProvider` · `liveSignalProvider` | S02 |
+| `themeModeProvider` · `demoModeProvider` | S06 — **저장됩니다**(기기 저장소) |
+| `pendingSignOutProvider` | F1-02 — 대화 중 만료를 미뤄 두는 표시 |
 | `lastSessionEndProvider` | S02-1 |
+
+목록(S03·S05)은 `PagedNotifier`가 **바닥에 닿으면 다음 장을 이어 붙입니다** — "더 보기" 버튼이 없습니다(§7 결정 22). 다음 장을 못 불러와도 **이미 보여준 목록을 오류로 바꾸지 않습니다.**
 
 **로딩·빈 상태·오류는 `AsyncView`가 한 곳에서 처리합니다.** 특히 **오류를 빈 상태로 바꿔 말하지 않습니다** — "아직 발견한 것이 없습니다"는 사실 주장이라, 못 불러온 것을 그렇게 적으면 거짓이 됩니다.
 
@@ -211,7 +239,7 @@ lib/
 | ~~F9-03 이야기별 갭~~ | ✅ 해결 — 계약 **v1.4** §2-8에서 `GET /api/trend`가 `tagGaps`·`userAvgGap`을 함께 줍니다(상위 7개, 3회 미만은 서버가 걸러냄, `range` 종속). **아직 앱 코드에 반영하지 않았습니다** |
 | 산세리프 서체 | 문서상 Pretendard지만 Google Fonts에 없어 **Noto Sans KR로 대체** 중입니다(캔버스와 동일). `fonts/`에 넣고 `pubspec.yaml`의 fonts 항목을 켠 뒤 `AppType.sans`만 바꾸면 전 화면에 적용됩니다 |
 | 제품 이름 | 미확정(PRD §14-6). Dart 패키지명 `voice_journal`, 번들 ID `com.hackathonyaho.voiceJournal`은 임시입니다. 확정되면 `main.dart`의 `title`과 `web/index.html`·`manifest.json`을 함께 고칩니다. **커스텀 도메인이 정해지면 백엔드에 알립니다** — 허용 오리진이 환경변수 한 줄이라 재배포 없이 들어갑니다 |
-| 카카오 로그인 | 흐름·계약(v1.6 §2-1)·키 이름(**`KAKAO_REST_KEY`**) 다 확정인데 **값이 없어 아직 구현하지 않았습니다.** `onboarding_screen.dart`는 여전히 TODO입니다 — repo variable이 등록되면 인가 URL 조립부터 붙입니다 |
+| 카카오 로그인 | **흐름은 다 구현했습니다** — 인가 URL 조립·복귀 시 `?code=` 교환·주소창 정리까지. **값만 없습니다**(`KAKAO_REST_KEY` repo variable). 키가 없으면 버튼이 조용히 죽지 않고 "아직 로그인을 켤 수 없습니다"를 띄웁니다 |
 | ~~데이터 연결~~ | ✅ 해결 — 화면이 `JournalRepository`를 봅니다. 기본은 실제 API이고, 샘플은 **샘플 모드에서만** 나옵니다(위 「데이터는 어디서 오나」) |
 | 로그인 | 흐름은 확정(인가 코드)이고 **계약 v1.6 §2-1도 확정**인데 카카오 키가 없어 아직 구현하지 않았습니다. `POST /api/auth/kakao` 호출은 그래서 리포지토리에 없습니다 |
 | EVI 음성 | 구현했습니다(`core/voice/`, 테스트 17건). **마이크 음성 왕복만 미검증** — 토큰이 `session/start`에서만 나와 백엔드가 붙는 날 확인합니다 |

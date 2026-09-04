@@ -34,13 +34,24 @@ class RecordsScreen extends ConsumerWidget {
         children: [
           const SmallLabel('기록'),
           Expanded(
-            child: SingleChildScrollView(
+            // 바닥에 닿으면 다음 장을 불러온다 — "더 보기" 버튼이 없다
+            // (§7 결정 22).
+            child: NotificationListener<ScrollEndNotification>(
+              onNotification: (n) {
+                final m = n.metrics;
+                if (m.extentAfter < 240) {
+                  ref.read(sessionsProvider.notifier).loadMore();
+                }
+                return false;
+              },
+              child: SingleChildScrollView(
               padding: EdgeInsets.only(
                 top: 36,
                 // 떠 있는 탭 칩 높이만큼 안쪽에 남긴다 (TabPill.reserve).
                 bottom: Space.xl + MediaQuery.paddingOf(context).bottom,
               ),
               child: _body(ref),
+              ),
             ),
           ),
         ],

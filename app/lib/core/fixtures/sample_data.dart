@@ -1,3 +1,4 @@
+import '../models/auth_models.dart';
 import '../models/live_models.dart';
 import '../models/observation_models.dart';
 import '../models/record_models.dart';
@@ -214,6 +215,17 @@ abstract final class Sample {
       TagGap(tag: '팀장', occurrences: 3, tagAvgGap: 0.88),
       TagGap(tag: '가족', occurrences: 4, tagAvgGap: 0.65),
     ],
+  );
+
+  /// `POST /api/auth/kakao` — 샘플 모드에서 로그인 화면을 통과시키기 위한 값.
+  ///
+  /// **JWT가 가짜다.** 샘플 모드는 백엔드를 타지 않으므로 이 토큰으로 실제
+  /// 호출이 나갈 일이 없다.
+  static final authResult = AuthResult(
+    jwt: 'sample-not-a-real-jwt',
+    expiresAt: DateTime.now().add(const Duration(days: 7)),
+    profileId: 'prof_sample',
+    isNewUser: false,
   );
 
   /// `GET /api/me` — 신규 계정이 아니라 **며칠 써 본 계정**이다. 샘플 화면이

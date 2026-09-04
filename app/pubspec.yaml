@@ -51,6 +51,10 @@ dependencies:
   record: ^5.2.1
   audioplayers: ^6.1.0
 
+  # 주소창의 인가 코드를 지우는 데만 쓴다 (웹 전용, 조건부 import)
+  web: ^1.1.0
+  url_launcher: ^6.3.2
+
 
 dev_dependencies:
   flutter_test:

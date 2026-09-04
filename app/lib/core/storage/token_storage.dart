@@ -12,6 +12,8 @@ class TokenStorage {
 
   static const _jwtKey = 'jwt';
   static const _onboardedKey = 'onboarded';
+  static const _themeKey = 'theme';
+  static const _demoKey = 'demo';
 
   Future<String?> readJwt() => _storage.read(key: _jwtKey);
   Future<void> writeJwt(String jwt) => _storage.write(key: _jwtKey, value: jwt);
@@ -28,6 +30,22 @@ class TokenStorage {
 
   Future<void> markOnboardingSeen() =>
       _storage.write(key: _onboardedKey, value: 'true');
+
+  /// 화면 설정 — **비밀이 아니지만** 저장소를 하나로 유지한다. 값 하나
+  /// 때문에 의존성을 더 넣는 것보다 낫다.
+  ///
+  /// `system` | `dark` | `light`. 없으면 시스템 설정을 따른다
+  /// (design-system §4).
+  Future<String?> readThemeMode() => _storage.read(key: _themeKey);
+  Future<void> writeThemeMode(String mode) =>
+      _storage.write(key: _themeKey, value: mode);
+
+  /// F11-01 데모 모드 — **시연용 로컬 설정**이다. 계약에 변경 엔드포인트가
+  /// 없어 서버로 올리지 않는다.
+  Future<bool> readDemoMode() async =>
+      (await _storage.read(key: _demoKey)) == 'true';
+  Future<void> writeDemoMode(bool on) =>
+      _storage.write(key: _demoKey, value: on.toString());
 
   /// 로그아웃 — 기기의 토큰만 지운다. 서버 데이터는 남는다 (F1-03).
   Future<void> clearAll() async {

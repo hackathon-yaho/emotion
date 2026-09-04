@@ -119,4 +119,39 @@ void main() {
       expect(one.items.length, 1);
     });
   });
+
+  group('페이징 이어 붙이기 (§7 결정 22)', () {
+    test('다음 장을 이어 붙이고, 끝이면 더 부르지 않는다', () async {
+      final repo = SampleJournalRepository(delay: Duration.zero);
+      final first = await repo.sessions(page: const PageQuery(limit: 2));
+      expect(first.hasMore(0), isTrue);
+
+      final second = await repo.sessions(
+        page: PageQuery(limit: 2, offset: first.items.length),
+      );
+      final merged = Paged(
+        total: second.total,
+        items: [...first.items, ...second.items],
+      );
+      expect(merged.items.length, 4);
+      // 샘플이 4건이면 여기서 끝이다.
+      expect(merged.hasMore(0), merged.items.length < merged.total);
+    });
+
+    test('offset이 총 개수를 넘어도 빈 장을 준다 — 예외가 아니다', () async {
+      final repo = SampleJournalRepository(delay: Duration.zero);
+      final page = await repo.sessions(page: const PageQuery(offset: 999));
+      expect(page.items, isEmpty);
+      expect(page.total, greaterThan(0));
+    });
+  });
+
+  group('세션 종료 사유 (§2-5)', () {
+    test('종료 호출에 사유가 필요하다', () async {
+      final repo = SampleJournalRepository(delay: Duration.zero);
+      await repo.startSession();
+      final end = await repo.endSession('s', endReason: 'hard_cut');
+      expect(end.sessionId, 's');
+    });
+  });
 }

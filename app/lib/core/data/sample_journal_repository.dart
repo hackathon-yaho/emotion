@@ -38,6 +38,13 @@ class SampleJournalRepository implements JournalRepository {
   Future<T> _wait<T>(T value) => Future.delayed(delay, () => value);
 
   @override
+  Future<AuthResult> authKakao({
+    required String kakaoAuthCode,
+    required String redirectUri,
+  }) =>
+      _wait(Sample.authResult);
+
+  @override
   Future<Me> me() => _wait(Sample.me);
 
   @override
@@ -93,7 +100,7 @@ class SampleJournalRepository implements JournalRepository {
   }
 
   @override
-  Future<SessionEnd> endSession(String sessionId) {
+  Future<SessionEnd> endSession(String sessionId, {required String endReason}) {
     _startedAt = null;
     final s = Sample.sessions.first;
     return _wait(SessionEnd(

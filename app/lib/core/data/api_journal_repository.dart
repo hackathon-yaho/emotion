@@ -16,6 +16,19 @@ class ApiJournalRepository implements JournalRepository {
   final ApiClient _api;
 
   @override
+  Future<AuthResult> authKakao({
+    required String kakaoAuthCode,
+    required String redirectUri,
+  }) =>
+      _api.post(
+        Endpoints.authKakao,
+        // 인증 전이라 Authorization 헤더가 없다.
+        authenticated: false,
+        body: {'kakaoAuthCode': kakaoAuthCode, 'redirectUri': redirectUri},
+        parse: AuthResult.fromJson,
+      );
+
+  @override
   Future<Me> me() => _api.get(Endpoints.me, parse: Me.fromJson);
 
   @override
@@ -91,8 +104,10 @@ class ApiJournalRepository implements JournalRepository {
       );
 
   @override
-  Future<SessionEnd> endSession(String sessionId) => _api.post(
+  Future<SessionEnd> endSession(String sessionId, {required String endReason}) =>
+      _api.post(
         Endpoints.sessionEnd(sessionId),
+        body: {'endReason': endReason},
         parse: SessionEnd.fromJson,
       );
 

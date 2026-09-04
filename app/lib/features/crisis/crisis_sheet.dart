@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
@@ -135,9 +136,14 @@ class CrisisSheet extends StatelessWidget {
                       height: 56,
                       background: t.care,
                       foreground: t.onAccent,
-                      onPressed: () {
-                        // 데스크톱에서는 동작하지 않는다 — 복사 버튼이 그 대비다.
-                      },
+                      // **데스크톱에서는 동작하지 않는다** — 웹 배포라
+                      // `tel:`을 열 수 없고, 복사 버튼이 그 대비다
+                      // (design-system §7 결정 3 · §4-3).
+                      //
+                      // 실패해도 조용히 넘긴다. 위기 안내 화면에서 오류
+                      // 팝업을 띄우는 것이 가장 나쁜 선택이다.
+                      onPressed: () => launchUrl(Uri.parse('tel:$hotline'))
+                          .catchError((_) => false),
                     ),
                   ),
                   const SizedBox(width: Space.sm),

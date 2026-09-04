@@ -28,7 +28,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  bool _demoMode = false;
 
   @override
   Widget build(BuildContext context) {
@@ -104,8 +103,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   const Hairline(),
                   _ToggleRow(
                     label: '데모 모드',
-                    value: _demoMode,
-                    onChanged: (v) => setState(() => _demoMode = v),
+                    value: ref.watch(demoModeProvider),
+                    onChanged: (v) =>
+                        ref.read(demoModeProvider.notifier).set(v),
                   ),
                   const Hairline(),
                   const SizedBox(height: Space.md),
@@ -166,7 +166,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ThemeMode.dark => ThemeMode.light,
       ThemeMode.light => ThemeMode.system,
     };
-    ref.read(themeModeProvider.notifier).state = next;
+    ref.read(themeModeProvider.notifier).set(next);
   }
 
   /// 로그아웃 — 기기의 토큰만 지운다. **서버 데이터는 삭제하지 않는다** (F1-03).

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/auth/kakao_login.dart';
+import '../../core/config/browser_url.dart';
+import '../../core/network/api_exception.dart';
+import '../../core/providers.dart';
 import '../../core/router/routes.dart';
 import '../../core/session/app_session.dart';
 import '../../core/theme/app_theme.dart';
@@ -17,11 +22,107 @@ import '../../shared/widgets/screen_scaffold.dart';
 ///
 /// **동의 없이 대화 화면으로 진입할 수 없다** (F1-05 수용 기준) — 라우터
 /// 가드가 막고, 여기서 동의가 기록된다.
-class OnboardingScreen extends ConsumerWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+  /// 인가 코드를 교환하는 중 — 버튼을 두 번 누르지 못하게 한다. 코드는
+  /// **1회용**이라 두 번 보내면 두 번째가 400이다 (§2-1).
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // 카카오가 돌려보낸 직후라면 주소에 코드가 있다.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _finishIfReturned());
+  }
+
+  /// ③ 복귀 처리 — 주소의 `?code=`를 JWT로 바꾼다.
+  Future<void> _finishIfReturned() async {
+    final here = Uri.base;
+    if (KakaoLogin.deniedIn(here)) {
+      // 사용자가 동의 화면에서 취소한 경우다. 오류로 다루지 않는다.
+      clearQuery();
+      return;
+    }
+    final code = KakaoLogin.codeFrom(here);
+    if (code == null) return;
+
+    setState(() => _busy = true);
+    try {
+      final auth = await ref.read(journalRepositoryProvider).authKakao(
+            kakaoAuthCode: code,
+            // **인가 때 쓴 것과 같은 값이어야 한다** — 서버가 대조한다.
+            redirectUri: KakaoLogin.redirectUriFrom(here).toString(),
+          );
+      // ⑤ 먼저 지운다. 새로고침이 같은 코드를 다시 보내면 400이다.
+      clearQuery();
+      await ref.read(appSessionProvider).completeLogin(auth.jwt);
+      if (mounted) context.go(Routes.home);
+    } on ApiException catch (e) {
+      clearQuery();
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = e.isNetwork
+              ? '연결이 되지 않습니다. 네트워크를 확인해 주세요.'
+              : '로그인이 완료되지 않았습니다. 다시 시도해 주세요.';
+        });
+      }
+    } on Object {
+      clearQuery();
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = '로그인이 완료되지 않았습니다. 다시 시도해 주세요.';
+        });
+      }
+    }
+  }
+
+  /// ①② 인가 페이지로 보낸다.
+  ///
+  /// **샘플 모드에서는 카카오에 가지 않는다** — 백엔드도 없는 상태에서 화면을
+  /// 보려는 모드이므로 그 자리에서 통과시킨다.
+  Future<void> _start() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    if (ref.read(dataModeProvider) == DataMode.sample) {
+      final auth = await ref.read(journalRepositoryProvider).authKakao(
+            kakaoAuthCode: 'sample',
+            redirectUri: KakaoLogin.redirectUriFrom(Uri.base).toString(),
+          );
+      await ref.read(appSessionProvider).completeLogin(auth.jwt);
+      if (mounted) context.go(Routes.home);
+      return;
+    }
+
+    final url = KakaoLogin.authorizeUrl(
+      redirectUri: KakaoLogin.redirectUriFrom(Uri.base),
+    );
+    if (url == null) {
+      // 키가 아직 없다. **조용히 실패하지 않는다** — 눌렀는데 아무 일도
+      // 없으면 버그로 보인다.
+      setState(() {
+        _busy = false;
+        _error = '아직 로그인을 켤 수 없습니다. 카카오 키가 등록되면 됩니다.';
+      });
+      return;
+    }
+    await launchUrl(url, webOnlyWindowName: '_self');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final t = context.tokens;
 
     return ScreenScaffold(
@@ -73,14 +174,18 @@ class OnboardingScreen extends ConsumerWidget {
             ),
           ),
 
-          KakaoButton(
-            onPressed: () async {
-              // TODO(app): 카카오 SDK 로그인 → POST /api/auth/kakao.
-              // 지금은 고지 동의만 기록하고 홈으로 보낸다.
-              await ref.read(appSessionProvider).completeLogin('dev-token');
-              if (context.mounted) context.go(Routes.home);
-            },
-          ),
+          if (_error != null) ...[
+            Text(
+              _error!,
+              style: AppType.sans(
+                size: AppType.captionSize,
+                color: t.muted,
+                height: 1.7,
+              ),
+            ),
+            const SizedBox(height: Space.lg),
+          ],
+          KakaoButton(onPressed: _busy ? null : _start),
           const SizedBox(height: Space.lg),
           Text(
             '시작하면 위 내용에 동의한 것으로 봅니다',
