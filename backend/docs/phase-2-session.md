@@ -68,9 +68,9 @@ AI서버 → 백엔드. **CLM 인증을 겸한다**(계약 §4).
 ## 2-3. 세션 종료 — `POST /api/session/{id}/end` (F2-05)
 
 - [x] `ended_at` · `duration_sec` · `end_reason` 기록
-- [ ] **요약 생성** — `endReason`이 `user_end`·`soft_wrap`·`hard_cut`이면 §3-5 `POST /internal/summaries`를 **동기 호출**(타임아웃 3초) → **Phase 3으로 미룸**
-  - [ ] 실패·타임아웃·422 → **재시도하지 않고 `summary: null`**
-  - [ ] **`endReason: "timeout"`이면 호출하지 않고 항상 `null`** — 아래 주의
+- [x] **요약 생성** — `endReason`이 `user_end`·`soft_wrap`·`hard_cut`이면 §3-5 `POST /internal/summaries`를 **동기 호출**(타임아웃 3초) → **Phase 3에서 구현했고 2026-09-05에 성공 경로까지 확인**
+  - [x] 실패·타임아웃·422 → **재시도하지 않고 `summary: null`**
+  - [x] **`endReason: "timeout"`이면 호출하지 않고 항상 `null`** — 아래 주의
 
 > **왜 Phase 3인가** (2026-09-04). §3-5는 **턴 텍스트를 보내는** 호출인데, 턴이 들어오는 것도(`/internal/turns`) 그 본문을 평문으로 읽는 복호화 변환기도 Phase 3에서 생긴다. 지금 붙이면 **호출할 데이터가 0건이라 실행되는 경로가 없는 코드**가 남는다. 계약 §2-5가 `summary: null`을 허용하므로 지금 항상 null인 것은 계약 위반이 아니다 — 턴이 없으니 요약할 것도 없다.
 - [x] **`user_baseline.session_count` +1** — F3-05가 아니라 **종료의 기본 동작**이다(spec F3-05, 2026-09-04 분리). F3-05를 잘라도 이건 남는다
