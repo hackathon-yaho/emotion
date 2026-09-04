@@ -1,5 +1,7 @@
 # 데이터 모델 — 백엔드
 
+> **수정 기록 (2026-09-04 ②)** — 계약 v1.4 반영. **컬럼 2개 신설** — `voice_session.gap_threshold`(F9-02 음영 판정이 쓸 임계값 스냅샷. 안 두면 임계값 확정 시 과거 음영이 소급 변경된다)·`profile.demo_mode`(F11-01 플래그의 실체가 어디에도 없었다). **F3-04에 `avg_gap IS NOT NULL` 가드**를 반영하고 `session_count` 증가를 F3-05에서 분리했다. `observation_evidence` 절의 "숫자 4개" 표현을 정정 — 계약 §2-6의 `evidence` 객체는 **`tag`를 포함한 5키**다. 로그 상관용 **`sessionRef`** 규칙 추가.
+>
 > **수정 기록 (2026-09-04 ①)** — 문서 신설. `spec.md` §6-1은 "무엇을 저장하는가"(컬럼명·개인정보 여부)까지만 정의하고 타입·제약·인덱스·FK가 없어, 구현에 필요한 DDL을 여기서 확정한다. 작성 중 발견한 공백 3건은 아래 "spec과 달라진 점"에 적었다.
 
 `spec.md` §6-1이 **무엇을** 저장할지의 단일 출처이고, 이 문서는 **어떻게** 저장할지를 정한다. 컬럼이 추가·삭제되면 **§6-1을 먼저 고치고** 여기를 따라 고친다.
@@ -14,7 +16,9 @@
 | --- | --- | --- |
 | `turn_log.role` | 계약 §2-10 응답과 §3-2 요청이 `role`(`user`/`assistant`)을 주고받는데 **§6-1 컬럼 목록에 없다** | **컬럼 추가.** 없으면 §2-10 응답을 만들 수 없다. spec §6-1 개정 필요 |
 | `turn_log.occurred_at` | 계약이 `occurredAt`(발화 시각, AI가 보냄)을 요구하는데 §6-1엔 `created_at`(적재 시각)만 있다 | **둘 다 둔다.** 적재가 지연·재시도되면 두 값이 갈린다 |
-| `voice_session.pattern_processed_at` | 배치 트리거를 스케줄러 방식으로 정하면서(2026-09-04) 필요해진 컬럼 | **컬럼 추가.** spec §6-1·F7-01 개정 필요 |
+| `voice_session.pattern_processed_at` | 배치 트리거를 스케줄러 방식으로 정하면서(2026-09-04) 필요해진 컬럼 | **컬럼 추가.** spec §6-1·F7-01 개정 완료 |
+| `voice_session.gap_threshold` | 계약 §2-8 `highlights`가 "갭이 임계를 넘은 구간"인데, 세션에 **실제로 적용된 임계값 수치**가 저장되지 않았다(`threshold_mode`만 있었다) | **컬럼 추가.** 임계값은 PRD §14-5로 반드시 한 번 바뀌고, 바뀌면 과거 음영이 소급 재판정된다. spec §6-1·F9-02 개정 완료 (계약 v1.4) |
+| `profile.demo_mode` | F11-01 데모 플래그의 저장 위치가 어느 문서에도 없었다. `GET /api/me`·`session/start`·`/live`·`/internal/sessions` 네 곳이 이 값을 읽는다 | **컬럼 추가.** 환경변수 목록은 값을 바꾸는 데 재배포가 필요하고, 스키마는 어차피 지금 한 번에 만든다. spec §6-1·F11-01 개정 완료 |
 
 ## 공통 규약
 
@@ -42,6 +46,7 @@ create table account (
 
 create table profile (
     id          uuid primary key default gen_random_uuid(),
+    demo_mode   boolean     not null default false,
     created_at  timestamptz not null default now()
 );
 
@@ -52,6 +57,7 @@ create table account_profile (
 ```
 
 > **감정 데이터는 `profile_id`만 참조한다.** `account`(카카오 식별자)와의 연결은 `account_profile` 한 곳에만 있다 — PRD §5.1 식별자 분리. 이 테이블을 조인하지 않으면 어떤 감정 데이터도 실명 계정에 닿지 않는다.
+> **`demo_mode`가 `account`가 아니라 `profile`에 있는 이유** — 조회 경로가 전부 `profileId` 기반이다. `account`에 두면 데모 여부를 볼 때마다 `account_profile` 조인이 붙는데, 그 조인은 식별자 분리가 막으려는 바로 그 경로다. **심사 당일에는 `UPDATE profile SET demo_mode = true WHERE id = ?` 한 줄로 켠다 — 재배포가 필요 없다.**
 
 ### 대화 세션 (F2)
 
@@ -63,6 +69,7 @@ create table voice_session (
     ended_at             timestamptz,
     duration_sec         integer,
     threshold_mode       text        not null check (threshold_mode in ('fixed','personal')),
+    gap_threshold        numeric(3,2) not null,
     end_reason           text        check (end_reason in ('user_end','soft_wrap','hard_cut','timeout','resumed')),
     summary              text,
     hume_chat_group_id   text,
@@ -77,12 +84,15 @@ create index idx_session_batch_pending   on voice_session (ended_at) where ended
 | 컬럼 | 규칙 |
 | --- | --- |
 | `id` | **UUIDv4.** CLM 인증에 `custom_session_id`로 쓰이므로 **로그에 남기지 않는다**(백엔드 절대 원칙 6번) |
+| `threshold_mode` | `session_count >= 5` **AND** `avg_gap IS NOT NULL`이면 `personal`, 아니면 `fixed`(F3-04, 2026-09-04 가드 추가). **가드가 없으면 5세션 내내 분석이 실패한 사용자가 평균 없이 `personal`로 넘어간다** |
+| `gap_threshold` | **세션 시작 시 실제로 적용한 임계값 수치를 그대로 박는다.** F9-02 음영(계약 §2-8 `highlights`)이 이 값으로 판정한다. `NOT NULL` — 세션이 시작됐다면 임계값은 반드시 정해져 있다 |
 | `ended_at` `duration_sec` | 종료 전에는 NULL. `duration_sec`는 종료 시 계산해 넣는다 |
 | `end_reason` | 앱은 `timeout`·`resumed`를 보내지 않는다(계약 §2-5). 서버 내부에서만 기록 |
 | `summary` | **NULL 가능** — 생성 실패·`endReason: timeout`(§2-5) |
 | `pattern_processed_at` | **NULL이면 배치 미처리.** 스케줄러가 이 조건으로 훑는다(F7-01) |
 | `resumableUntil` | **컬럼을 두지 않는다.** `ended_at + 30분`으로 계산한다 — 값이 하나면 규칙이 하나다 |
 
+> **`gap_threshold`를 스냅샷하는 이유** — 초기 수치는 20쌍 세트 측정 후 확정된다(PRD §14-5). 현재 설정값으로 소급 판정하면 **수치를 확정하는 순간 과거 날짜의 음영이 통째로 달라져**, 그날 앱이 실제로 되물었던 근거(FR-022)와 화면이 어긋난다. 컬럼 하나로 그 경로를 막는다.
 > `idx_session_batch_pending`은 **부분 인덱스**다. 처리 끝난 세션은 인덱스에서 빠지므로, 도그푸딩이 길어져도 배치 스캔 비용이 늘지 않는다.
 
 ### 턴 로그 (F3 · F5 · F6)
@@ -177,7 +187,7 @@ create index idx_evidence_turn on observation_evidence (turn_id);
 
 | 컬럼 | 규칙 |
 | --- | --- |
-| `occurrences` `tag_avg_gap` `user_avg_gap` `ratio` | **계약 §2-6의 `evidence` 객체가 이 4개 그대로다.** 관찰 문장 ↔ 이 숫자의 불일치는 0건이어야 한다(§1.4) |
+| `tag` `occurrences` `tag_avg_gap` `user_avg_gap` `ratio` | **계약 §2-6의 `evidence` 객체가 이 5개 그대로다** — `tag`가 포함된다. 관찰 문장 ↔ 이 숫자의 불일치는 0건이어야 한다(§1.4) |
 | `feedback` | **NULL이 기본**(미응답). `agree`/`disagree` 둘뿐이고 취소·수정 없다(F7-08) |
 | `status` | `disagree`가 관찰을 **삭제하지 않는다**(F7-08). 무효화는 F10-02 경로에서만 |
 
@@ -215,6 +225,18 @@ create table ops_error_log (
 
 > **탈퇴 삭제 대상이 아니다**(spec §6-1). 사용자 데이터를 담지 않고 장애 분석에 필요하다.
 > **`message`에 발화 내용·`sessionId`를 넣지 않는다**(FR-092, 백엔드 절대 원칙 3·6번). 이 테이블이 규칙을 깨기 가장 쉬운 자리다.
+
+#### `sessionRef` — 세션을 안 남기면서 상관시키는 법 (2026-09-04)
+
+발화도 `sessionId`도 못 남기면 **`/internal/turns` 저장이 실패해도 어느 세션의 문제인지 알 수 없다.** 도그푸딩의 목적이 실사용 로그 수집인데, "3일치 턴이 안 쌓였는데 왜인지 모른다"가 되면 되돌릴 방법이 없다.
+
+```
+sessionRef = SHA-256(sessionId).hex[:8]
+```
+
+- `ops_error_log.message` **앞머리**와 애플리케이션 로그, 계약 §1-2 오류 응답의 `traceId`에 **같은 값**을 쓴다 — 컬럼을 늘리지 않는다
+- **원본을 복원할 수 없으므로 절대 원칙 6번을 깨지 않는다.** 그 규칙의 목적은 CLM 인증 수단(`custom_session_id`)의 노출을 막는 것이고, 해시는 인증에 쓸 수 없다
+- 같은 세션에서 난 오류끼리 묶인다. 사용자를 특정해야 하면 `voice_session`을 훑어 같은 해시를 만들어 대조한다 — **로그에서 DB로 가는 방향은 열려 있고, 로그만으로는 아무것도 못 한다**
 
 ## 삭제 순서 (FK가 `NO ACTION`이므로 코드가 순서를 지킨다)
 

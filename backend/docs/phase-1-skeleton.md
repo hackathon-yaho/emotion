@@ -46,6 +46,7 @@ com.hackathonyaho.voicejournal
 ## 1-4. DB 스키마
 
 - [ ] `src/main/resources/db/migration.sql`에 [`data-model.md`](data-model.md)의 DDL을 **부모 테이블 먼저** 순서로 작성 (11테이블 + 인덱스)
+- [ ] **`profile.demo_mode`·`voice_session.gap_threshold`를 빠뜨리지 않는다** (2026-09-04 신설). 둘 다 뒤 Phase에서 쓰지만 **지금 넣어야 마이그레이션이 한 번으로 끝난다**
 - [ ] 로컬 compose Postgres에 적용
 - [ ] `gen_random_uuid()`가 동작하는지 확인 — **PostgreSQL 13+ 내장**이라 확장 설치가 필요 없다
 
@@ -56,18 +57,23 @@ com.hackathonyaho.voicejournal
 - [ ] `ErrorCode` enum에 계약 §1-2의 **10종**을 미리 정의 — `VALIDATION_ERROR`, `UNAUTHORIZED`, `TOKEN_EXPIRED`, `KAKAO_VERIFY_FAILED`, `INTERNAL_AUTH_FAILED`, `FORBIDDEN`, `NOT_FOUND`, `SESSION_NOT_RESUMABLE`, `HUME_TOKEN_ISSUE_FAILED`, `INTERNAL_ERROR`
 - [ ] `GlobalExceptionHandler`로 응답 형태를 계약 §1-2 그대로 통일 — `{ "error": { "code", "message", "traceId" } }`
 - [ ] `message`는 **사용자에게 그대로 보여도 되는 한국어 문장**으로 쓴다(계약 §1-2). 앱이 code별 문구를 다시 만들지 않아도 되게
+- [ ] **`traceId`는 `sessionRef`와 같은 값을 쓴다** — 세션 컨텍스트가 있는 요청이면 `SHA-256(sessionId)[:8]`, 없으면 임의 8자(`data-model.md`)
+
+> **`sessionId`를 로그에 못 남기므로**(절대 원칙 6번) `traceId`가 유일한 상관 수단이다. 해시를 쓰면 앱이 신고한 `traceId`로 `ops_error_log`와 애플리케이션 로그를 한 번에 찾을 수 있고, 값에서 세션을 역산할 수는 없다.
 
 ## 1-6. 카카오 로그인 · JWT (F1-01 · F1-02)
 
-- [ ] `POST /api/auth/kakao` — 계약 §2-1
+- [ ] `POST /api/auth/kakao` — **응답은 계약 §2-1 그대로**
   - [ ] 앱이 보낸 카카오 액세스 토큰을 **카카오 API로 검증**
   - [ ] 신규면 `account` + `profile` + `account_profile` 생성 (한 트랜잭션)
-  - [ ] 자체 JWT 발급 → `{ jwt, profileId, isNewUser }`
-  - [ ] 검증 실패 → 401 `KAKAO_VERIFY_FAILED`
+  - [ ] 자체 JWT 발급. **`expiresAt`은 JWT의 만료 시각과 같은 값**을 UTC ISO 8601로 내려준다 — 앱이 토큰을 파싱하지 않아도 되게
+  - [ ] 검증 실패 → 401 `KAKAO_VERIFY_FAILED` / 카카오 API 장애 → 503 `INTERNAL_ERROR`
 - [ ] JWT 인증 필터 — `Authorization: Bearer <JWT>`, **만료 7일**(계약 §1-1)
   - [ ] `/api/auth/kakao`·`/api/health` 제외 **전 엔드포인트 필수**
   - [ ] 만료 시 401 `TOKEN_EXPIRED` — 앱이 카카오 재로그인으로 갱신한다
-- [ ] `GET /api/me` — 계약 §2-2. **`openSession`은 Phase 2에서 채운다**(지금은 항상 `null`)
+- [ ] `GET /api/me` — **응답은 계약 §2-2 그대로**
+  - [ ] `sessionCount`는 `user_baseline.session_count`, `demoMode`는 `profile.demo_mode`, `thresholdMode`는 F3-04 규칙으로 그 자리에서 계산 (표시용이며 실제 적용 값은 세션 시작 시 다시 내려간다)
+  - [ ] **`openSession`은 Phase 2에서 채운다**(지금은 항상 `null`)
 
 > **감정 데이터 API는 `profileId`로만 동작한다.** 컨트롤러·서비스 어디에도 `kakao_sub`가 흘러다니지 않게 한다 — 식별자 분리(PRD §5.1)는 테이블만 나눈다고 지켜지지 않고, 코드가 조인하면 무너진다.
 
@@ -100,4 +106,5 @@ com.hackathonyaho.voicejournal
 - 세션·턴·관찰 로직 (Phase 2~4)
 - `DELETE /api/account`의 실제 삭제 (Phase 6)
 - `GET /api/me`의 `openSession` 채우기 (Phase 2)
+- **`demo_mode`를 켜는 일** — 컬럼은 지금 만들지만 값은 전부 `false`다. 심사 직전에 `UPDATE` 한 줄 (Phase 7)
 - **로그아웃 서버 처리** — F1-03은 앱 로컬 저장소 정리이고 서버가 할 일이 없다(spec F1-03)

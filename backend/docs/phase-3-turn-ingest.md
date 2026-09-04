@@ -1,24 +1,19 @@
-# Phase 3 — 턴 로그 수신 · 저장
+# Phase 3 — 턴 로그 수신 · 저장 · 대화 중 신호
 
-> 목표: **대화가 끝나면 그 턴들이 DB에 남아 있는 상태**를 만든다. 여기가 서면 도그푸딩 데이터가 쌓이기 시작한다.
+> 목표: **대화가 끝나면 그 턴들이 DB에 남아 있고, 대화 중에는 앱이 그 신호를 읽을 수 있는 상태**를 만든다. 여기가 서면 도그푸딩 데이터가 쌓이기 시작하고 **앱의 S02가 완성된다.**
 >
-> 의존: Phase 2의 `voice_session` · Phase 1의 `turn_log`·`turn_tag`·`user_baseline` 테이블
+> 의존: Phase 2의 `voice_session` · Phase 1의 `turn_log`·`turn_tag`·`user_baseline`·`crisis_event` 테이블
 >
-> 근거: `spec.md` F5-01~04, F6-03, F3-04·F3-05 · `api-contract.md` §3-1·§3-2
+> 근거: `spec.md` F5-01~04, F6-03, F3-04·F3-05, F4-04·F11-01 · `api-contract.md` §3-1·§3-2·§2-13 (**v1.4**)
+>
+> **응답 필드는 여기 옮겨 적지 않는다.** 계약 §번호를 열어 보고, 여기서는 계약이 정하지 않은 백엔드 쪽 판단만 확인한다 — [README](README.md) "이 문서를 쓰는 법" 4번.
 
 > **이 Phase가 늦으면 그 기간의 로그는 영영 없다.** Phase 4~7은 나중에 만들어도 과거 턴을 다시 읽어 소급 처리되지만, 적재는 그 순간에만 가능하다 — `roadmap.md`.
 
 ## 3-1. 턴 로그 수신 — `POST /internal/turns` (F5-01)
 
 - [ ] 헤더 `X-Internal-Secret` 검증 → 401 `INTERNAL_AUTH_FAILED` (계약 §3-1)
-- [ ] 페이로드 수신 — 계약 §3-2
-
-```json
-{ "sessionId", "turnIndex", "role", "occurredAt", "transcript",
-  "textValence", "voiceValence", "gap", "gapTriggered",
-  "thresholdMode", "tags", "topProsody", "crisis" }
-```
-
+- [ ] 페이로드 수신 — **필드는 계약 §3-2가 단일 출처다**(v1.4)
 - [ ] `turn_log` 저장. **`transcript`는 암호화 컬럼(`transcript_enc`)으로**(3-2)
 - [ ] `tags`를 `turn_tag`에 저장 — **백엔드는 태그를 재검증하지 않는다**(3-3)
 - [ ] `crisis.detected == true`면 `crisis_event` 적재 — **발화 내용 없이**, `detected_by`는 `rule`/`llm`
@@ -26,6 +21,7 @@
 
 | 필드 | 규칙 |
 | --- | --- |
+| `turnIndex` | **세션 내 단조 증가.** AI서버가 채번하고 백엔드는 검증하지 않는다. **이어하기 후에도 0부터 다시 시작하지 않는다**(계약 §3-2, v1.4) — 리셋되면 아래 "중복 적재 처리"가 유실 장치로 뒤집힌다 |
 | `role` | `assistant` 턴은 valence·gap이 **전부 null, tags는 빈 배열**로 온다. 그대로 저장 |
 | `thresholdMode` | 세션 단위 값이라 `voice_session`에 이미 있다. **`turn_log`에 중복 저장하지 않는다** |
 | `crisis` | `turn_log`에 저장하지 않는다 — `crisis_event`로만. **`turn_id`를 넣지 않는다**(백엔드 절대 원칙 2번) |
@@ -34,6 +30,8 @@
 - [ ] **중복 적재 처리** — `unique (session_id, turn_index)` 위반은 **오류가 아니라 "이미 적재됨"**으로 보고 202를 돌려준다
 
 > **중복이 실제로 온다.** v1.3에서 `/internal/turns` 재시도를 1회 → **3회**로 올렸다(계약 §3-2). 백엔드가 저장에 성공하고 응답만 유실되면 AI서버는 실패로 보고 재시도한다. **제약 위반을 500으로 돌려주면 AI가 또 재시도하고, 로그에 오류가 쌓인다.**
+>
+> **⚠️ 그래서 `turnIndex` 채번이 틀리면 유실이 조용하다.** 이어하기(F2-07)는 같은 `sessionId`를 쓰므로, AI가 재연결 후 인덱스를 리셋하면 새 발화가 전부 "이미 적재됨"으로 202를 받고 사라진다 — 오류도 안 남는다. 계약 v1.4 §3-2에 규칙을 명시하고 §3-4가 `lastTurnIndex`를 주지만, **AI 회신 전까지는 F2-07을 붙인 뒤 `turn_log`를 직접 확인한다** (`../../docs/request/ai/turn-index-numbering.md` ⏳).
 
 > **이 호출은 fire-and-forget이다.** 무거운 처리를 여기 넣지 않는다 — 응답이 느려지면 AI서버의 대화 응답 경로에 영향이 갈 수 있다. baseline 재계산 같은 것은 세션 종료 시점에 한다(3-4).
 
@@ -61,18 +59,46 @@
 ## 3-4. baseline 갱신 (F3-05)
 
 - [ ] **세션 종료 시** `user_baseline` 갱신 — 턴 적재 때마다가 아니다
-- [ ] `session_count` +1, `avg_gap`·`stddev_gap` 재계산
+- [ ] **`avg_gap`·`stddev_gap`만 여기서 재계산한다.** `session_count` +1은 **세션 종료의 기본 동작**이고 F3-05가 아니다 (spec F3-05, 2026-09-04 분리) — 아래 주의
 - [ ] **갭이 NULL인 턴은 집계에서 제외**
 - [ ] **전체 재계산으로 한다** (증분 아님) — `data-model.md` 참조. 세션 삭제(F10-01) 후 재계산과 **같은 코드**를 쓴다
 
-> `session_count`가 **5**에 도달하는 순간 다음 세션의 `thresholdMode`가 `personal`로 바뀐다(F3-04). TC-07이 이 전환 로그를 확인한다.
+> `session_count`가 **5**에 도달하고 **`avg_gap`이 NULL이 아니면** 다음 세션의 `thresholdMode`가 `personal`로 바뀐다(F3-04). TC-07이 이 전환 로그를 확인한다.
+>
+> **`session_count`를 이 절에서 분리한 이유** — F3-05는 **P1이고 spec §11 스코프 컷 7번**이다. 카운트까지 여기 묶여 있으면 자르는 순간 **P0인 F3-04가 영영 `fixed`에 머물고, `GET /api/me`의 `sessionCount`가 0으로 굳고, TC-07이 실패한다.** 카운트는 종료가 하고 이 절은 평균·표준편차만 맡으면, 잘라도 F3-04의 `avg_gap IS NOT NULL` 가드가 안전하게 `fixed`를 유지한다.
 
 ## 3-5. 전송 실패 시 동작 (F5-04)
 
-- [ ] 수신 엔드포인트가 **느리게 응답하지 않는지** 확인 — 무거운 작업 금지
+- [ ] 수신 엔드포인트가 **느리게 응답하지 않는지** 확인 — 무거운 작업 금지. **p95 200ms 이내를 목표로 계측한다** (NFR-01·TC-12의 전체 예산 2초 중 이 구간의 몫)
 - [ ] 저장 실패는 `ops_error_log`에 적재. **발화 내용·`sessionId`를 로그에 남기지 않는다**
+- [ ] 대신 **`sessionRef = SHA-256(sessionId)[:8]`**을 남긴다(`data-model.md`) — 아래 주의
 
 > 재시도 정책(3회)은 **발신 측(AI서버) 몫**이다. 백엔드가 할 일은 "빨리 202를 주고, 중복은 조용히 넘기는 것"뿐이다.
+
+> **아무것도 안 남기면 추적할 수단이 0이다.** 발화도 `sessionId`도 못 남기므로, 실패가 반복돼도 "어느 대화의 문제인지"를 알 방법이 없어진다. 도그푸딩의 목적이 실사용 로그 수집인데 **"3일치 턴이 안 쌓였는데 왜인지 모른다"가 되면 되돌릴 수 없다.** 해시는 원본을 복원할 수 없어 절대 원칙 6번(CLM 인증 수단 노출 금지)을 깨지 않는다.
+
+## 3-6. 대화 중 턴 신호 — `GET /api/session/{sessionId}/live` (F4-04 · F11-01)
+
+**Phase 5에서 옮겨 왔다** (2026-09-04). 의존이 이 Phase의 `turn_log`·`crisis_event`뿐이고, **앱은 이게 없으면 S02를 끝낼 수 없다** — S07 위기 안내 시트와 데모 오버레이가 둘 다 여기 걸린다.
+
+**S02에서만 호출된다.** 앱은 `livePollIntervalSec`(2초, Phase 2에서 내려줌) 간격으로 폴링하고 화면을 벗어나면 멈춘다.
+
+- [ ] 쿼리 `sinceTurnIndex` — 그 이후 턴만. 생략 시 세션 시작부터
+- [ ] 응답 — **필드는 계약 §2-13이 단일 출처다**
+- [ ] `crisisDetected` — **세션 단위 boolean.** `crisis_event`에 그 세션 행이 있는지(`EXISTS`)
+- [ ] **`profile.demo_mode`가 `false`면 `turns`는 항상 빈 배열**
+- [ ] `transcript`는 **포함하지 않는다**
+- [ ] 404 `SESSION_NOT_FOUND` / 403 `FORBIDDEN`
+
+| 규칙 | 이유 |
+| --- | --- |
+| `crisisDetected`는 데모 여부와 **무관하게 항상** 정상 값 | S07 위기 안내는 모든 사용자에게 떠야 한다 |
+| 비데모는 `turns: []`, **`null`이 아니다** | 계약 §1-3이 `null`을 "측정하지 못했다"로 못박았다. 마스킹에 쓰면 "측정 실패"와 "볼 권한 없음"이 같은 값이 된다 |
+| 새 계산·새 저장 없음 | `/internal/turns`로 이미 받은 값을 되돌려줄 뿐이다 |
+
+> **FR-031 방어선이 여기서 이중이 된다.** 앱이 S02에 갭을 그리지 않는 것이 1차, 서버가 아예 주지 않는 것이 2차다. 앱 코드가 실수해도 그릴 데이터가 없다.
+> **S07은 `false → true` 전이에서 한 번만 뜬다** — 앱 쪽 책임이지만, 서버가 세션 단위 boolean으로 주기 때문에 앱이 전이를 판단할 수 있다(TC-27).
+> **F4는 어떤 스코프 컷에서도 자르지 않는다**(spec §11). 대화 중 109 안내 자체는 AI서버가 응답에 실어 보내지만(F4-04 담당 `B/C`), **S07 시트와 TC-27은 이 엔드포인트에 걸려 있다.**
 
 ## 완료 기준
 
@@ -82,12 +108,14 @@
 - **TC-06** — 분석 호출 실패 턴(valence null, tags 빈 배열)이 정상 수신·저장된다
 - **TC-11** — 서버·스토리지 어디에도 **오디오 파일 0건**
 - **TC-15** — 원문에 없는 태그가 저장돼 있지 않다
-- `ops_error_log`·애플리케이션 로그에 `transcript`·`sessionId`가 찍히지 않는다
-- `api-spec.md`에서 `/internal/turns`를 `구현 완료`로 갱신했다
+- **TC-26** — `demoMode == false` 계정의 `/live` 응답에서 `turns`가 **빈 배열**이고 `crisisDetected`는 정상 값이다
+- **TC-27** — 위기 감지 후 연속 폴링에서 앱이 S07을 **1회만** 띄울 수 있다(서버가 세션 단위 boolean을 준다)
+- `ops_error_log`·애플리케이션 로그에 `transcript`·`sessionId`가 찍히지 않고, **`sessionRef`로 같은 세션의 오류가 묶인다**
+- `api-spec.md`에서 `/internal/turns`·`/api/session/{id}/live`를 `구현 완료`로 갱신했다
 
 ## 이 Phase에서 하지 않는 것
 
 - **패턴 집계·관찰 생성** (Phase 4) — 여기서는 저장만 한다
-- **턴 조회 API** (`/api/sessions/{id}`, `/api/session/{id}/live`) — Phase 5
+- **대화 기록 조회** (`/api/sessions`, `/api/sessions/{id}`) — Phase 5
 - **태그 정규화·검증** — AI서버가 이미 했다
-- **`crisis_event` 조회** — Phase 5의 `/live`에서
+- **데모 플래그를 켜는 일** — Phase 7. 여기서는 `profile.demo_mode`를 **읽어서 분기만** 한다

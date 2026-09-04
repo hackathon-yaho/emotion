@@ -442,7 +442,7 @@
 | GET | `/api/me` | 내 정보 (가입일, 세션 수, 임계 모드, 데모 모드) |
 | DELETE | `/api/account` | 탈퇴. 전량 즉시 삭제 |
 | POST | `/api/session/start` | 세션 생성 + **Hume 단기 액세스 토큰** 발급 + 임계 모드 반환 |
-| POST | `/api/session/{id}/end` | 세션 종료. 배치 큐 적재 |
+| POST | `/api/session/{id}/end` | 세션 종료. 패턴 배치의 미처리 상태로 남는다 |
 | POST | `/api/session/{id}/resume` | 중단 세션 이어하기 (P1). 잔여 시간 승계 |
 | GET | `/api/observations` | 관찰 목록 |
 | GET | `/api/observations/{id}/evidence` | 관찰 근거 대화 |

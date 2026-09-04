@@ -35,6 +35,8 @@ select id from voice_session
 - [ ] **갭이 `NULL`인 턴은 전부 제외** — 분모·분자 양쪽에서
 
 > `user_baseline.avg_gap`(Phase 3)과 여기서 계산하는 `userAvgGap`은 **같은 값이어야 한다.** 한쪽만 갱신되면 관찰의 `evidence` 숫자와 트렌드 화면이 어긋난다. **`user_baseline`을 읽어 쓰고 여기서 다시 계산하지 않는다.**
+>
+> **`GET /api/trend`의 `userAvgGap`(계약 §2-8, v1.4)도 같은 값이다.** 세 곳(baseline·관찰 evidence·트렌드 응답)이 전부 `user_baseline.avg_gap`을 읽는다. 조회 시점에 다시 계산하는 코드를 만들면 §1.4 "evidence 불일치 0건"이 그 순간 깨진다.
 
 ## 4-3. 규칙 판정 (F7-03) — **코드가 판정한다**
 
@@ -47,9 +49,9 @@ select id from voice_session
 
 ## 4-4. 관찰 문장 생성 (F7-04) — `POST /internal/observations`
 
-- [ ] 판정을 **통과한 것만** AI서버에 보낸다 — 계약 §3-3
-- [ ] 요청은 **숫자와 태그만**: `{ tag, occurrences, tagAvgGap, userAvgGap, ratio }`
-- [ ] 응답 `{ sentence }`를 `observation.sentence`에 저장
+- [ ] 판정을 **통과한 것만** AI서버에 보낸다 — 요청·응답은 계약 §3-3
+- [ ] 보내는 것은 **숫자와 태그뿐이다.** 원본 대화·발화·turn ID를 넣지 않는다
+- [ ] 응답의 `sentence`를 `observation.sentence`에 저장
 - [ ] **실패하면 관찰을 만들지 않는다.** 템플릿 문장으로 대체하지 않는다
 
 > **원본 대화를 보내지 않는다**(계약 §3-3). LLM은 표현만 담당하고 패턴의 존재·강도를 판정하지 않는다(FR-054).
@@ -57,7 +59,7 @@ select id from voice_session
 
 ## 4-5. evidence 부착 (F7-05)
 
-- [ ] `observation`에 집계 숫자 4개를 그대로 저장 — `occurrences`·`tag_avg_gap`·`user_avg_gap`·`ratio`
+- [ ] `observation`에 집계 결과를 그대로 저장 — `tag`·`occurrences`·`tag_avg_gap`·`user_avg_gap`·`ratio`. **계약 §2-6의 `evidence` 객체가 이 5개다**(`tag` 포함)
 - [ ] 근거 turn을 `observation_evidence`에 연결
 - [ ] **API 응답의 `evidence` 객체에는 turn ID를 넣지 않는다**(계약 §2-6). 근거 대화는 F7-07 상세 조회의 `turns` 배열로만 내려간다
 

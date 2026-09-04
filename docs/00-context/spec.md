@@ -307,7 +307,7 @@
 | --- | --- |
 | 설명 | 세션 종료 시 대화를 한 줄로 정리해 보여주고, 배치 큐에 적재한다 |
 | 트리거 | 사용자 종료 / 소프트 마무리 후 종료 / 하드 컷 |
-| 처리 | ① `POST /api/session/{id}/end` ② `voice_session` 종료 시각·길이 기록 ③ **F7-01 배치 큐 적재** ④ 요약 문장 생성 — **`endReason`이 `user_end`·`soft_wrap`·`hard_cut`이면 AI서버 `POST /internal/summaries`(v1.3)를 동기 호출(타임아웃 3초), `timeout`(F2-06)이면 호출하지 않는다**(정리 건당 대기 없음, 아무도 보고 있지 않은 세션) |
+| 처리 | ① `POST /api/session/{id}/end` ② `voice_session` 종료 시각·길이 기록 ③ **`user_baseline.session_count` +1**(F3-05가 아니라 종료의 기본 동작) ④ **F7-01 배치 미처리 상태로 남김**(`pattern_processed_at`이 NULL인 것 자체가 미처리 — 별도 큐 없음) ⑤ 요약 문장 생성 — **`endReason`이 `user_end`·`soft_wrap`·`hard_cut`이면 AI서버 `POST /internal/summaries`(v1.3)를 동기 호출(타임아웃 3초), `timeout`(F2-06)이면 호출하지 않는다**(정리 건당 대기 없음, 아무도 보고 있지 않은 세션) |
 | 출력 | `{ sessionId, durationSec, turnCount, summary, gapAvg }` — 전체 스키마는 [api-contract.md](../02-architecture/api-contract.md) §2-5 |
 | 예외 | 요약 생성 실패·타임아웃·`timeout` 종료 → `summary: null`로 종료. 대화 기록은 남는다 |
 | 수용 기준 | 종료 후 S02-1에 요약이 표시되고, 해당 세션이 S05 목록에 나타난다 |
@@ -319,7 +319,7 @@
 | --- | --- |
 | 설명 | 앱 강제 종료·네트워크 끊김·배터리 방전 등으로 종료 호출이 없었던 세션을 서버가 정리한다 |
 | 트리거 | 스케줄러 주기 실행 (**F11-02 헬스체크와 동일 스케줄러에 태운다** — 추가 인프라 0) |
-| 처리 | 시작 후 **30분** 경과한 미종료 세션 → `end_reason: "timeout"`으로 종료 + **배치 큐 적재** |
+| 처리 | 시작 후 **30분** 경과한 미종료 세션 → `end_reason: "timeout"`으로 종료. `pattern_processed_at`이 NULL이므로 **그대로 배치 미처리 상태**가 된다(별도 큐 적재 없음) |
 | 부수 효과 | 새 세션 시작(F2-01) 시 그 사용자의 열린 세션을 먼저 닫는다 → **동시 세션 문제 동시 해결** |
 | 수용 기준 | 대화 중 앱을 강제 종료해도 **그 대화가 관찰 집계에 반영된다** |
 | 왜 P0인가 | 이게 없으면 중단된 대화가 `voice_session` 열린 채 남아 **배치가 영영 돌지 않는다.** 도그푸딩 10일 중 하루만 이래도 발표에 쓸 데이터가 줄어든다 |
@@ -371,7 +371,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 설명 | `gap = |textValence − voiceValence|` |
+| 설명 | `gap = \|textValence − voiceValence\|` |
 | 처리 | 두 값이 모두 존재할 때만 계산 |
 | 출력 | `gap: number \| null`, `gapTriggered: boolean` |
 | 예외 | 어느 한쪽이 `null`이면 `gap = null`, `gapTriggered = false` |
