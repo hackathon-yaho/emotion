@@ -11,6 +11,14 @@
 - 핵심 개념: **갭 = |텍스트 valence − 음성 valence|**. 절대 감정("슬픔 78%")을 주장하지 않고 두 채널의 차이만 본다
 - 일정: **고정 마감은 9/20 제출 하나.** 9/10 도그푸딩 시작은 **팀 내부 목표**이며 배포 시점(세 파트 기능 확인 후)에 종속된다. 개발 타임라인은 따로 세우지 않는다 (PRD §12, 2026-09-04 개정)
 
+## 작업 시작 시 — 나에게 온 요청부터 센다
+
+```sh
+git pull && grep -L "✅" docs/request/{내 역할}/*.md   # README.md는 무시
+```
+
+**미회신 건수를 어느 문서에도 적어두지 않는다.** 답은 이 명령에 있고, 문서에 적은 숫자는 다음 요청이 도착하는 순간 틀린다. 실제로 백엔드가 `docs/request/backend/`의 5번째 요청을 그렇게 놓쳤다 — 자기 문서에 "4건 전부 회신 완료"라고 적어둔 탓에 다시 볼 이유가 없어져 있었다.
+
 ## 작업 전에 읽을 것
 
 1. `docs/README.md` — 문서 지도, 핵심 설계 원칙, 갱신 규칙
@@ -75,9 +83,7 @@
 - **착수 전 확정 항목**: ~~매핑표(§14-1)~~ ✅ · ~~위기 키워드(§14-2)~~ ✅ (`ai-server/rules/`) · Hume 플랜 실측(§14-3, 백엔드) · 고정 임계값(§14-5) — 절차 확정, 수치는 20쌍 측정 후
 - **누락 문서 3개**: `decisions.md`, `voice-emotion-stack-options.md`, `selected-topic.md` — PRD가 참조하지만 저장소에 없음. `docs/00-context/`에 올릴 것
 - **계약은 v1.4(2026-09-04).** `api-contract.md`가 인터페이스 단일 출처이며, 변경 이력 표에 v1.0~v1.4의 무엇을 왜 바꿨는지가 있다
-- **요청 현황** — 회신 대기 중인 것만 ⏳다
-  - ⏳ `docs/request/ai/integration-test-path.md` (백엔드 → AI) — 양쪽이 로컬이면 AI서버가 백엔드에 도달하지 못해 통합 검증이 성립하지 않는다. 임시 터널로 뚫을 시점·순서 협의
-  - ⏳ `docs/request/ai/turn-index-numbering.md` (백엔드 → AI, 2026-09-04) — 이어하기 재연결 후 `turnIndex`를 이어 붙이는지. **리셋하면 백엔드의 중복 방어에 걸려 이후 턴이 오류 없이 버려진다.** 계약 v1.4가 규칙을 명시하고 §3-4가 `lastTurnIndex`를 제공한다
-  - ✅ `docs/request/ai/clm-turn-pipeline-review.md` — 회신 완료(2026-09-03). §9.1 개정, FR-025 신설
-  - ✅ `docs/request/backend/` **5건 전부 회신 완료** — `hume-config-id`·`live-turn-signal`·`session-context-lookup`·`session-summary-endpoint`(계약 v1.3) · `tag-gap-endpoint`(v1.4, 2026-09-04). 회신은 `docs/response/{app,ai}/`에 같은 파일명으로
+- **요청 현황은 위 grep이 단일 출처다.** 아래는 grep이 못 주는 "왜 중요한가"만 적는다 — **개수·완결 선언을 여기 쓰지 않는다**
+  - `request/ai/integration-test-path.md` (백엔드 → AI) — 양쪽이 로컬이면 AI서버가 백엔드에 도달하지 못해 통합 검증이 성립하지 않는다. 임시 터널로 뚫을 시점·순서 협의. **단위 개발은 안 막는다**
+  - `request/ai/turn-index-numbering.md` (백엔드 → AI, 2026-09-04) — 이어하기 재연결 후 `turnIndex` 채번. **유실 자체는 백엔드가 `occurred_at` 판별로 이미 막았고**, 남은 확인은 `occurredAt`이 발화 시각이며 재시도에서 불변인지다(그 가드의 유일한 전제)
 - 코드는 아직 없다. `ai-server/`에는 프롬프트 3종·규칙 데이터 3종·`.env.example`·`pyproject.toml`·평가 세트 안내가 있다
