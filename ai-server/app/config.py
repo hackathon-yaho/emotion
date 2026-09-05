@@ -43,9 +43,9 @@ class Settings(BaseSettings):
     ai_model_observe: str = "gemini-3.8-flash"
     ai_observe_effort: str = "none"
     ai_model_summary: str = "gemini-3.5-flash-lite"
-    # 실측 p95 5473ms(2026-09-05, Gemini 무료 티어). 900ms로 두면 분석이 거의 항상
-    # 타임아웃되어 갭 기능이 통째로 죽는다 — 갭이 이 제품의 핵심이라 시간을 준다.
-    ai_analyze_timeout_ms: int = 6000
+    # 실측 p95 1209ms(2026-09-05 재측정, 턴 간격 15초). 여유를 두되 지나치게 길면
+    # 실패한 턴이 오래 매달린다. 갭이 이 제품의 핵심이라 짧게 자르지는 않는다.
+    ai_analyze_timeout_ms: int = 3000
     # 기동 시 모델을 한 번씩 깨운다. 콜드 스타트가 20초를 넘는다(실측).
     ai_warmup_on_start: bool = True
     ai_summary_timeout_ms: int = 2500

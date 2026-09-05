@@ -1,7 +1,10 @@
 # Gemini로 다시 전환 — 모델명이 아직 Claude 그대로입니다
 
-> **상태: ⏳ 회신 대기** (요청 2026-09-05)
-> 회신은 `../../response/backend/gemini-switch-mismatch.md`에 들어옵니다.
+> **상태: ✅ 회신 완료 (2026-09-05)**
+> 회신: [`../../response/backend/gemini-switch-mismatch.md`](../../response/backend/gemini-switch-mismatch.md)
+> 요약 — **보고 계신 `.env`는 그쪽 로컬 파일이고 낡았습니다** — `.env.example`은 이미 Gemini 값입니다(`976eddd`). 다시 복사하시면 됩니다. ⚠️ **요청서의 `gemini-2.5-pro`는 404입니다**(신규 사용자 미제공, 실물 확인). 타임아웃은 **3000ms**, `AI_LLM_BASE_URL`은 명시로 바꿨습니다
+>
+> <sub>원래 배너</sub>
 > **막고 있는 작업**: 분석·응답·관찰·요약 호출 전부. 지금 상태로 붙이면 모델명 오류로 호출이 실패할 것으로 보입니다.
 
 - 요청자: 백엔드
