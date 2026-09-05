@@ -6,10 +6,13 @@
 >
 > 근거: `spec.md` F11-01·F11-03·F11-04 · PRD FR-090·FR-092 · `roadmap.md`
 
-> **상태 (2026-09-05): 배포 전 준비는 끝났다. 남은 것은 계정 두 개(Supabase·Render)를 만드는 일뿐이다.**
-> **배포 이미지로 실제 확인한 것** — Docker 빌드 성공 · `PORT` 주입으로 기동(10000) · DB 연결 · **TC-14 데모 모드 전환** · 로그 감사. 아래 7-1·7-2는 닫혔고 7-4만 남았다.
+> **상태 (2026-09-05): 배포됐다 — `https://emotion-6yeh.onrender.com`**
+> **배포본에서 실제 확인한 것** — 부팅 성공(98.7초) · Supabase 연결(Postgres 17.6, 11테이블) · `GET /api/health` = `{"status":"ok","db":"ok"}` · 내부 API 인증 3경로(시크릿 없음 401 / 틀림 401 / 맞음+없는 세션 404) · CORS(GitHub Pages 오리진) 통과.
+> **7-4 체크박스에서 남은 것은 cron 킵얼라이브 하나**이고, 그 밖에 사람 손이 필요한 것이 셋 있다 — `TRANSCRIPT_ENC_KEY` 오프라인 사본 보관 · AI에 새 `INTERNAL_SHARED_SECRET` 전달 · AI서버가 배포되면 `AI_SERVER_BASE_URL` 갱신. 목록은 `blocked.md` ⑦.
 
 > **배포는 세 파트(앱·백엔드·AI)의 기능 확인이 끝난 뒤에 한다**(2026-09-04 팀 결정, PRD §12). 도그푸딩이 웹 링크 공유로 진행되므로 **배포 시점이 곧 도그푸딩 시작 시점**이다. 그 전의 역할 간 통합 검증은 배포가 아니라 **임시 터널**로 한다 — `../../docs/request/ai/integration-test-path.md`.
+>
+> **2026-09-05에 이 게이트보다 먼저 배포했다**(팀장 판단). **다만 배포 시점이 도그푸딩 시작 시점이 되지는 않았다** — 앱이 새 `API_BASE_URL`로 다시 빌드해야 하고 Hume Config에 CLM이 없어서, 지금 링크를 공유해도 대화가 성립하지 않는다. 위 등식은 **그 둘이 붙는 날** 성립한다.
 
 ## 7-1. 데모 모드 (F11-01)
 
@@ -50,13 +53,13 @@
 
 ## 7-4. 배포 (Render)
 
-**세 파트 기능 확인이 끝난 뒤 착수한다.**
+> **실제로는 그 게이트 전에 배포했다** (2026-09-05, 팀장 판단). 앱은 새 `API_BASE_URL`로 다시 빌드해야 하고 Hume Config에 CLM이 아직 없으므로, **지금 링크를 공유해도 대화는 성립하지 않는다.** 도그푸딩 시작은 그 두 개가 붙은 뒤다.
 
-- [ ] Render Web Service 생성 — **AI서버와 별도 계정**(무료 750시간은 워크스페이스당)
+- [x] Render Web Service 생성 — **AI서버와 별도 워크스페이스**(`emotion`, 무료 750시간은 워크스페이스당). 서비스 `srv-dadjih6q1p3s73dv0gt0` · 루트 `backend` · Dockerfile · 리전 oregon
 - [x] `Dockerfile`로 빌드 — **2026-09-05에 실제로 빌드해 컨테이너를 띄웠다**
   - ⚠️ **`gradlew`에 실행 비트가 없었다**(git `100644`). 리눅스에서 `./gradlew`가 permission denied로 죽는다 — **배포 당일에야 드러났을 결함**이다. `git update-index --chmod=+x`로 올리고 `Dockerfile`에도 `chmod +x`를 넣었다(Windows에서 다시 추가되면 또 사라지므로 두 겹)
   - `PORT=10000`을 주입해 기동·DB 연결·헬스체크·TC-14까지 확인했다
-- [ ] 환경변수 등록 — **아래 표가 단일 출처다.** 코드(`application.yml`)에서 뽑았다
+- [x] 환경변수 등록 — **아래 표가 단일 출처다.** 코드(`application.yml`)에서 뽑았다. **필수 10개 + `KAKAO_CLIENT_SECRET`까지 등록했다** (2026-09-05)
 
 | 변수 | 필수 | 어디서 오나 |
 | --- | --- | --- |
@@ -77,16 +80,16 @@
 | `GAP_THRESHOLD` | 선택 | 20쌍 측정 후 확정(PRD §14-5). 그때까지 기본값 |
 | `PORT` | 선택 | **Render가 자동 주입한다.** 우리가 넣지 않는다 |
 
-> **필수 8개 중 하나라도 없으면 서버가 기동하지 않는다.** 런타임 오류가 아니라 부팅 실패라, 배포 로그 첫 화면에서 바로 보인다 — 의도한 설계다(`SessionPolicy`).
+> **필수 10개 중 하나라도 없으면 서버가 기동하지 않는다.** 런타임 오류가 아니라 부팅 실패라, 배포 로그 첫 화면에서 바로 보인다 — 의도한 설계다(`SessionPolicy`).
 >
 > **문서의 종전 목록에 `KAKAO_APP_ID`가 있었다** (2026-09-05 정정). 계약 v1.6에서 인가 코드 방식으로 바뀌며 없어진 변수인데 목록에 남아 있었고, **대신 필수인 `KAKAO_REST_API_KEY`가 빠져 있었다.** 그대로 등록했으면 배포가 부팅에서 죽었다.
 - [x] **카카오 Admin 키는 등록하지 않는다** — 탈퇴 unlink는 **백엔드가 사용자 토큰으로** 한다(2026-09-05 개정, Phase 6). Admin 키는 여전히 쓰지 않는다
-- [ ] **`HUME_API_KEY`·`HUME_CONFIG_ID`는 AI에게서 받는다** — 계정을 AI가 소유한다(2026-09-04 결정, `roadmap.md`)
-- [ ] **Supabase 프로젝트를 이 시점에 만든다** — 미리 만들면 무료 플랜이 1주 미사용에 일시정지돼 깨우는 절차만 는다. 로컬은 compose로 충분했다
-- [ ] **연결은 Session pooler(5432)를 쓴다** — 아래
-- [ ] `db/migration.sql`을 **Supabase에 적용** (로컬과 같은 파일)
-- [ ] cron-job.org에 **10분 간격** `GET /api/health` 등록
-- [ ] 앱·AI에 배포 도메인 전달
+- [x] **Hume 키 3개 등록** — 계정은 결국 팀장이 만들었다(`blocked.md` ①). `HUME_API_KEY`·`HUME_SECRET_KEY`·`HUME_CONFIG_ID`를 `.env`와 같은 값으로 넣었다
+- [x] **Supabase 프로젝트** — `emotion` (`reanvqcepfaxwdoeskty`, ap-southeast-2). 미리 만들면 무료 플랜이 1주 미사용에 일시정지돼 깨우는 절차만 는다. 로컬은 compose로 충분했다
+- [x] **연결은 Session pooler(5432)를 쓴다** — `aws-0-ap-southeast-2.pooler.supabase.com:5432` · 사용자 `postgres.reanvqcepfaxwdoeskty`. 이유는 아래
+- [x] `db/migration.sql`을 **Supabase에 적용** (로컬과 같은 파일) — 11테이블 생성 확인
+- [ ] cron-job.org에 **10분 간격** `GET /api/health` 등록 — **남은 하나.** 계정이 필요해 팀장이 직접 한다. **이게 없으면 15분 유휴에 잠들고, 복귀 약 1분이 AI서버의 fail-closed 2초 타임아웃과 부딪혀 대화가 통째로 막힌다**(`../../docs/request/ai/deploy-handoff.md` 3번)
+- [x] 앱·AI에 배포 도메인 전달 — 앱은 저장소 변수 `API_BASE_URL` 등록 완료(2026-09-05), AI는 요청서 `../../docs/request/ai/deploy-handoff.md`. **AI에는 새 `INTERNAL_SHARED_SECRET`을 별도 경로로 따로 줘야 한다**
 
 | 확인 | 이유 |
 | --- | --- |
@@ -107,15 +110,15 @@
 - ✅ **TC-14** — 데모 모드 on/off로 갭 노출이 갈린다 — **배포 이미지에서 확인**(`UPDATE` 한 줄, 재배포 없음). S02 화면 확인은 앱 몫
 - ⏳ **TC-20** — 평가 세트 실행으로 전 지표가 1회 출력된다 (P1) — 세트는 AI 소관이고 키가 있어야 돈다
 - ✅ **로그 전수 검사에서 `transcript` 0건, `sessionId` 0건** — 코드·실행 로그 양쪽
-- ⏳ 배포된 URL로 앱이 로그인·대화 시작까지 완주한다 — 배포 후
-- ⏳ cron 등록 후 첫 요청이 즉시 응답한다 (슬립 없음) — 배포 후
+- ⏳ 배포된 URL로 앱이 로그인·대화 시작까지 완주한다 — **서버는 섰다.** 앱이 새 `API_BASE_URL`로 다시 빌드해야 하고, 대화는 Hume Config의 CLM 등록이 먼저다
+- ⏳ cron 등록 후 첫 요청이 즉시 응답한다 (슬립 없음) — **cron 미등록**
 - ✅ `api-spec.md`의 구현 현황이 **전부 `구현 완료`**다
 
 > **대기열 변수 2개는 선택이다** (계약 §2-14, v1.9) — `SESSION_QUEUE_ENABLED`(기본 `false`) · `SESSION_QUEUE_CAPACITY`(기본 5). **켤 때 `CAPACITY`를 Hume 플랜의 동시 접속 수와 맞춘다** — Free **1** / Starter·Creator **5** / Pro 10. 무료 상태로 5를 넣으면 두 번째 사람이 `E0700`을 맞는다.
 
-## 배포 당일 순서 (계정 두 개만 만들면 된다)
+## 배포 당일 순서
 
-**앞의 준비는 끝났다.** 이 순서대로 하면 된다.
+> **2026-09-05에 1~7·9(앱)를 실행했다.** 남은 것은 **8(cron)** 과 **9의 AI 절반**(새 시크릿 전달) · **10**(AI서버 주소)이다.
 
 1. **Supabase 프로젝트 생성** → Connection string에서 **Session pooler(5432)** 문자열을 복사
 2. Supabase SQL Editor에 **`src/main/resources/db/migration.sql`을 그대로 붙여넣기** — 로컬과 같은 파일이다
@@ -126,7 +129,7 @@
    - **`TRANSCRIPT_ENC_KEY`는 저장소 밖에 사본 1부.** 잃으면 도그푸딩 발화 전체가 복호화 불가다
    - **`INTERNAL_SHARED_SECRET`은 AI에게 다시 준다** — 로컬용과 다른 값이다
 4. **Render Web Service 생성** — 저장소 연결, 루트 디렉터리 `backend`, Dockerfile 빌드
-5. **환경변수 등록** — 위 표의 **필수 8개**. `PORT`는 넣지 않는다(Render가 준다)
+5. **환경변수 등록** — 위 표의 **필수 10개**. `PORT`는 넣지 않는다(Render가 준다)
 6. 첫 배포 → **로그 첫 화면에서 부팅 성공 확인.** 필수 변수가 빠졌으면 여기서 죽는다
 7. `GET /api/health`가 `{"status":"ok","db":"ok"}`인지 확인
 8. **cron-job.org에 10분 간격 `GET /api/health` 등록**
