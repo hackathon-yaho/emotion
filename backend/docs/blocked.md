@@ -106,6 +106,7 @@
 | `TRANSCRIPT_ENC_KEY`(배포용) 오프라인 사본 | 생성은 했다. **보관은 사람이 해야 한다** — 잃으면 도그푸딩 발화 전체가 복호화 불가 |
 | AI에 새 `INTERNAL_SHARED_SECRET` 전달 | 배포용은 로컬과 다른 값이다. 저장소에 넣지 않으므로 별도 경로 |
 | `AI_SERVER_BASE_URL` | AI서버가 아직 배포되지 않았다. **안 넣으면 요약 null·관찰 0건이 조용히 난다** |
+| **앱 웹 재빌드** | 저장소 변수 등록이 **마지막 빌드(9/4 19:38)보다 늦다.** 지금 Pages 빌드는 `API_BASE_URL`이 폴백 `localhost:8080`이고 `KAKAO_REST_KEY`가 빈 문자열이라 **로그인부터 안 된다.** 코드 변경 없이 재빌드만 하면 된다 (`../../docs/request/app/backend-deployed-rebuild.md`) |
 
 > **배포가 곧 도그푸딩 시작은 아니게 됐다.** 앱이 새 `API_BASE_URL`로 다시 빌드해야 하고 Hume Config에 CLM이 없어서(①), 지금 링크를 공유해도 대화가 성립하지 않는다.
 

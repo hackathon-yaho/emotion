@@ -89,7 +89,7 @@
 - [x] **연결은 Session pooler(5432)를 쓴다** — `aws-0-ap-southeast-2.pooler.supabase.com:5432` · 사용자 `postgres.reanvqcepfaxwdoeskty`. 이유는 아래
 - [x] `db/migration.sql`을 **Supabase에 적용** (로컬과 같은 파일) — 11테이블 생성 확인
 - [ ] cron-job.org에 **10분 간격** `GET /api/health` 등록 — **남은 하나.** 계정이 필요해 팀장이 직접 한다. **이게 없으면 15분 유휴에 잠들고, 복귀 약 1분이 AI서버의 fail-closed 2초 타임아웃과 부딪혀 대화가 통째로 막힌다**(`../../docs/request/ai/deploy-handoff.md` 3번)
-- [x] 앱·AI에 배포 도메인 전달 — 앱은 저장소 변수 `API_BASE_URL` 등록 완료(2026-09-05), AI는 요청서 `../../docs/request/ai/deploy-handoff.md`. **AI에는 새 `INTERNAL_SHARED_SECRET`을 별도 경로로 따로 줘야 한다**
+- [x] 앱·AI에 배포 도메인 전달 — 앱은 저장소 변수 `API_BASE_URL` 등록 + 요청서 `../../docs/request/app/backend-deployed-rebuild.md`, AI는 요청서 `../../docs/request/ai/deploy-handoff.md`. **변수 등록만으로는 부족하다** — `app-web.yml`이 `--dart-define`으로 빌드 시점에 값을 굽고 `app/**` 변경에만 도는데, **변수 등록이 마지막 빌드(9/4 19:38)보다 늦어서 지금 Pages 빌드는 `API_BASE_URL`이 폴백 `localhost:8080`이고 `KAKAO_REST_KEY`가 빈 문자열이다.** 앱이 `workflow_dispatch`로 다시 빌드해야 한다
 
 | 확인 | 이유 |
 | --- | --- |
