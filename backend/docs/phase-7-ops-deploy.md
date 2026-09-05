@@ -88,7 +88,9 @@
 - [x] **Supabase 프로젝트** — `emotion` (`reanvqcepfaxwdoeskty`, ap-southeast-2). 미리 만들면 무료 플랜이 1주 미사용에 일시정지돼 깨우는 절차만 는다. 로컬은 compose로 충분했다
 - [x] **연결은 Session pooler(5432)를 쓴다** — `aws-0-ap-southeast-2.pooler.supabase.com:5432` · 사용자 `postgres.reanvqcepfaxwdoeskty`. 이유는 아래
 - [x] `db/migration.sql`을 **Supabase에 적용** (로컬과 같은 파일) — 11테이블 생성 확인
-- [ ] cron-job.org에 **10분 간격** `GET /api/health` 등록 — **남은 하나.** 계정이 필요해 팀장이 직접 한다. **이게 없으면 15분 유휴에 잠들고, 복귀 약 1분이 AI서버의 fail-closed 2초 타임아웃과 부딪혀 대화가 통째로 막힌다**(`../../docs/request/ai/deploy-handoff.md` 3번)
+- [ ] cron에 **10분 간격 킵얼라이브 — 두 곳** 등록. 계정이 필요해 팀장이 직접 한다. **이게 없으면 15분 유휴에 잠들고, 복귀 약 1분이 AI서버의 fail-closed 2초 타임아웃과 부딪혀 대화가 통째로 막힌다.** AI 회신에서 **타임아웃으로는 못 막는다**고 확인됐다 — 60초를 붙들면 Hume이 먼저 끊는다
+  - 백엔드 `https://emotion-6yeh.onrender.com/api/health`
+  - ⚠️ **AI서버 `<Cloud Run 주소>/healthz`** — AI서버도 무료라 잠든다. 백엔드만 깨우면 이번엔 저쪽이 자고 있다. **AI가 자기 것을 같은 도구에 등록하겠다고 했으므로 쓰는 cron 서비스 이름을 알려줘야 한다**(`../../docs/response/backend/deploy-handoff.md`)
 - [x] 앱·AI에 배포 도메인 전달 — 앱은 저장소 변수 `API_BASE_URL` 등록 + 요청서 `../../docs/request/app/backend-deployed-rebuild.md`, AI는 요청서 `../../docs/request/ai/deploy-handoff.md`. **변수 등록만으로는 부족하다** — `app-web.yml`이 `--dart-define`으로 빌드 시점에 값을 굽고 `app/**` 변경에만 도는데, **변수 등록이 마지막 빌드(9/4 19:38)보다 늦어서 지금 Pages 빌드는 `API_BASE_URL`이 폴백 `localhost:8080`이고 `KAKAO_REST_KEY`가 빈 문자열이다.** 앱이 `workflow_dispatch`로 다시 빌드해야 한다
 
 | 확인 | 이유 |
@@ -132,7 +134,7 @@
 5. **환경변수 등록** — 위 표의 **필수 10개**. `PORT`는 넣지 않는다(Render가 준다)
 6. 첫 배포 → **로그 첫 화면에서 부팅 성공 확인.** 필수 변수가 빠졌으면 여기서 죽는다
 7. `GET /api/health`가 `{"status":"ok","db":"ok"}`인지 확인
-8. **cron-job.org에 10분 간격 `GET /api/health` 등록**
+8. **cron에 10분 간격 킵얼라이브 등록 — 백엔드 `/api/health`와 AI서버 `/healthz` 두 곳.** 서비스 이름을 AI에 알려준다
 9. **앱·AI에 배포 도메인 전달** — 앱은 `API_BASE_URL`, AI는 `BACKEND_BASE_URL`
    - 앱 것은 **팀장이 직접 등록한다**: `gh variable set API_BASE_URL --repo hackathon-yaho/emotion --body https://…` (`.github/workflows/app-web.yml`이 `vars.API_BASE_URL`을 읽고, **비어 있으면 폴백이 `http://localhost:8080`이라 배포본이 조용히 로컬을 부른다**). `KAKAO_REST_KEY`는 2026-09-05에 등록해 뒀다
 10. AI서버가 배포되면 **`AI_SERVER_BASE_URL`을 그 주소로** 갱신

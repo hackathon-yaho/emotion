@@ -42,11 +42,17 @@
 **필요한 값**: 셋 다 `.env`에 있다. 실제 Config id는 **`23d6162d-d334-44dd-9c2d-f5858de19a06`** — 배포 환경변수에도 이 값을 넣는다(`phase-7`).
 **남은 것**: 위 Config 5건. **CLM이 제일 급하다** — 그게 없으면 제품이 성립하지 않는다.
 
+> **회신이 왔다** (2026-09-05, `../../docs/response/backend/hume-config-setup.md`). **등록이 막혀 있던 게 아니라 넣을 주소가 없었다** — CLM URL은 공개 인터넷에서 닿아야 하는데 AI서버가 로컬에만 있었다. **AI서버를 Cloud Run에 배포하고 그 주소를 넣는다**(터널이면 끊길 때마다 Config를 고쳐야 한다). 비활성 타임아웃은 **120 → 420초**(하드컷과 같게). **`HUME_CONFIG_ID`는 그대로 쓴다** — 백엔드 환경변수를 바꿀 일이 없다. **백엔드 후속 작업 없음.**
+
 > **지금은 무료 플랜이다**(2026-09-05). 월 5분 · **동시 접속 1**. 요금표 실측: Starter·Creator **동시 5**, Pro 10. **Creator로 올려도 동시 접속은 안 늘고**(5로 같다) 포함 분수가 40→200분으로 늘 뿐이다.
 
-## ② `GOOGLE_API_KEY` — 값은 들어갔다. 이제 **모델명이 안 맞는다**
+## ② `GOOGLE_API_KEY` — 값은 들어갔다. 남은 건 **`.env.example`의 세 줄**
 
-**막는 것: 2건.** 2026-09-05에 팀장이 키를 받아 `ai-server/.env`에 넣었다. 다만 같은 파일의 `AI_MODEL_*`이 **Claude 모델명 그대로**(`claude-haiku-4-5` 등)라 Gemini 엔드포인트에 그 이름을 보내게 된다 — `AI_ANALYZE_TIMEOUT_MS=400`도 Gemini 실측 p95(5473ms)보다 짧다. AI에 확인 요청했다(`../../docs/request/ai/gemini-switch-mismatch.md` ⏳).
+**막는 것: 2건.** 2026-09-05에 팀장이 키를 받아 넣었다. **우리가 보던 `ai-server/.env`가 낡은 로컬 파일이었다는 지적은 맞았다** — 공유되는 것은 `.env.example`이고 그건 이미 Gemini다(회신 `../../docs/response/backend/gemini-switch-mismatch.md`).
+
+**다만 그 `.env.example`이 `config.py`보다 낡았다** (2026-09-05 확인). 회신이 안내한 대로 복사하면 **AI가 방금 고친 결함 둘이 되살아난다** — `AI_RESPOND_EFFORT=low`(코드는 `none`. **위기 응답의 109 안내가 문장 중간에서 잘린다**) · `AI_MODEL_OBSERVE=gemini-2.5-pro`(코드는 `gemini-3.8-flash`. **404, 신규 사용자 미제공**). 요청했다(`../../docs/request/ai/env-example-drift.md` ⏳).
+
+> **지연 수치가 정정됐다** — 종전에 여기 적었던 "실측 p95 5473ms"는 **AI가 재측정해 철회했다.** 연속 호출 벤치마크가 429를 맞고 SDK 재시도로 잠든 시간이 지연으로 기록된 것이었다. **합계 p95는 12.5초가 아니라 3.19초**이고, 그래서 **유료 전환을 서두를 이유가 없어졌다**(`../../docs/response/backend/latency-diagnosis.md`).
 
 > **변수명이 두 번 바뀌었다** (2026-09-05). `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → **`GOOGLE_API_KEY`**(Gemini 무료 티어). AI 회신에는 `OPENAI_API_KEY`로 적혀 있지만 **그 뒤 커밋이 Gemini로 또 바꿨고**, `ai-server/app/config.py`가 실제로 읽는 이름은 `google_api_key`다 — **코드를 따랐다.** SDK 의존성이 `openai>=2.0`인 것은 Gemini의 OpenAI 호환 엔드포인트를 쓰기 때문이다.
 
@@ -102,10 +108,10 @@
 
 | 아직 못 한 것 | 왜 |
 | --- | --- |
-| **cron-job.org 10분 킵얼라이브** | 계정이 필요하다. **이게 제일 급하다** — 없으면 15분 유휴에 잠들고 복귀 1분이 AI서버 fail-closed 2초와 부딪혀 **첫 대화가 통째로 막힌다** |
+| **cron 10분 킵얼라이브 — 두 곳** | 계정이 필요하다. **이게 제일 급하다.** 없으면 15분 유휴에 잠들고 복귀 1분이 AI서버 fail-closed 2초와 부딪혀 **첫 대화가 통째로 막힌다.** AI 회신에서 **타임아웃으로는 못 막는다**고 확인됐다(60초를 붙들면 Hume이 먼저 끊는다). ⚠️ **AI서버도 Cloud Run 무료라 잠든다** — 백엔드 `/api/health`와 **AI서버 `/healthz` 둘 다** 찔러야 한다. AI가 자기 것을 같은 도구에 등록하겠다고 해서 **쓰는 cron 서비스 이름을 알려줘야 한다** |
 | `TRANSCRIPT_ENC_KEY`(배포용) 오프라인 사본 | 생성은 했다. **보관은 사람이 해야 한다** — 잃으면 도그푸딩 발화 전체가 복호화 불가 |
 | AI에 새 `INTERNAL_SHARED_SECRET` 전달 | 배포용은 로컬과 다른 값이다. 저장소에 넣지 않으므로 별도 경로 |
-| `AI_SERVER_BASE_URL` | AI서버가 아직 배포되지 않았다. **안 넣으면 요약 null·관찰 0건이 조용히 난다** |
+| `AI_SERVER_BASE_URL` | AI서버가 아직 배포되지 않았다. **Cloud Run으로 간다**(터널 아님)고 회신이 왔고 주소가 나오면 준다. **안 넣으면 요약 null·관찰 0건이 조용히 난다** |
 | **앱 웹 재빌드** | 저장소 변수 등록이 **마지막 빌드(9/4 19:38)보다 늦다.** 지금 Pages 빌드는 `API_BASE_URL`이 폴백 `localhost:8080`이고 `KAKAO_REST_KEY`가 빈 문자열이라 **로그인부터 안 된다.** 코드 변경 없이 재빌드만 하면 된다 (`../../docs/request/app/backend-deployed-rebuild.md`) |
 
 > **배포가 곧 도그푸딩 시작은 아니게 됐다.** 앱이 새 `API_BASE_URL`로 다시 빌드해야 하고 Hume Config에 CLM이 없어서(①), 지금 링크를 공유해도 대화가 성립하지 않는다.
