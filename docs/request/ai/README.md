@@ -13,7 +13,7 @@ AI 개발자에게 요청할 사항을 문서로 정리하는 폴더입니다.
 
 | 문서 | 상태 | 막고 있던 작업 |
 | --- | --- | --- |
-| [env-example-drift.md](env-example-drift.md) | ⏳ **회신 대기** (2026-09-05) | **위기 응답 109 안내(F4)와 관찰 생성.** `.env.example` 세 줄이 `config.py`보다 낡아, 회신이 안내한 대로 복사하면 **`AI_RESPOND_EFFORT=low`(109가 잘린다)와 `AI_MODEL_OBSERVE=gemini-2.5-pro`(404)가 되살아난다** |
+| [env-example-drift.md](env-example-drift.md) | ⏳ **회신 대기** (2026-09-05) | **위기 응답 109 안내(F4)와 관찰 생성.** `.env.example` 세 줄이 `config.py`보다 낡아, 회신이 안내한 대로 복사하면 **`AI_RESPOND_EFFORT=low`(109가 잘린다)와 `AI_MODEL_OBSERVE=gemini-2.5-pro`(404)가 되살아난다.** 덧붙임으로 **cron 서비스(`cron-job.org`)** 와 **Config 5건 중 CLM만 배포에 묶여 있다는 것**도 함께 적었다 |
 | [deploy-handoff.md](deploy-handoff.md) | ✅ **회신 완료** (2026-09-05) | ~~배포 주소·새 시크릿·슬립 대 fail-closed 판단~~ → **cron이 맞다**(복귀 60초를 타임아웃으로 덮으면 Hume이 먼저 끊는다). ⚠️ **cron이 두 곳을 찔러야 한다** — AI서버도 Cloud Run 무료라 잠든다. AI서버는 **Cloud Run 배포**로 가고 주소가 나오면 준다. 회신 `../../response/backend/deploy-handoff.md` |
 | [gemini-switch-mismatch.md](gemini-switch-mismatch.md) | ✅ **회신 완료** (2026-09-05) | ~~Gemini 키는 넣었는데 모델명이 Claude 그대로~~ → **보고 있던 `.env`가 로컬 낡은 파일**이었다. `.env.example`이 단일 출처다. ⚠️ **회신이 알려준 `gemini-2.5-pro` 404**(신규 사용자 미제공)가 실측으로 나왔다. 타임아웃 **3000ms**. **다만 `.env.example`이 아직 안 맞는다 → [env-example-drift.md](env-example-drift.md)** |
 | [hume-config-setup.md](hume-config-setup.md) | ✅ **회신 완료** (2026-09-05) | ~~Config의 `language_model`이 `null`이라 CLM이 안 붙어 있다~~ → **등록이 막힌 게 아니라 넣을 주소가 없었다.** AI서버를 **Cloud Run에 배포**하고 그 주소를 넣는다(터널 아님). 비활성 **120 → 420초**. **`HUME_CONFIG_ID`는 그대로** `23d6162d-…`. 회신 `../../response/backend/hume-config-setup.md` |
