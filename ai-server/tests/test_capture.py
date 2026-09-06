@@ -91,3 +91,19 @@ def test_스냅샷은_프로소디가_없으면_만들지_않는다(tmp_path):
     """갭 재생에 쓸 수 없는 스냅샷은 파일만 늘린다."""
     assert capture_snapshot("안녕하세요", None, tmp_path) is None
     assert capture_snapshot("", {"Joy": 1.0}, tmp_path) is None
+
+
+def test_뼈대가_로그에도_남는다(tmp_path, capsys):
+    """Cloud Run에서는 파일이 인스턴스와 함께 사라진다.
+
+    첫 연결의 요청 모양은 다시 못 만든다(무료 5분). 로그가 유일한 보존 경로다.
+    """
+    from app.telemetry import configure
+
+    configure("info")
+    capture_shape(BODY, tmp_path)
+    out = capsys.readouterr().out
+    assert "clm_shape_captured" in out
+    assert "prosody" in out and "Tiredness" in out   # 스키마는 남고
+    assert "오늘 완전 괜찮았어요" not in out          # 발화는 안 남는다
+    assert "0.71" not in out                          # 점수 값도 안 남는다

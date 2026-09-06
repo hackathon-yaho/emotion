@@ -78,10 +78,17 @@ def capture_shape(body: dict[str, Any], out_dir: Path) -> Path | None:
 
         path = out_dir / f"clm-request-{_stamp()}.json"
         path.write_text(blob + "\n", encoding="utf-8", newline="\n")
-        log("clm_shape_captured", status=path.name)
+        # **로그에도 남긴다.** Cloud Run에서는 파일이 인스턴스와 함께 사라져서,
+        # 첫 연결의 모양을 되찾을 수 있는 곳은 로그뿐이다. 무료 5분이라 다시 찍을 수도 없다.
+        log("clm_shape_captured", status=path.name, shape=skeleton)
         return path
     except OSError:
-        error_log("shape_capture_failed")
+        # 파일을 못 써도 모양은 남긴다 — 그게 이 기능의 목적이다.
+        error_log("shape_capture_file_failed")
+        try:
+            log("clm_shape_captured", status="log-only", shape=shape_of(body))
+        except Exception:
+            pass
         return None
 
 
