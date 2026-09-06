@@ -74,14 +74,13 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # 서체를 번들할 때 여기에 등록한다. 파일은 fonts/ 아래.
-  # fonts:
-  #   - family: Pretendard
-  #     fonts:
-  #       - asset: fonts/Pretendard-Regular.otf
-  #         weight: 400
-  #       - asset: fonts/Pretendard-Medium.otf
-  #         weight: 500
+  # 산세리프 본문 서체 (design-system §3). 서브셋·라이선스는 fonts/README.md.
+  # **CanvasKit은 CSS @font-face를 쓰지 않으므로 반드시 여기에 등록해야 한다.**
+  fonts:
+    - family: Pretendard
+      fonts:
+        - asset: fonts/Pretendard-Regular.otf
+          weight: 400
 
   # To add assets to your application, add an assets section, like this:
   # assets:

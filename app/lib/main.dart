@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/auth/account_unlink.dart';
+import 'core/config/browser_url.dart';
 import 'core/providers.dart';
+import 'core/router/routes.dart';
 import 'core/router/app_router.dart';
 import 'core/session/app_session.dart';
 import 'core/theme/app_theme.dart';
@@ -22,9 +25,49 @@ class VoiceJournalApp extends ConsumerStatefulWidget {
 class _VoiceJournalAppState extends ConsumerState<VoiceJournalApp> {
   late final GoRouter _router = createRouter(ref.read(appSessionProvider));
 
+  /// 부팅 때 한 번 — 카카오에서 돌아온 코드가 **탈퇴용**이면 여기서 끝낸다.
+  ///
+  /// 로그인 복귀는 S00이 처리하지만, 탈퇴 복귀는 이미 로그인된 상태라 S00을
+  /// 지나지 않는다. 앱이 통째로 다시 뜨는 자리는 여기뿐이다 (F10-03).
+  final _messenger = GlobalKey<ScaffoldMessengerState>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _finishUnlink());
+  }
+
+  Future<void> _finishUnlink() async {
+    final outcome = await finishUnlinkIfReturned(
+      storage: ref.read(tokenStorageProvider),
+      repo: ref.read(journalRepositoryProvider),
+      here: Uri.base,
+    );
+    if (outcome == UnlinkOutcome.none) return;
+    // 코드는 1회용이다 — 새로고침이 같은 코드를 다시 보내지 않게 지운다.
+    clearQuery();
+    if (!mounted) return;
+    switch (outcome) {
+      case UnlinkOutcome.done:
+        await ref.read(appSessionProvider).reset();
+        _router.go(Routes.onboarding);
+      case UnlinkOutcome.failed:
+        // **기기를 비우지 않는다.** 비우면 서버에 남은 데이터를 지울 방법이
+        // 없어진다 — 설정에서 다시 누를 수 있는 상태로 둔다.
+        _messenger.currentState?.showSnackBar(
+          const SnackBar(
+            content: Text('지금은 지울 수 없습니다. 잠시 후 다시 시도해 주세요.'),
+          ),
+        );
+      case UnlinkOutcome.cancelled || UnlinkOutcome.none:
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
+      scaffoldMessengerKey: _messenger,
       // 제품 이름 미확정 (PRD §14-6). 확정되면 여기와 web/index.html·manifest를
       // 함께 고친다.
       title: '감정 케어 보이스 저널',

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../core/auth/kakao_login.dart';
 
 import '../../core/providers.dart';
 import '../../core/router/routes.dart';
@@ -175,7 +178,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) context.go(Routes.onboarding);
   }
 
+  /// 지금 지워질 것을 **세어서** 말한다.
+  ///
+  /// 여기 "대화 12건과 발견 3건"이 상수로 박혀 있었다 (2026-09-07) — 아무것도
+  /// 없는 사람에게도 같은 문장을 보여줬다. 수를 모르면 **숫자를 뺀다.**
+  String get _whatGetsDeleted {
+    final sessions = ref.read(meProvider).valueOrNull?.sessionCount;
+    final found = ref.read(observationsProvider).valueOrNull?.total;
+    if (sessions == null) return '쌓인 대화와 발견이';
+    if (found == null) return '대화 $sessions건이';
+    return '대화 $sessions건과 발견 $found건이';
+  }
+
   /// 탈퇴 — 유예 없이 전량 삭제 (F1-04 · F10-03).
+  ///
+  /// **카카오 연결까지 끊는다.** 백엔드가 unlink를 부르려면 사용자 토큰이
+  /// 필요하고, 우리는 그것을 보관하지 않는다(계약 §2-3의 근거). 그래서 탈퇴를
+  /// 누른 이 자리에서 인가를 한 번 더 통과시켜 코드를 받아 넘긴다. 이미 동의한
+  /// 계정이면 동의 화면 없이 되돌아온다.
   Future<void> _confirmLeave() async {
     final t = context.tokens;
     final ok = await showConfirmSheet(
@@ -183,7 +203,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       title: '계정을 지울까요?',
       confirmLabel: '모두 지우고 탈퇴',
       body: [
-        const TextSpan(text: '대화 12건과 발견 3건이 지금 바로 모두 지워집니다.\n\n'),
+        TextSpan(text: '$_whatGetsDeleted 지금 바로 모두 지워집니다.\n\n'),
         TextSpan(
           text: '유예 기간이 없고 되돌릴 수 없습니다.',
           style: TextStyle(color: t.paper),
@@ -192,12 +212,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ],
     );
     if (!ok) return;
+
+    // 카카오 인가를 한 번 더 통과시켜 **연결 해제용 코드**를 받아온다. 돌아온
+    // 뒤의 처리는 `finishUnlinkIfReturned`가 한다 — 웹은 여기서 앱이 통째로
+    // 다시 뜨므로 이 함수는 이어서 실행되지 않는다.
+    //
+    // **샘플 모드와 키가 없는 빌드는 그냥 지운다.** 연결 해제는 선택이고
+    // (§2-3), 없어도 데이터는 똑같이 지워진다.
+    final url = ref.read(dataModeProvider) == DataMode.sample
+        ? null
+        : KakaoLogin.authorizeUrl(
+            redirectUri: KakaoLogin.redirectUriFrom(Uri.base),
+          );
+    if (url != null) {
+      await ref.read(tokenStorageProvider).markPendingUnlink();
+      await launchUrl(url, webOnlyWindowName: '_self');
+      return;
+    }
+
     // **서버가 지운 뒤에 기기를 비운다.** 순서를 뒤집으면 토큰이 없어져
     // 삭제 요청을 다시 보낼 수도 없다.
-    //
-    // `kakaoAuthCode`를 함께 보내면 백엔드가 카카오 연결까지 끊는다
-    // (v1.6 §2-3). 지금은 인가 코드를 받아오는 흐름이 없어 보내지 않는다 —
-    // 그래도 응답은 204이고 데이터는 지워진다.
     try {
       await ref.read(journalRepositoryProvider).deleteAccount();
     } on Object {

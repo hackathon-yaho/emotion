@@ -6,9 +6,13 @@ import 'package:google_fonts/google_fonts.dart';
 /// 두 종만 쓴다. 관찰 문장·화면 제목·109 번호는 **명조**, 나머지 전부는
 /// **산세리프**. 셋째 서체를 넣지 않는다.
 ///
-/// 산세리프는 문서상 Pretendard지만 Google Fonts에 없어 지금은 Noto Sans KR로
-/// 대체한다(캔버스와 동일). `fonts/`에 Pretendard를 넣고 pubspec에 등록한 뒤
-/// [sans]만 바꾸면 전 화면에 적용된다.
+/// **산세리프는 Pretendard이고 앱에 번들돼 있다** (`fonts/`, 2026-09-07).
+/// Google Fonts에 없는 서체라 종전에는 Noto Sans KR로 대체하고 있었다.
+///
+/// 번들인 이유는 둘이다. CanvasKit이 글자를 직접 그려 **브라우저 CSS 서체가
+/// 적용되지 않고**, 런타임에 내려받는 방식은 네트워크가 없으면 서체가 영영
+/// 오지 않는다. 크기는 서브셋으로 1.27MB — 종전에 런타임으로 받던 Noto Sans
+/// KR(약 5MB)보다 가볍다. 자세한 것은 `fonts/README.md`.
 abstract final class AppType {
   static TextStyle sans({
     required double size,
@@ -18,7 +22,8 @@ abstract final class AppType {
     double? letterSpacing,
     List<Shadow>? shadows,
   }) {
-    return GoogleFonts.notoSansKr(
+    return TextStyle(
+      fontFamily: 'Pretendard',
       fontSize: size,
       color: color,
       fontWeight: weight,
