@@ -110,7 +110,7 @@
 
 | 아직 못 한 것 | 왜 |
 | --- | --- |
-| **cron 10분 킵얼라이브 — 두 곳** | **cron-job.org로 정했다**(2026-09-05). ⚠️ **AI서버는 `/healthz`가 아니라 `/health`다** — Cloud Run이 `/healthz`를 앞단에서 가로채 구글 HTML 404를 낸다(우리도 실측 확인). 계정이 필요하다. **이게 제일 급하다.** 없으면 15분 유휴에 잠들고 복귀 1분이 AI서버 fail-closed 2초와 부딪혀 **첫 대화가 통째로 막힌다.** AI 회신에서 **타임아웃으로는 못 막는다**고 확인됐다(60초를 붙들면 Hume이 먼저 끊는다). ⚠️ **AI서버도 Cloud Run 무료라 잠든다** — 백엔드 `/api/health`와 **AI서버 `/healthz` 둘 다** 찔러야 한다. AI가 자기 것을 같은 도구에 등록하겠다고 해서 **쓰는 cron 서비스 이름을 알려줘야 한다** |
+| ~~cron 10분 킵얼라이브~~ | **AI가 걸었다** (2026-09-07, GCP Cloud Scheduler). 백엔드 `/api/health`·AI서버 `/health` 둘 다 10분. 별도 가입이 필요 없어 팀장 작업에서 빠졌다 |
 | `TRANSCRIPT_ENC_KEY`(배포용) 오프라인 사본 | 생성은 했다. **보관은 사람이 해야 한다** — 잃으면 도그푸딩 발화 전체가 복호화 불가 |
 | AI에 새 `INTERNAL_SHARED_SECRET` 전달 | 배포용은 로컬과 다른 값이다. 저장소에 넣지 않으므로 별도 경로 |
 | ~~`AI_SERVER_BASE_URL`~~ | **넣었다** (2026-09-06) — `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app` (Cloud Run, asia-northeast3). **다만 AI서버 쪽 공유 시크릿이 아직 배포용이 아니라** 양방향이 401이다. 그게 맞춰져야 요약·관찰이 실제로 돈다 |

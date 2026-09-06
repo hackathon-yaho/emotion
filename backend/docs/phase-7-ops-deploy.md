@@ -88,9 +88,10 @@
 - [x] **Supabase 프로젝트** — `emotion` (`reanvqcepfaxwdoeskty`, ap-southeast-2). 미리 만들면 무료 플랜이 1주 미사용에 일시정지돼 깨우는 절차만 는다. 로컬은 compose로 충분했다
 - [x] **연결은 Session pooler(5432)를 쓴다** — `aws-0-ap-southeast-2.pooler.supabase.com:5432` · 사용자 `postgres.reanvqcepfaxwdoeskty`. 이유는 아래
 - [x] `db/migration.sql`을 **Supabase에 적용** (로컬과 같은 파일) — 11테이블 생성 확인
-- [ ] cron에 **10분 간격 킵얼라이브 — 두 곳** 등록. 계정이 필요해 팀장이 직접 한다. **이게 없으면 15분 유휴에 잠들고, 복귀 약 1분이 AI서버의 fail-closed 2초 타임아웃과 부딪혀 대화가 통째로 막힌다.** AI 회신에서 **타임아웃으로는 못 막는다**고 확인됐다 — 60초를 붙들면 Hume이 먼저 끊는다
-  - 백엔드 `https://emotion-6yeh.onrender.com/api/health`
-  - ⚠️ **AI서버 `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app/health`** — AI서버도 Cloud Run 무료라 잠든다. 백엔드만 깨우면 이번엔 저쪽이 자고 있다. **`/healthz`가 아니라 `/health`다** — Cloud Run이 `/healthz`만 앞단에서 가로채 구글 HTML 404를 낸다(문서에 없는 동작이고, 양쪽이 실측으로 확인했다). 서비스는 **cron-job.org**로 정했고 AI가 자기 것을 같은 곳에 건다
+- [x] cron에 **10분 간격 킵얼라이브 — 두 곳** 등록 — **AI가 걸었다** (2026-09-07). 별도 서비스 가입 없이 **GCP Cloud Scheduler**(무료 한도 결제 계정당 3개 중 2개가 남아 있었다)로 해결됐다. `emotion-backend-keepalive` → `https://emotion-6yeh.onrender.com/api/health` · `emotion-ai-keepalive` → AI서버 `/health`, 둘 다 10분
+  - ⚠️ **AI서버는 `/healthz`가 아니라 `/health`다** — Cloud Run이 `/healthz`만 앞단에서 가로채 구글 HTML 404를 낸다. 문서에 없는 동작이고 양쪽이 실측으로 확인했다
+  - **cron-job.org는 쓰지 않게 됐다.** 종전에 그쪽으로 정했으나 AI 계정에서 해결되어 관리 지점이 하나로 모였다
+
 - [x] 앱·AI에 배포 도메인 전달 — 앱은 저장소 변수 `API_BASE_URL` 등록 + 요청서 `../../docs/request/app/backend-deployed-rebuild.md`, AI는 요청서 `../../docs/request/ai/deploy-handoff.md`. **변수 등록만으로는 부족하다** — `app-web.yml`이 `--dart-define`으로 빌드 시점에 값을 굽고 `app/**` 변경에만 도는데, **변수 등록이 마지막 빌드(9/4 19:38)보다 늦어서 지금 Pages 빌드는 `API_BASE_URL`이 폴백 `localhost:8080`이고 `KAKAO_REST_KEY`가 빈 문자열이다.** 앱이 `workflow_dispatch`로 다시 빌드해야 한다
 
 | 확인 | 이유 |
