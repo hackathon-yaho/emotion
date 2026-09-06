@@ -109,6 +109,14 @@ class EviService {
     // 옛 연결의 이벤트가 새 대화를 건드리지 못하게 하는 유일한 방법이다.
     final gen = ++_generation;
     _closing = false;
+    // **새 대화는 0에서 시작한다.** 이 서비스는 앱 수명 내내 사는 한 개짜리라
+    // (`eviServiceProvider`) 계수기를 안 지우면 두 번째 대화의 화면에 첫
+    // 대화의 턴 수가 얹혀 보인다 — 진단이 거짓말을 하게 된다.
+    interruptions = 0;
+    assistantTurns = 0;
+    micLevel = 0;
+    micPeak = 0;
+    _lastSocketError = null;
     try {
       final channel = connect(_endpoint({
         'access_token': accessToken,

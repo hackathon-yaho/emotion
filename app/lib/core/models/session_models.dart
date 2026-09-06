@@ -197,6 +197,15 @@ class OpenSession {
   /// 이 시각을 넘기면 스케줄러가 자동 종료한다 (중단 후 30분).
   final DateTime resumableUntil;
 
+  /// 대화를 멈춘 시각 — 시작 시각 + 실제로 쓴 시간.
+  ///
+  /// 서버가 "중단 시각"을 따로 주지 않으므로 준 값으로 만든다. 이어하기
+  /// 카드의 "N분 전"이 이 값이다.
+  DateTime get stoppedAt => startedAt.add(Duration(seconds: usedSec));
+
+  /// 이 세션에 원래 주어졌던 시간(`hardCutSec`). 쓴 시간 + 남은 시간이다.
+  int get totalSec => usedSec + remainingSec;
+
   bool get isResumable =>
       remainingSec > 0 && DateTime.now().isBefore(resumableUntil);
 

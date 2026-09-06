@@ -227,6 +227,30 @@ void main() {
       );
     });
 
+    // 이 서비스는 앱 수명 내내 사는 한 개짜리다(`eviServiceProvider`).
+    // 계수기를 안 지우면 **두 번째 대화 화면에 첫 대화의 턴 수가 얹힌다**.
+    test('새 연결은 계수기를 0에서 시작한다', () async {
+      await start();
+      channel.push({
+        'type': 'assistant_message',
+        'message': {'role': 'assistant', 'content': '네'}
+      });
+      channel.push({'type': 'user_interruption'});
+      final loud = Int16List(200)..fillRange(0, 200, 9000);
+      mic.speak(Uint8List.sublistView(loud));
+      await settle();
+      expect(evi.assistantTurns, 1);
+      expect(evi.interruptions, 1);
+      expect(evi.micPeak, greaterThan(0));
+
+      await start(); // 두 번째 대화
+      await settle();
+      expect(evi.assistantTurns, 0);
+      expect(evi.interruptions, 0);
+      expect(evi.micPeak, 0);
+      expect(evi.micLevel, 0);
+    });
+
     test('권한 거부는 예외가 아니라 micDenied 사건이다 (F2-04)', () async {
       final denied = EviService(
         mic: _FakeMic(denied: true),

@@ -30,4 +30,30 @@ abstract final class SessionClock {
 
   /// 사용자가 "대화 마치기"를 눌렀을 때.
   static const reasonUserEnd = 'user_end';
+
+  /// 초를 사람 말로. `282` → `4분 42초`.
+  ///
+  /// **화면에 시간을 적을 때는 반드시 이걸 쓴다.** 시안에서 옮겨온 "4분 42초"가
+  /// 상수로 박힌 채 배포돼 있었다 (2026-09-07) — 남은 시간이 얼마든 늘 같은
+  /// 숫자가 보였다.
+  static String spell(int seconds) {
+    final sec = seconds < 0 ? 0 : seconds;
+    if (sec < 60) return '$sec초';
+    final m = sec ~/ 60, s = sec % 60;
+    if (m < 60) return s == 0 ? '$m분' : '$m분 $s초';
+    final h = m ~/ 60, mm = m % 60;
+    return mm == 0 ? '$h시간' : '$h시간 $mm분';
+  }
+
+  /// "얼마 전"인지. `'방금 전'` · `'5분 전'` · `'2시간 전'` · `'3일 전'`.
+  ///
+  /// 기기 시계가 서버보다 빠르면 음수가 나온다 — 그때도 `방금 전`이다.
+  /// **미래 시각을 "-3분 전"으로 쓰지 않는다.**
+  static String ago(DateTime moment, {DateTime? now}) {
+    final d = (now ?? DateTime.now()).difference(moment);
+    if (d.inSeconds < 60) return '방금 전';
+    if (d.inMinutes < 60) return '${d.inMinutes}분 전';
+    if (d.inHours < 24) return '${d.inHours}시간 전';
+    return '${d.inDays}일 전';
+  }
 }

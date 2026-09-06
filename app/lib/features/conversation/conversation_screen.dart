@@ -229,6 +229,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   /// 이어하기로 들어온 세션인지 — `E0700` 처리가 갈린다.
   bool _resumed = false;
 
+  /// 이어하기로 들어왔을 때 남아 있던 시간(초). 새 대화면 null이다.
+  int? _remainingSec;
+
   /// 백엔드가 준 `chat_group_id`. **지금은 소켓에 싣지 않는다**(위 주석).
   /// 값 자체는 계속 받아 두어 원인이 밝혀지면 바로 되돌릴 수 있게 한다.
   // ignore: unused_field
@@ -261,6 +264,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   }) {
     _stopQueue();
     _resumed = resumed;
+    // 이어하기면 서버가 남은 시간을 `hardCutSec`으로 준다 (§2-5-1).
+    _remainingSec = resumed ? session.hardCutSec : null;
     // 새 대화면 이전 그룹을 지운다 — 남겨두면 다음 소켓에 실린다.
     ref.read(chatGroupIdProvider.notifier).state = chatGroupId;
     ref.read(activeSessionProvider.notifier).state = session;
@@ -641,13 +646,18 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   _Ring get _ring => switch (_state) {
         TalkState.connecting =>
           const _Ring('연결하고 있습니다', size: 176, offset: 4, cool: 0.30, warm: 0.20),
-        TalkState.resumed => const _Ring(
+        // **남은 시간은 서버가 준 값이다.** 여기 "4분 42초"가 상수로 박혀
+        // 있었다 (2026-09-07) — 실제로 얼마가 남았든 같은 숫자를 말했다.
+        TalkState.resumed => _Ring(
             '이어서 듣고 있습니다',
             size: 200,
             offset: 8,
             cool: 0.85,
             warm: 0.60,
-            sub: '중단된 대화를 이어갑니다 · 남은 시간 4분 42초',
+            sub: _remainingSec == null
+                ? '중단된 대화를 이어갑니다'
+                : '중단된 대화를 이어갑니다'
+                    ' · 남은 시간 ${SessionClock.spell(_remainingSec!)}',
           ),
         TalkState.listening => const _Ring(
             '듣고 있습니다',

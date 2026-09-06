@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/record_models.dart';
 import '../../core/providers.dart';
+import '../../core/session/session_clock.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
@@ -45,8 +46,7 @@ class RecordDetailScreen extends ConsumerWidget {
   Widget _content(BuildContext context, WidgetRef ref, SessionDetail d) {
     final t = context.tokens;
     final at = d.startedAt;
-    final minutes = d.durationSec ~/ 60;
-    final seconds = d.durationSec % 60;
+
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,7 +89,7 @@ class RecordDetailScreen extends ConsumerWidget {
                     '${at.month}월 ${at.day}일 · '
                     '${at.hour.toString().padLeft(2, '0')}:'
                     '${at.minute.toString().padLeft(2, '0')} · '
-                    '$minutes분 $seconds초',
+                    '${SessionClock.spell(d.durationSec)}',
                   ),
                   const SizedBox(height: Space.md + 2),
                   if (d.summary != null)
@@ -103,8 +103,12 @@ class RecordDetailScreen extends ConsumerWidget {
                   if (d.endReason == 'hard_cut' || d.endReason == 'timeout') ...[
                     const SizedBox(height: Space.md),
                     Text(
+                      // **"7분"을 박지 않는다.** 하드컷 길이는 서버가 정하고
+                      // (§2-4 `hardCutSec`), 이어하기한 세션은 7분이 아니다.
+                      // 이 세션이 실제로 흐른 시간을 적는다.
                       d.endReason == 'hard_cut'
-                          ? '7분에 자동으로 마무리됐습니다'
+                          ? '${SessionClock.spell(d.durationSec)}에 자동으로'
+                              ' 마무리됐습니다'
                           : '연결이 끊겨 정리됐습니다',
                       style: AppType.sans(
                         size: AppType.captionSize,

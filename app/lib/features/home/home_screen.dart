@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/observation_models.dart';
+import '../../core/models/session_models.dart';
+import '../../core/session/session_clock.dart';
 import '../../core/providers.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
@@ -122,7 +124,8 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
-          if (resumable || resumeExpired) _ResumeBlock(expired: resumeExpired),
+          if (resumable || resumeExpired)
+            _ResumeBlock(open: open, expired: resumeExpired),
 
           if (!resumable) ...[
             OutlineAction(
@@ -251,7 +254,12 @@ class _PastRow extends StatelessWidget {
 /// **남은 시간을 화면이 직접 말한다** — 이어하기로 새 7분을 주면 세션당 원가
 /// 상한 $0.49가 뚫린다(NFR-06).
 class _ResumeBlock extends StatelessWidget {
-  const _ResumeBlock({required this.expired});
+  const _ResumeBlock({required this.open, required this.expired});
+
+  /// **서버가 준 값만 쓴다.** 여기 있던 "5분 전"·"남은 시간 4분 42초"·"원래
+  /// 7분"은 시안에서 옮겨온 상수였고, 언제 중단했든 늘 같은 숫자가 보였다
+  /// (2026-09-07). 하드컷도 서버가 정하므로 앱에 7분을 박지 않는다 (§2-4).
+  final OpenSession open;
 
   final bool expired;
 
@@ -270,7 +278,8 @@ class _ResumeBlock extends StatelessWidget {
           Text(
             expired
                 ? '이어갈 수 있는 시간이 지났습니다. 새 대화로 시작합니다.'
-                : '5분 전에 중단된 대화가 있습니다. 이어서 이야기할까요?',
+                : '${SessionClock.ago(open.stoppedAt)}에 중단된 대화가 있습니다.'
+                    ' 이어서 이야기할까요?',
             style: AppType.sans(
               size: AppType.bodySize,
               color: expired ? t.muted : t.paper,
@@ -280,7 +289,9 @@ class _ResumeBlock extends StatelessWidget {
           if (!expired) ...[
             const SizedBox(height: Space.md),
             Text(
-              '남은 시간 4분 42초 · 원래 7분 중 이미 쓴 시간을 뺀 값입니다',
+              '남은 시간 ${SessionClock.spell(open.remainingSec)}'
+              ' · 원래 ${SessionClock.spell(open.totalSec)} 중'
+              ' 이미 쓴 시간을 뺀 값입니다',
               style: AppType.sans(
                 size: AppType.captionSize,
                 color: t.faint,

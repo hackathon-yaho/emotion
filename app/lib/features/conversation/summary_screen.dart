@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
+import '../../core/session/session_clock.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
@@ -31,8 +32,6 @@ class SummaryScreen extends ConsumerWidget {
     // 그것이 "방금 끝낸 대화"라는 보장이 없다.
     final s = ref.watch(lastSessionEndProvider);
     if (s == null) return const _NoSummary();
-    final minutes = s.durationSec ~/ 60;
-    final seconds = s.durationSec % 60;
 
     return ScreenScaffold(
       topPadding: 0,
@@ -52,7 +51,10 @@ class SummaryScreen extends ConsumerWidget {
                     style: AppType.serif(size: 27, color: t.paper),
                   ),
                 const SizedBox(height: Space.xxl - Space.xs),
-                MetaRow(['$minutes분 $seconds초', '${s.turnCount}턴']),
+                MetaRow([
+                  SessionClock.spell(s.durationSec),
+                  '${s.turnCount}턴',
+                ]),
               ],
             ),
           ),
