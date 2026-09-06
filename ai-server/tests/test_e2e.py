@@ -48,9 +48,28 @@ def test_헬스체크가_뜬다():
         assert c.get("/healthz").json() == {"status": "ok"}
 
 
-def test_세션_ID가_없으면_401이다():
+def test_세션_ID가_없으면_401이고_그_사실이_로그에_남는다(capsys, monkeypatch):
+    """**401도 우리 로그에 남아야 한다.**
+
+    Hume이 `custom_session_id` 없이 부르는 동안 이 경로가 아무것도 안 남겨서,
+    열 번의 연결 실패를 우리 로그가 아니라 Cloud Run 요청 로그에서야 찾았다
+    (2026-09-07). 안 보이는 실패는 없는 실패와 구별되지 않는다.
+
+    **모양은 401보다 먼저 남긴다.** 실패한 그 요청이 우리가 아직 못 본 Hume의
+    실제 요청이고, 무료 5분이라 다시 찍을 기회가 많지 않다.
+    """
+    from app import main
+    from app.telemetry import configure
+
+    captured: list[dict] = []
+    monkeypatch.setattr(main, "capture_shape", lambda raw, _out: captured.append(raw))
+    configure("info")
+
     with TestClient(app) as c:
         assert c.post("/chat/completions", json=CLM_BODY).status_code == 401
+
+    assert "clm_unauthorized:missing_custom_session_id" in capsys.readouterr().out
+    assert captured == [CLM_BODY]
 
 
 @respx.mock

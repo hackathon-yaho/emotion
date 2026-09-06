@@ -131,23 +131,37 @@ async def chat_completions(
     request: Request, custom_session_id: str = Query(default="")
 ) -> Any:
     started = time.monotonic()
-    if not custom_session_id:
-        raise HTTPException(status_code=401, detail="missing custom_session_id")
+    ref = session_ref(custom_session_id)
 
     # 본문이 깨져 있으면 400으로 끝낸다. 500으로 두면 우리 서버 장애처럼 보이고,
     # 실제 장애와 섞여서 로그를 읽을 수 없게 된다.
     try:
         raw = await request.json()
-        body = ChatRequest.model_validate(raw)
     except (UnicodeDecodeError, ValueError) as exc:
-        error_log("clm_bad_body", sessionRef=session_ref(custom_session_id))
+        error_log("clm_bad_body:not_json", sessionRef=ref)
+        raise HTTPException(status_code=400, detail="malformed body") from exc
+
+    # **모양은 인증보다도, 스키마 검증보다도 먼저 남긴다.** 우리가 아직 한 번도
+    # 못 본 것이 Hume의 실제 요청이다. 여기서 401이나 400으로 끝나더라도 모양은
+    # 건져야 다음 시도에서 같은 값을 또 태우지 않는다. 발화는 안 담긴다(FR-092).
+    if _cfg.ai_shape_capture:
+        capture_shape(raw, _cfg.ai_capture_dir / "shape")
+
+    # **인증 실패도 반드시 로그를 남긴다.** 이 줄이 없어서, Hume이 열 번 연결에
+    # 실패하는 동안 우리 구조화 로그가 통째로 비어 있었다. 원인을 Cloud Run의
+    # 요청 로그에서야 찾았다(2026-09-07). 우리 401은 우리 로그에서 보여야 한다.
+    if not custom_session_id:
+        error_log("clm_unauthorized:missing_custom_session_id")
+        raise HTTPException(status_code=401, detail="missing custom_session_id")
+
+    try:
+        body = ChatRequest.model_validate(raw)
+    except ValueError as exc:
+        error_log("clm_bad_body:schema", sessionRef=ref)
         raise HTTPException(status_code=400, detail="malformed body") from exc
     transcript = body.transcript()
     prosody = body.prosody()
 
-    # 첫 연결의 요청 모양을 남긴다. 발화는 담기지 않는다(FR-092).
-    if _cfg.ai_shape_capture:
-        capture_shape(raw, _cfg.ai_capture_dir / "shape")
     if _cfg.ai_eval_capture:
         capture_snapshot(transcript, prosody, _cfg.ai_capture_dir / "inbox")
 

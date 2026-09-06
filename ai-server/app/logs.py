@@ -16,6 +16,7 @@ import json
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .envcheck import _safe_stdout
@@ -40,16 +41,25 @@ def fetch(minutes: int) -> list[dict]:
 
     처음에 `textPayload`만 읽다가 구조화 로그를 통째로 놓쳤다 — 그쪽에는 uvicorn의
     평문만 온다. 그래서 `--format=json`으로 받아 둘 다 본다.
+
+    **시간 범위는 필터에 직접 쓴다.** 종전에는 `--freshness`에 맡겼는데 `--order=asc`
+    와 함께 쓰면 걸리지 않아서, "최근 10분"을 달래도 두 시간 전 것이 딸려 나왔다.
+    낡은 줄을 방금 것으로 읽는 것이 안 보이는 것보다 나쁘다 — 그 착각으로 손으로 찌른
+    탐침을 Hume의 첫 연결로 읽었다(2026-09-07).
     """
     gcloud = find_gcloud()
     if gcloud is None:
         print("gcloud를 찾지 못했습니다.")
         return []
+    since = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    stamp = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     result = subprocess.run(
         [
             gcloud, "logging", "read",
-            f'resource.type=cloud_run_revision AND resource.labels.service_name={SERVICE}',
-            f"--project={PROJECT}", "--limit=300", f"--freshness={minutes}m",
+            f"resource.type=cloud_run_revision"
+            f" AND resource.labels.service_name={SERVICE}"
+            f' AND timestamp>="{stamp}"',
+            f"--project={PROJECT}", "--limit=300",
             "--format=json", "--order=asc",
         ],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -92,7 +102,10 @@ def main(argv: list[str] | None = None) -> int:
             rest = " ".join(f"{k}={v}" for k, v in sorted(data.items()) if v is not None)
             print(f"{ts}  {event:<26} {rest}")
             if shape is not None:
-                print("    ── Hume이 실제로 보낸 요청의 모양 ──")
+                # **"Hume이 보낸 모양"이라고 쓰지 않는다.** 처음에 그렇게 적었다가
+                # 손으로 찌른 curl 탐침을 Hume의 요청으로 읽었다(2026-09-07).
+                # 이 자리는 누가 불렀는지 모른다 — 판별은 앞줄의 event가 한다.
+                print("    ── 들어온 요청의 모양 ──")
                 for line in json.dumps(shape, ensure_ascii=False, indent=2).splitlines():
                     print("    " + line)
             shown += 1
