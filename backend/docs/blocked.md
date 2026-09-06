@@ -21,27 +21,35 @@
 
 > **그 과정에서 결함 1건을 잡았다** — Hume 토큰 엔드포인트가 **200에 `Content-Type`을 안 싣는다.** 응답을 `Map`으로 받으면 Spring이 변환기를 못 골라 `UnknownContentTypeException`이 나고, **겉으로는 키가 틀린 것과 똑같은 503**으로 보인다. `String`으로 받아 직접 파싱하도록 고치고 회귀 테스트로 묶었다. **대역으로는 절대 안 보이는 종류**다.
 
-### Config — **CLM이 붙었다** (2026-09-07 확인, version 0 → 1)
+### Config — **다 됐다** (2026-09-07 01:00 KST, version 2)
 
-**`language_model`이 채워졌다.** `hume-config-setup.md`에서 요청한 것 중 가장 큰 것이 닫혔다.
+`hume-config-setup.md`에서 올린 5건이 **전부 닫혔다.** 조회로 확인했다.
 
-```
-model_provider: CUSTOM_LANGUAGE_MODEL
-model_resource: https://emotion-ai-server-gq7yhdrrlq-du.a.run.app/chat/completions
-```
-
-**`prompt.text`도 `null`이 됐다** — 종전 `"You are a helpful assistant."`가 사라졌으니 우리 프롬프트와 겹칠 걱정이 없다.
-
-**남은 3건은 그대로다.** 셋 다 배포와 무관해서 지금 바꿀 수 있다.
-
-| 항목 | 현재 | 왜 문제인가 |
+| 항목 | 종전 | 지금 |
 | --- | --- | --- |
-| `timeouts.inactivity` | **120초** | 감정 대화에서 2분 침묵은 흔하다. **하드컷 420초보다 먼저 끊긴다** — 세션 상한을 우리가 정한다는 설계(F2-03·FR-011)가 성립하지 않는다 |
-| `nudges` | **3초마다** | 우는 사람에게 3초마다 말을 건다 |
-| `voice` | Kora (**영어**) | 한국어 제품이다 |
-| `evi_version` | `"3"` | CLM이 실제로 불리는지는 첫 대화에서 확인된다 |
+| `language_model` | `null` | **CLM 등록됨** — `…run.app/chat/completions` |
+| `evi_version` | `3` | **`4-mini`** |
+| `voice` | Kora (영어) | **Jin-Hee** (한국어) |
+| `timeouts.inactivity` | 120초 | **420초** (하드컷과 같게) |
+| `nudges` | 3초 | **꺼짐** |
+| `prompt.text` | `"You are a helpful assistant."` | `null` |
 
-> **CLM이 붙었어도 아직 대화는 안 된다.** AI서버의 세션 조회가 **공유 시크릿 불일치로 401**이고, 그건 CLM 인증을 겸하므로(계약 §3-4) 거기서 끊긴다 — `../../docs/request/backend/deploy-secret-handoff.md` (⏳). **값 하나가 남았다.**
+> **AI가 우리가 못 본 것을 하나 더 찾았다** — **EVI 3은 영어 전용이다.** 한국어는 **4-mini**부터다. 우리 요청서는 "EVI 3에서 CLM 인터페이스가 계약 §4와 같은지"만 물었지 **버전이 한국어를 지원하는지는 묻지 않았다.** 그대로 대화를 걸었으면 무료 5분을 한국어가 안 되는 채로 날렸다. 4-mini는 **외부 LLM이 필수**라 "Hume이 자기 내장 LLM으로 대답한다"는 실패 모드가 버전 차원에서 사라진다.
+
+### 그런데 턴이 0건이다 — **설정 전에 시도한 대화들이다**
+
+`voice_session` **10건**인데 `turn_log`는 **0건**이다(2026-09-07 확인). 사람이 실제로 붙었다 — `hume_chat_group_id`가 차 있고 길게는 22분짜리도 있다. 그런데 **턴이 한 건도 안 들어왔고 `ops_error_log`도 0건**이다.
+
+**시각을 맞춰 보면 설명된다.**
+
+| | 시각 (KST) |
+| --- | --- |
+| 세션 10건 | 09-06 **15:09 ~ 20:56** |
+| Config version 2 (위 5건 전부) | 09-07 **01:00** |
+
+**모든 세션이 설정보다 4시간 이상 앞선다.** CLM이 없거나 영어 전용이던 때의 시도다. **지금 다시 걸면 달라져야 하고, 그게 다음에 확인할 것이다.**
+
+**백엔드 쪽은 검증됐다** — 배포된 `/internal/sessions/{실제 세션 id}`가 **배포용 시크릿으로 200**, 로컬 시크릿으로 401이다. 우리가 줄 것은 다 서 있다.
 
 | 못 한 것 | 근거 | 오면 어떻게 되나 |
 | --- | --- | --- |
