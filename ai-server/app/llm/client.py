@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -30,7 +31,9 @@ from openai import AsyncOpenAI, BadRequestError, RateLimitError
 
 from ..telemetry import error_log, log
 
-DEFAULT_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
+# 소스 트리 기준 경로. 컨테이너 배치에서는 어긋나므로 `AI_PROMPTS_DIR`을 우선한다.
+_SOURCE_TREE_PROMPTS = Path(__file__).resolve().parent.parent.parent / "prompts"
+DEFAULT_PROMPTS_DIR = Path(os.environ.get("AI_PROMPTS_DIR") or _SOURCE_TREE_PROMPTS)
 
 # 서버가 거부한 파라미터. 프로세스 수명 동안 기억해 다시 붙이지 않는다.
 _unsupported: set[str] = set()

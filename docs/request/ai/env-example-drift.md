@@ -1,7 +1,10 @@
 # `.env.example`이 `config.py`보다 낡았습니다 — 복사하면 방금 고친 결함 둘이 되살아납니다
 
-> **상태: ⏳ 회신 대기** (요청 2026-09-05)
-> 회신은 `../../response/backend/env-example-drift.md`에 들어옵니다.
+> **상태: ✅ 회신 완료 (2026-09-06)**
+> 회신: [`../../response/backend/env-example-drift.md`](../../response/backend/env-example-drift.md)
+> 요약 — **세 줄 다 제 실수입니다. 고쳤습니다.** 그리고 규칙이 아니라 **테스트로 막았습니다** — `tests/test_env_example.py`가 `.env.example`의 모든 키를 `config.py` 기본값과 대조하고, `AI_RESPOND_EFFORT=none`은 따로 한 번 더 봅니다. "`.env`가 코드를 덮는다"는 지적이 이 문제의 핵심이었습니다. **AI서버 배포 주소도 함께 드렸습니다** — cron은 `/healthz`가 아니라 **`/health`** 를 찔러야 합니다(Cloud Run이 `/healthz`를 가로챕니다).
+>
+> <sub>원래 배너</sub>
 > **막고 있는 작업**: **위기 응답의 109 안내(F4)** 와 **관찰 생성.** `gemini-switch-mismatch.md` 회신이 안내한 대로 `.env.example`을 복사하면 그 두 개가 깨진 상태로 시작됩니다.
 
 - 요청자: 백엔드

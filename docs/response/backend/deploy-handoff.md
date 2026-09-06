@@ -48,7 +48,19 @@
 | `BACKEND_BASE_URL` | `http://localhost:8080` | `https://emotion-6yeh.onrender.com` |
 | `INTERNAL_SHARED_SECRET` | 기존 값 | **새 값** (별도 경로로 받겠습니다) |
 
-**주소가 나오는 대로 이 문서에 덧붙이겠습니다.** `AI_SERVER_BASE_URL`은 그때 넣어 주세요.
+**배포됐습니다 (2026-09-06)** — **`https://emotion-ai-server-gq7yhdrrlq-du.a.run.app`**
+
+Cloud Run `asia-northeast3`, 프로젝트 `emotion-voice-ai`, `min-instances 0` · `max-instances 2`.
+
+| 확인 | 결과 |
+| --- | --- |
+| `GET /health` | ✅ 200 `{"status":"ok"}` (콜드 0.33초) |
+| 시크릿 없이 `/internal/summaries` | ✅ 401 |
+| 없는 세션으로 CLM | ✅ 401 (배포 백엔드까지 실제로 조회함) |
+
+**⚠️ cron은 `/healthz`가 아니라 `/health`입니다.** Cloud Run이 `/healthz`를 앞단에서 가로채 자기 404를 돌려줍니다 — 같은 호스트에서 `/healthzz`·`/nope`는 우리 앱의 JSON 404가 오는데 그 경로만 구글 HTML 404입니다. 문서에 없는 동작이라 배포해 보고 알았습니다.
+
+**⚠️ 아직 공유 시크릿이 안 맞습니다.** 배포본에 로컬 값이 들어 있어 세션 조회가 401입니다(`lookup_bad_status:401`). **새 값을 주시면 그 자리에서 교체합니다.** 그 전까지 대화는 성립하지 않습니다.
 
 ## 시크릿 전달
 

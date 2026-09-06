@@ -116,3 +116,30 @@ def test_세션_픽스처에_전사가_없다():
 def test_이어하기_픽스처의_lastTurnIndex는_0이_아니다():
     """0이면 이 픽스처가 검사하려는 상황 자체가 아니다."""
     assert _fx("sessions.200.resumed.json")["lastTurnIndex"] > 0
+
+
+def test_규칙_경로가_환경변수로_옮겨진다():
+    """컨테이너에서는 패키지가 설치돼 상대 경로가 어긋난다.
+
+    `AI_RULES_DIR`·`AI_PROMPTS_DIR`이 선언만 되고 아무도 안 읽으면, 로컬에서는 돌고
+    배포에서만 죽는다. 실제로 그 상태였다.
+    """
+    import importlib
+
+    for mod_name, env, attr in (
+        ("app.rules.loader", "AI_RULES_DIR", "DEFAULT_RULES_DIR"),
+        ("app.llm.client", "AI_PROMPTS_DIR", "DEFAULT_PROMPTS_DIR"),
+    ):
+        import os
+
+        before = os.environ.get(env)
+        os.environ[env] = "/tmp/from-env"
+        try:
+            mod = importlib.reload(importlib.import_module(mod_name))
+            assert str(getattr(mod, attr)).replace("\\", "/").endswith("from-env")
+        finally:
+            if before is None:
+                os.environ.pop(env, None)
+            else:
+                os.environ[env] = before
+            importlib.reload(importlib.import_module(mod_name))

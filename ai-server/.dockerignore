@@ -1,0 +1,26 @@
+# 이미지에 들어가면 안 되는 것들.
+#
+# ★ 가장 중요한 줄은 `.env`다. 이미지에 구우면 레지스트리를 볼 수 있는 사람이 전부 읽는다.
+#   시크릿은 Secret Manager에서 런타임에 주입한다 (계약 §3-1).
+
+.env
+.env.*
+!.env.example
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# 테스트와 평가 데이터는 런타임에 필요 없다. 이미지만 커진다.
+tests/
+eval/
+scripts/
+
+# 캡처 산출물 — 발화가 들어 있을 수 있다.
+**/capture/
+**/reports/
+
+Makefile
+README.md

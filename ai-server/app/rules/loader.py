@@ -10,11 +10,18 @@
 from __future__ import annotations
 
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-DEFAULT_RULES_DIR = Path(__file__).resolve().parent.parent.parent / "rules"
+# 소스 트리 기준 경로. 컨테이너처럼 패키지가 설치되는 배치에서는 이 상대 경로가
+# 어긋나므로 `AI_RULES_DIR`이 있으면 그것을 쓴다.
+#
+# `app/config.py`를 import하지 않는 것은 의도적이다 — 이 계층은 설정에 의존하지 않는다
+# (tests/test_boundaries.py). 여기서 읽는 것은 정책 값이 아니라 **파일이 어디 있는가**뿐이다.
+_SOURCE_TREE_RULES = Path(__file__).resolve().parent.parent.parent / "rules"
+DEFAULT_RULES_DIR = Path(os.environ.get("AI_RULES_DIR") or _SOURCE_TREE_RULES)
 
 
 class RulesError(RuntimeError):

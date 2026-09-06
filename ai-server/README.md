@@ -15,7 +15,7 @@
 | `POST /internal/turns` | 여기 → 백엔드 | 턴 적재 (fire-and-forget) | 계약 §3-2 |
 | `POST /internal/summaries` | 백엔드 → 여기 | 세션 턴 텍스트 → 요약 1문장 (동기, 3초) | 계약 §3-5 |
 | `GET /internal/sessions/{id}` | 여기 → 백엔드 | 세션 컨텍스트 조회. **CLM 인증을 겸한다** — 캐시 미스 + 조회 실패는 401 | 계약 §3-4 |
-| `GET /healthz` | — | 헬스체크 | — |
+| `GET /health` | — | 헬스체크. **`/healthz`는 Cloud Run이 가로채므로 배포에서는 안 닿는다** (별칭으로만 유지) | — |
 
 ## 이 폴더의 단일 출처
 

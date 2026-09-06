@@ -42,7 +42,9 @@ def events(text: str) -> list[str]:
 
 
 def test_헬스체크가_뜬다():
+    """`/health`가 정식이다. Cloud Run이 `/healthz`를 가로채서 배포에서는 안 닿는다."""
     with TestClient(app) as c:
+        assert c.get("/health").json() == {"status": "ok"}
         assert c.get("/healthz").json() == {"status": "ok"}
 
 

@@ -111,8 +111,15 @@ async def _warmup() -> None:
     _spawn(all_of_them())
 
 
+# **`/health`가 정식 경로다. `/healthz`는 별칭이고 배포에서는 닿지 않는다.**
+#
+# Cloud Run(Google Frontend)이 `/healthz`를 앞단에서 가로채 자기 404를 돌려준다
+# (2026-09-06 실측 — 같은 호스트에서 `/healthzz`·`/health`·`/nope`는 전부 우리 앱의
+# JSON 404가 오는데 `/healthz`만 구글 HTML 404가 온다). 문서에 없는 동작이라
+# 배포해 보고 알았다. **킵얼라이브 cron은 `/health`를 찔러야 한다.**
+@app.get("/health")
 @app.get("/healthz")
-async def healthz() -> dict[str, str]:
+async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 

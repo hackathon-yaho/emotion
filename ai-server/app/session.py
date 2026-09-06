@@ -140,7 +140,9 @@ class SessionStore:
             if resp.status_code >= 500:
                 raise SessionUnauthorized("lookup_5xx")
             if resp.status_code != 200:
-                raise SessionUnauthorized("lookup_bad_status")
+                # 코드를 붙여야 원인이 보인다. 401이면 공유 시크릿 불일치,
+                # 403이면 권한, 그 밖이면 계약이 어긋난 것이다.
+                raise SessionUnauthorized(f"lookup_bad_status:{resp.status_code}")
 
             ctx = SessionContext.from_response(resp.json(), now=now)
             if ctx.status != "open":
