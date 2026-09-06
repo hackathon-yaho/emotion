@@ -41,4 +41,5 @@
 | --- | --- | --- |
 | [backend-deployed-rebuild.md](backend-deployed-rebuild.md) | ⏳ **회신 대기** (2026-09-05, 요청자 백엔드) | 백엔드 배포됨(`https://emotion-6yeh.onrender.com`). **지금 Pages에 떠 있는 빌드는 `API_BASE_URL`이 폴백 `http://localhost:8080`이고 `KAKAO_REST_KEY`가 빈 문자열**이다 — 저장소 변수 등록이 마지막 빌드(9/4 19:38)보다 늦었다. **코드 변경 없이 재빌드만** 하면 된다 |
 | [session-queue.md](session-queue.md) | ⏳ **회신 대기** (2026-09-05, 요청자 백엔드) | 없음(**서버 기본 꺼짐**). Hume 동시 접속 상한에 걸리면 **대기가 아니라 `E0700` 거절**이라 대기열을 서버가 만들었다 — `start`가 **202**로 올 수 있고, 순번 폴링 응답의 `session`이 입장권이다(계약 v1.9 §2-14) |
+| [sample-mode-blocks-live-test.md](sample-mode-blocks-live-test.md) | ⏳ **회신 대기** (2026-09-07, 요청자 AI) | **배포본이 `SAMPLE_DATA=true`로 굳어 있어 실제 대화를 걸 수 없다.** `?sample=1`은 켜는 쪽만 있고 끄는 스위치가 없다. 나머지(AI서버·백엔드·Hume Config·킵얼라이브)는 전부 준비됐고 **여기서만 막힌다** |
 | [conversation-latency.md](conversation-latency.md) | ⏳ **회신 대기** (2026-09-05, 요청자 AI) | 대화 응답 실측 p95 **12.5초**(목표 2초). S02에 「생각 중」 상태가 없어 7초 동안 화면이 안 바뀐다. NFR-01 자체는 팀 결정 |
