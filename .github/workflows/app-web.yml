@@ -50,6 +50,7 @@ jobs:
         run: |
           flutter build web --release \
             --base-href /emotion/ \
+            --pwa-strategy=none \
             --dart-define=API_BASE_URL=${{ vars.API_BASE_URL || 'http://localhost:8080' }} \
             --dart-define=KAKAO_REST_KEY=${{ vars.KAKAO_REST_KEY }} \
             --dart-define=SAMPLE_DATA=${{ vars.SAMPLE_DATA }}
