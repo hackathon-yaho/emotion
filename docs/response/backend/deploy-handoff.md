@@ -35,7 +35,24 @@
 | 백엔드 | `https://emotion-6yeh.onrender.com/api/health` | 15분 유휴에 슬립, 복귀 약 60초 |
 | **AI서버** | `<배포 주소>/healthz` | `min-instances 0`이라 유휴 시 인스턴스 소멸. 콜드 스타트 있음 |
 
-**AI서버 쪽은 제가 등록하겠습니다.** 백엔드 것과 같은 도구를 쓰면 관리가 하나로 모이니, 쓰시는 cron 서비스를 알려주시면 거기에 맞추겠습니다.
+### ✅ cron 등록 완료 (2026-09-06) — **두 개 다 걸었습니다**
+
+**별도 서비스에 가입하지 않았습니다.** GCP에 Cloud Scheduler가 있어서 거기에 걸었습니다. 계정이 이미 있고, 무료 한도가 결제 계정당 3개인데 해빙이 1개를 쓰고 있어 **정확히 2개가 남아 있었습니다.**
+
+| 작업 이름 | 대상 | 주기 |
+| --- | --- | --- |
+| `emotion-ai-keepalive` | `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app/health` | 10분 |
+| `emotion-backend-keepalive` | `https://emotion-6yeh.onrender.com/api/health` | 10분 |
+
+프로젝트 `emotion-voice-ai` · 리전 `asia-northeast3` · 시간대 `Asia/Seoul` · 응답 대기 60초(콜드 스타트 감안). 둘 다 즉시 실행해 정상 동작을 확인했습니다.
+
+**`phase-7` 7-4의 cron 체크박스를 닫으셔도 됩니다.** 계정이 필요해 팀장이 직접 해야 한다고 적어두셨는데, 기존 GCP 계정으로 해결됐습니다.
+
+**끄거나 주기를 바꾸려면**:
+
+```powershell
+gcloud.cmd scheduler jobs pause emotion-backend-keepalive --project=emotion-voice-ai --location=asia-northeast3
+```
 
 ## 1·4. 배포 계획 — Cloud Run
 

@@ -121,6 +121,22 @@ ai-server/
 └─ tests/
 ```
 
+## 배포 (2026-09-06)
+
+**`https://emotion-ai-server-gq7yhdrrlq-du.a.run.app`** — Cloud Run `asia-northeast3`, 프로젝트 `emotion-voice-ai`.
+
+절차는 `Finance_yaho/Cloud-Run-배포-런북.md`를 따랐다. 재배포는 이 폴더에서:
+
+```powershell
+gcloud.cmd run deploy emotion-ai-server --source . --region asia-northeast3 --project emotion-voice-ai --quiet
+```
+
+시크릿은 Secret Manager(`GOOGLE_API_KEY`·`INTERNAL_SHARED_SECRET`)에서 런타임에 주입한다. **`.env`는 이미지에 들어가지 않는다**(`.dockerignore`) — 구우면 레지스트리를 볼 수 있는 사람이 전부 읽는다.
+
+**⚠️ `/healthz`는 배포에서 닿지 않는다.** Cloud Run이 앞단에서 가로채 자기 404를 돌려준다(2026-09-06 실측 — 같은 호스트에서 `/healthzz`·`/nope`는 우리 앱의 JSON 404가 온다). **`/health`가 정식 경로**이고 킵얼라이브도 그쪽을 찌른다.
+
+**킵얼라이브**는 Cloud Scheduler에 10분 주기로 걸려 있다 — `emotion-ai-keepalive`(우리)와 `emotion-backend-keepalive`(백엔드). 백엔드가 자고 있으면 세션 조회가 타임아웃나고 **fail-closed라 대화가 통째로 막히기 때문에** 두 곳을 다 깨운다.
+
 ---
 
 이 폴더에 대한 요청은 `../docs/request/ai/`, AI가 보낸 요청의 회신은 `../docs/response/ai/`.
