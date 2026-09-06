@@ -48,7 +48,9 @@
 
 ## ② `GOOGLE_API_KEY` — 값은 들어갔다. 남은 건 **`.env.example`의 세 줄**
 
-**막는 것: 2건.** 2026-09-05에 팀장이 키를 받아 넣었다. **우리가 보던 `ai-server/.env`가 낡은 로컬 파일이었다는 지적은 맞았다** — 공유되는 것은 `.env.example`이고 그건 이미 Gemini다(회신 `../../docs/response/backend/gemini-switch-mismatch.md`).
+**해소됐다 (2026-09-06).** AI가 `.env.example` 세 줄을 고치고 **`tests/test_env_example.py`로 막았다** — 모든 키를 `config.py` 기본값과 대조하고 `AI_RESPOND_EFFORT=none`은 따로 검사한다. 규칙이 아니라 테스트다. 아래는 경위다.
+
+**막던 것: 2건.** 2026-09-05에 팀장이 키를 받아 넣었다. **우리가 보던 `ai-server/.env`가 낡은 로컬 파일이었다는 지적은 맞았다** — 공유되는 것은 `.env.example`이고 그건 이미 Gemini다(회신 `../../docs/response/backend/gemini-switch-mismatch.md`).
 
 **다만 그 `.env.example`이 `config.py`보다 낡았다** (2026-09-05 확인). 회신이 안내한 대로 복사하면 **AI가 방금 고친 결함 둘이 되살아난다** — `AI_RESPOND_EFFORT=low`(코드는 `none`. **위기 응답의 109 안내가 문장 중간에서 잘린다**) · `AI_MODEL_OBSERVE=gemini-2.5-pro`(코드는 `gemini-3.8-flash`. **404, 신규 사용자 미제공**). 요청했다(`../../docs/request/ai/env-example-drift.md` ⏳).
 
@@ -108,10 +110,10 @@
 
 | 아직 못 한 것 | 왜 |
 | --- | --- |
-| **cron 10분 킵얼라이브 — 두 곳** | **cron-job.org로 정했다**(2026-09-05). 계정이 필요하다. **이게 제일 급하다.** 없으면 15분 유휴에 잠들고 복귀 1분이 AI서버 fail-closed 2초와 부딪혀 **첫 대화가 통째로 막힌다.** AI 회신에서 **타임아웃으로는 못 막는다**고 확인됐다(60초를 붙들면 Hume이 먼저 끊는다). ⚠️ **AI서버도 Cloud Run 무료라 잠든다** — 백엔드 `/api/health`와 **AI서버 `/healthz` 둘 다** 찔러야 한다. AI가 자기 것을 같은 도구에 등록하겠다고 해서 **쓰는 cron 서비스 이름을 알려줘야 한다** |
+| **cron 10분 킵얼라이브 — 두 곳** | **cron-job.org로 정했다**(2026-09-05). ⚠️ **AI서버는 `/healthz`가 아니라 `/health`다** — Cloud Run이 `/healthz`를 앞단에서 가로채 구글 HTML 404를 낸다(우리도 실측 확인). 계정이 필요하다. **이게 제일 급하다.** 없으면 15분 유휴에 잠들고 복귀 1분이 AI서버 fail-closed 2초와 부딪혀 **첫 대화가 통째로 막힌다.** AI 회신에서 **타임아웃으로는 못 막는다**고 확인됐다(60초를 붙들면 Hume이 먼저 끊는다). ⚠️ **AI서버도 Cloud Run 무료라 잠든다** — 백엔드 `/api/health`와 **AI서버 `/healthz` 둘 다** 찔러야 한다. AI가 자기 것을 같은 도구에 등록하겠다고 해서 **쓰는 cron 서비스 이름을 알려줘야 한다** |
 | `TRANSCRIPT_ENC_KEY`(배포용) 오프라인 사본 | 생성은 했다. **보관은 사람이 해야 한다** — 잃으면 도그푸딩 발화 전체가 복호화 불가 |
 | AI에 새 `INTERNAL_SHARED_SECRET` 전달 | 배포용은 로컬과 다른 값이다. 저장소에 넣지 않으므로 별도 경로 |
-| `AI_SERVER_BASE_URL` | AI서버가 아직 배포되지 않았다. **Cloud Run으로 간다**(터널 아님)고 회신이 왔고 주소가 나오면 준다. **안 넣으면 요약 null·관찰 0건이 조용히 난다** |
+| ~~`AI_SERVER_BASE_URL`~~ | **넣었다** (2026-09-06) — `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app` (Cloud Run, asia-northeast3). **다만 AI서버 쪽 공유 시크릿이 아직 배포용이 아니라** 양방향이 401이다. 그게 맞춰져야 요약·관찰이 실제로 돈다 |
 | ~~앱 웹 재빌드~~ → **앱이 백엔드를 안 부른다** | 재빌드는 **됐다**(2026-09-06, run 34003227111). 번들에 `emotion-6yeh.onrender.com`이 있고 `localhost:8080`은 0건인 것을 우리도 확인했다. **다만 앱이 `SAMPLE_DATA=true`를 일부러 켜 뒀다** — 배포 링크가 팀 밖에서도 열려서, 라이브면 누르는 즉시 EVI 통화가 열리고 과금된다. 그래서 **`GET /api/health`를 포함해 백엔드 호출이 한 건도 안 나간다. 서버 로그가 조용한 것이 정상이다.** 라이브 전환은 앱이 로컬로 실제 왕복을 확인한 뒤에 한다 |
 
 > **배포가 곧 도그푸딩 시작은 아니게 됐다.** 앱이 새 `API_BASE_URL`로 다시 빌드해야 하고 Hume Config에 CLM이 없어서(①), 지금 링크를 공유해도 대화가 성립하지 않는다.

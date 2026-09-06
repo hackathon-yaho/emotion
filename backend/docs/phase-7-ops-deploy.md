@@ -90,7 +90,7 @@
 - [x] `db/migration.sql`을 **Supabase에 적용** (로컬과 같은 파일) — 11테이블 생성 확인
 - [ ] cron에 **10분 간격 킵얼라이브 — 두 곳** 등록. 계정이 필요해 팀장이 직접 한다. **이게 없으면 15분 유휴에 잠들고, 복귀 약 1분이 AI서버의 fail-closed 2초 타임아웃과 부딪혀 대화가 통째로 막힌다.** AI 회신에서 **타임아웃으로는 못 막는다**고 확인됐다 — 60초를 붙들면 Hume이 먼저 끊는다
   - 백엔드 `https://emotion-6yeh.onrender.com/api/health`
-  - ⚠️ **AI서버 `<Cloud Run 주소>/healthz`** — AI서버도 무료라 잠든다. 백엔드만 깨우면 이번엔 저쪽이 자고 있다. **AI가 자기 것을 같은 도구에 등록하겠다고 했으므로 쓰는 cron 서비스 이름을 알려줘야 한다**(`../../docs/response/backend/deploy-handoff.md`)
+  - ⚠️ **AI서버 `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app/health`** — AI서버도 Cloud Run 무료라 잠든다. 백엔드만 깨우면 이번엔 저쪽이 자고 있다. **`/healthz`가 아니라 `/health`다** — Cloud Run이 `/healthz`만 앞단에서 가로채 구글 HTML 404를 낸다(문서에 없는 동작이고, 양쪽이 실측으로 확인했다). 서비스는 **cron-job.org**로 정했고 AI가 자기 것을 같은 곳에 건다
 - [x] 앱·AI에 배포 도메인 전달 — 앱은 저장소 변수 `API_BASE_URL` 등록 + 요청서 `../../docs/request/app/backend-deployed-rebuild.md`, AI는 요청서 `../../docs/request/ai/deploy-handoff.md`. **변수 등록만으로는 부족하다** — `app-web.yml`이 `--dart-define`으로 빌드 시점에 값을 굽고 `app/**` 변경에만 도는데, **변수 등록이 마지막 빌드(9/4 19:38)보다 늦어서 지금 Pages 빌드는 `API_BASE_URL`이 폴백 `localhost:8080`이고 `KAKAO_REST_KEY`가 빈 문자열이다.** 앱이 `workflow_dispatch`로 다시 빌드해야 한다
 
 | 확인 | 이유 |
@@ -138,7 +138,7 @@
 8. **cron에 10분 간격 킵얼라이브 등록 — 백엔드 `/api/health`와 AI서버 `/healthz` 두 곳.** 서비스 이름을 AI에 알려준다
 9. **앱·AI에 배포 도메인 전달** — 앱은 `API_BASE_URL`, AI는 `BACKEND_BASE_URL`
    - 앱 것은 **팀장이 직접 등록한다**: `gh variable set API_BASE_URL --repo hackathon-yaho/emotion --body https://…` (`.github/workflows/app-web.yml`이 `vars.API_BASE_URL`을 읽고, **비어 있으면 폴백이 `http://localhost:8080`이라 배포본이 조용히 로컬을 부른다**). `KAKAO_REST_KEY`는 2026-09-05에 등록해 뒀다
-10. AI서버가 배포되면 **`AI_SERVER_BASE_URL`을 그 주소로** 갱신
+10. ~~AI서버가 배포되면 **`AI_SERVER_BASE_URL`을 그 주소로** 갱신~~ → **완료 (2026-09-06)** — `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app`. **다만 AI서버 쪽 공유 시크릿이 배포용으로 안 바뀌어 아직 양방향 401이다**
 
 > **10번을 빠뜨리면 조용히 실패한다.** 요약은 `null`, 관찰은 0건이 되는데 **둘 다 정상 동작과 구분이 안 된다**(설계상 실패해도 대화·기록은 멀쩡하다). 배포 후 첫 대화에서 `summary`가 `null`이면 이걸 먼저 본다.
 
