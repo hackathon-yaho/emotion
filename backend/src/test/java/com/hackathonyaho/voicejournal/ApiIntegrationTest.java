@@ -104,6 +104,36 @@ class ApiIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    /**
+     * 프리플라이트만 검사하면 못 잡는다. 프리플라이트는 MVC까지 가지만
+     * <b>인증 필터가 만든 401은 그 앞에서 끝나기 때문</b>이다 —
+     * 실제로 그 상태로 배포돼 앱이 F1-02를 못 태우고 있었다.
+     */
+    @Test
+    @DisplayName("인증 필터가 만든 401에도 CORS 헤더가 붙는다 — 없으면 브라우저가 응답을 통째로 막는다")
+    void unauthorizedCarriesCorsHeaders() throws Exception {
+        mvc.perform(get("/api/me")
+                        .header(HttpHeaders.ORIGIN, "https://hackathon-yaho.github.io")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer invalid.jwt"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
+                        "https://hackathon-yaho.github.io"));
+    }
+
+    @Test
+    @DisplayName("만료 토큰의 401에도 CORS 헤더가 붙는다 — F1-02가 이 응답을 봐야 재로그인시킨다")
+    void expiredTokenResponseCarriesCorsHeaders() throws Exception {
+        String expired = new JwtProvider(jwtSecret, -1).issue(UUID.randomUUID()).token();
+
+        mvc.perform(get("/api/me")
+                        .header(HttpHeaders.ORIGIN, "https://hackathon-yaho.github.io")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + expired))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("TOKEN_EXPIRED"))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
+                        "https://hackathon-yaho.github.io"));
+    }
+
     @Test
     @DisplayName("헬스체크는 인증 없이 열려 있다 (cron 킵얼라이브가 친다)")
     void healthIsPublic() throws Exception {
