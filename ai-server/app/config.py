@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     ai_rules_dir: Path = ROOT / "rules"
     ai_prompts_dir: Path = ROOT / "prompts"
 
+    # Hume Config 점검용 (app/humeconfig.py). 대화에는 쓰지 않는다 —
+    # EVI 토큰 발급은 백엔드 몫이고, 여기서는 Config를 읽기만 한다.
+    hume_api_key: str = ""
+    hume_config_id: str = "23d6162d-d334-44dd-9c2d-f5858de19a06"
+
     # 캡처 (app/capture.py)
     ai_shape_capture: bool = True
     ai_eval_capture: bool = False

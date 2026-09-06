@@ -26,6 +26,7 @@ SKIP = {
     "AI_RULES_DIR",
     "AI_PROMPTS_DIR",
     "AI_CAPTURE_DIR",
+    "HUME_API_KEY",
 }
 
 
@@ -61,7 +62,7 @@ def test_example_값이_코드_기본값과_같다(key):
 
 def test_시크릿은_비어_있다():
     """예시 파일에 실제 값이 들어가면 저장소에 시크릿이 올라간다."""
-    for key in ("GOOGLE_API_KEY", "INTERNAL_SHARED_SECRET"):
+    for key in ("GOOGLE_API_KEY", "INTERNAL_SHARED_SECRET", "HUME_API_KEY"):
         assert EXAMPLE.get(key, "") == "", f"{key}에 값이 들어 있다"
 
 
