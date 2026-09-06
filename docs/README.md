@@ -1,5 +1,13 @@
 # 감정 케어 보이스 저널 — 문서
 
+> **수정 기록 (2026-09-07 ㉑, AI)** — **백엔드에 요청 1건 신설(⏳ `request/backend/deploy-secret-handoff.md`). 배포용 `INTERNAL_SHARED_SECRET` 하나가 지금 대화 전체를 막고 있습니다.**
+>
+> AI서버는 배포돼 있고(`https://emotion-ai-server-gq7yhdrrlq-du.a.run.app`) 배포된 백엔드까지 실제로 닿는 것도 확인했습니다. **다만 인증에서 401로 끊깁니다** — 배포본에 로컬용 값이 들어 있기 때문입니다. **추측이 아니라 실물로 확인했습니다**: 배포 백엔드에 로컬 값으로 `GET /internal/sessions/{없는 세션}`을 걸면 `INTERNAL_AUTH_FAILED` 401이 오고, **시크릿을 아예 빼고 보낸 것과 결과가 같습니다.** 세션 조회가 CLM 인증을 겸하므로(계약 §3-4) 여기서 막히면 갭·되묻기·위기 감지가 전부 그 뒤의 이야기가 됩니다. **fail-closed는 의도한 설계라 바꾸지 않습니다** — 다만 지금은 "정상 동작하는 차단"이라 서버도 로그도 멀쩡한데 대화만 안 되는 상태입니다. 실패 이유에 상태 코드를 붙여둬서(`lookup_bad_status:401`) 시크릿 불일치인지 권한인지 로그만으로 갈립니다.
+>
+> **cron 킵얼라이브 두 개를 등록했습니다 — `phase-7` 7-4 체크박스를 닫으셔도 됩니다.** "계정이 필요해 팀장이 직접 한다"고 적혀 있던 항목인데, **별도 서비스 가입 없이 기존 GCP 계정의 Cloud Scheduler로 해결**됐습니다(무료 한도 결제 계정당 3개 중 해빙이 1개 사용, 정확히 2개 여유). `emotion-ai-keepalive`와 `emotion-backend-keepalive`, 각 10분 주기, 둘 다 즉시 실행해 확인했습니다. **AI서버 쪽 주소는 `/healthz`가 아니라 `/health`입니다** — Cloud Run이 `/healthz`를 앞단에서 가로챕니다.
+>
+> **시크릿을 받으면 10분입니다** — 교체·재배포 → `/internal/sessions`가 401에서 **404**로 바뀌는 것 확인 → **Hume Config에 CLM URL 등록**(`hume-config-setup.md` 요청 건) → 첫 대화. 그 첫 대화에서 **Hume이 실제로 보내는 요청 모양이 자동 저장**됩니다(발화는 담기지 않습니다). 문서만 보고 짠 파서라 그 한 번이 가장 중요합니다.
+>
 > **수정 기록 (2026-09-06 ㊿, AI)** — **AI서버를 배포했습니다 — `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app`** (Cloud Run `asia-northeast3`, 프로젝트 `emotion-voice-ai`). 터널을 접고 배포로 간 이유는 백엔드가 이미 공개 주소를 가졌고 **Hume Config의 CLM URL이 고정돼야** 하기 때문입니다.
 >
 > **① ⚠️ 백엔드 필독 — cron은 `/healthz`가 아니라 `/health`입니다.** **Cloud Run이 `/healthz`를 앞단에서 가로챕니다.** 같은 호스트에서 `/healthzz`·`/nope`는 우리 앱의 JSON 404가 오는데 **그 경로만 구글 HTML 404**가 옵니다. 문서에 없는 동작이라 배포해 보고 알았습니다. `/health`를 정식으로 두고 `/healthz`는 로컬 별칭으로 남겼습니다. `AI_SERVER_BASE_URL`도 위 주소로 넣어 주세요.
