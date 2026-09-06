@@ -49,8 +49,10 @@
     }
   </style>
 
-  <!-- 제품 이름은 미확정이다 (PRD §14-6). 확정되면 이 제목과
-       manifest.json의 name·short_name, main.dart의 title을 함께 고친다. -->
+  <!-- 이름을 바꾸면 이 제목과 아래 apple-mobile-web-app-title, manifest.json의
+       name·short_name·description, main.dart의 title을 **함께** 고친다.
+       2026-09-07: 앱은 이 값을 유지한다 (PRD §14 이슈 6). 배포 URL도 그대로다 —
+       저장소 이름을 바꾸면 카카오 Redirect URI 재등록 전까지 로그인이 죽는다. -->
   <title>감정 케어 보이스 저널</title>
   <link rel="manifest" href="manifest.json">
 </head>

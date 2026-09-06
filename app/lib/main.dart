@@ -68,8 +68,13 @@ class _VoiceJournalAppState extends ConsumerState<VoiceJournalApp> {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       scaffoldMessengerKey: _messenger,
-      // 제품 이름 미확정 (PRD §14-6). 확정되면 여기와 web/index.html·manifest를
-      // 함께 고친다.
+      // **이름을 바꾸면 여기만 고쳐서는 안 된다** — `web/index.html`의
+      // `<title>`·`apple-mobile-web-app-title`과 `manifest.json`의
+      // `name`·`short_name`·`description`이 함께다.
+      //
+      // 2026-09-07 확정: **바꾸지 않는다.** 배포 URL도 그대로다 — 저장소
+      // 이름을 바꾸면 Redirect URI가 달라져 카카오 콘솔 재등록 전까지 로그인이
+      // 400으로 죽는다. 제출까지 남은 시간에 견줘 이득이 없다.
       title: '감정 케어 보이스 저널',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
