@@ -93,9 +93,27 @@ def check(cfg: dict[str, Any], expected_clm: str) -> list[tuple[bool, str, str]]
     voice_name = voice.get("name") or voice.get("id") or ""
     out.append((bool(voice_name), "음성", f"{voice_name or '(없음)'} — 한국어 음성인지 눈으로 확인"))
 
-    greeting = (cfg.get("prompt") or {}).get("text") if isinstance(cfg.get("prompt"), dict) else None
-    first = cfg.get("first_message") or cfg.get("initial_message") or greeting
-    out.append((bool(first), "첫 인사말", f"{(first or '(자동 생성)')[:40]}"))
+    # 스키마는 event_messages.on_new_chat 이다 (Hume Config API 레퍼런스).
+    # 처음에 first_message/initial_message 로 찾다가 못 봤다.
+    on_new = dig(cfg, "event_messages", "on_new_chat") or {}
+    first = (on_new.get("text") or "").strip() if isinstance(on_new, dict) else ""
+    out.append((
+        bool(first),
+        "첫 인사말",
+        f"{first[:44] if first else '(자동 생성 — 매번 달라진다)'}",
+    ))
+
+    # 넛지: 켜져 있으면 간격을 본다. 감정 대화에서 짧은 넛지는 재촉이 된다.
+    nudges = cfg.get("nudges") or {}
+    if isinstance(nudges, dict) and nudges.get("enabled"):
+        interval = nudges.get("interval_secs") or nudges.get("interval")
+        out.append((
+            interval is not None and int(interval) >= 60,
+            "비활성 넛지",
+            f"켜짐 · {interval}초 — 감정 대화에서 짧은 넛지는 말을 고르는 사람을 재촉한다",
+        ))
+    else:
+        out.append((True, "비활성 넛지", "꺼짐"))
 
     return out
 
