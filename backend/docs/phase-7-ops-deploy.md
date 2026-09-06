@@ -91,6 +91,7 @@
 - [x] cron에 **10분 간격 킵얼라이브 — 두 곳** 등록 — **AI가 걸었다** (2026-09-07). 별도 서비스 가입 없이 **GCP Cloud Scheduler**(무료 한도 결제 계정당 3개 중 2개가 남아 있었다)로 해결됐다. `emotion-backend-keepalive` → `https://emotion-6yeh.onrender.com/api/health` · `emotion-ai-keepalive` → AI서버 `/health`, 둘 다 10분
   - ⚠️ **AI서버는 `/healthz`가 아니라 `/health`다** — Cloud Run이 `/healthz`만 앞단에서 가로채 구글 HTML 404를 낸다. 문서에 없는 동작이고 양쪽이 실측으로 확인했다
   - **cron-job.org는 쓰지 않게 됐다.** 종전에 그쪽으로 정했으나 AI 계정에서 해결되어 관리 지점이 하나로 모였다
+  - **확인 방법** — Render 무료는 **요청 로그를 남기지 않아** 들어오는 것을 직접 볼 수 없다. **16분 무접촉 뒤 응답 시간**으로 갈랐다: 0.72초면 깨어 있는 것이고, 슬립 복귀였다면 약 60초가 나온다
 
 - [x] 앱·AI에 배포 도메인 전달 — 앱은 저장소 변수 `API_BASE_URL` 등록 + 요청서 `../../docs/request/app/backend-deployed-rebuild.md`, AI는 요청서 `../../docs/request/ai/deploy-handoff.md`. **변수 등록만으로는 부족하다** — `app-web.yml`이 `--dart-define`으로 빌드 시점에 값을 굽고 `app/**` 변경에만 도는데, **변수 등록이 마지막 빌드(9/4 19:38)보다 늦어서 지금 Pages 빌드는 `API_BASE_URL`이 폴백 `localhost:8080`이고 `KAKAO_REST_KEY`가 빈 문자열이다.** 앱이 `workflow_dispatch`로 다시 빌드해야 한다
 
@@ -115,7 +116,7 @@
 - ✅ **로그 전수 검사에서 `transcript` 0건, `sessionId` 0건** — 코드·실행 로그 양쪽
 - ⏳ 배포된 URL로 앱이 로그인·대화 시작까지 완주한다 — **서버는 섰고 앱도 다시 빌드됐다**(2026-09-06). 다만 앱이 **`SAMPLE_DATA=true`를 일부러 켜 둬서 백엔드 호출이 한 건도 안 나간다**(Hume 과금 회피). 라이브 전환 후에야 닫힌다. 대화까지는 Hume Config의 CLM 등록이 먼저다
   - ⚠️ **`SAMPLE_DATA`는 제출 전에 반드시 꺼야 한다** — 켠 채로 제출하면 심사자가 준비된 데이터를 실제 기록으로 본다. 앱이 `app/README.md` 「아직 임시인 것」에 올려 뒀다
-- ⏳ cron 등록 후 첫 요청이 즉시 응답한다 (슬립 없음) — **cron 미등록**
+- ✅ cron 등록 후 첫 요청이 즉시 응답한다 (슬립 없음) — **16분 무접촉 후 0.72초** (2026-09-07 실측). 슬립 복귀라면 약 60초이고 앱이 본 최악은 274초였다
 - ✅ `api-spec.md`의 구현 현황이 **전부 `구현 완료`**다
 
 > **대기열 변수 2개는 선택이다** (계약 §2-14, v1.9) — `SESSION_QUEUE_ENABLED`(기본 `false`) · `SESSION_QUEUE_CAPACITY`(기본 5). **켤 때 `CAPACITY`를 Hume 플랜의 동시 접속 수와 맞춘다** — Free **1** / Starter·Creator **5** / Pro 10. 무료 상태로 5를 넣으면 두 번째 사람이 `E0700`을 맞는다.
