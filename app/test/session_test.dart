@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:voice_journal/core/auth/kakao_login.dart';
+import 'package:voice_journal/core/models/session_models.dart';
 import 'package:voice_journal/core/session/session_clock.dart';
 
 void main() {
@@ -77,6 +78,41 @@ void main() {
       expect(
         KakaoLogin.authorizeUrl(redirectUri: Uri.parse('http://localhost:3000/')),
         isNull,
+      );
+    });
+  });
+
+  group('이어하기 판정 (F2-07 · §2-5-1)', () {
+    OpenSession open({required int remaining, required Duration until}) =>
+        OpenSession(
+          sessionId: 's',
+          startedAt: DateTime.now().subtract(const Duration(minutes: 3)),
+          usedSec: 180,
+          remainingSec: remaining,
+          resumableUntil: DateTime.now().add(until),
+        );
+
+    test('남은 시간이 있고 창 안이면 이어한다', () {
+      expect(
+        open(remaining: 240, until: const Duration(minutes: 10)).isResumable,
+        isTrue,
+      );
+    });
+
+    test('30분 창이 지나면 이어하지 않는다 — 부르면 409다', () {
+      // **실제로 여기서 막혔다** (2026-09-06 통합). 대화 화면이 `openSession`이
+      // 있기만 하면 `resume`을 불러 409를 받았고, 화면에는 "지금은 대화를
+      // 시작할 수 없습니다"가 떴다 — 새로 시작하면 되는 상황인데도.
+      expect(
+        open(remaining: 240, until: const Duration(minutes: -1)).isResumable,
+        isFalse,
+      );
+    });
+
+    test('남은 시간이 0이면 이어할 것이 없다', () {
+      expect(
+        open(remaining: 0, until: const Duration(minutes: 10)).isResumable,
+        isFalse,
       );
     });
   });

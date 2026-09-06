@@ -62,7 +62,9 @@ class AsyncErrorBlock extends StatelessWidget {
     final e = error;
     if (e is! ApiException) return '문제가 생겼습니다. 잠시 후 다시 시도해 주세요.';
     if (e.isNetwork) {
-      return '연결이 되지 않습니다. 네트워크를 확인해 주세요.';
+      // **사용자 네트워크를 탓하지 않는다.** 서버가 잠에서 깨는 중일 때도
+      // 여기로 오는데(Render 무료, 실측 17.7초), 그건 사용자 잘못이 아니다.
+      return '서버에 닿지 못했습니다. 잠시 후 다시 시도해 주세요.';
     }
     return e.message;
   }

@@ -4,6 +4,9 @@ import 'package:voice_journal/core/data/journal_repository.dart';
 import 'package:voice_journal/core/data/sample_journal_repository.dart';
 import 'package:voice_journal/core/models/paged.dart';
 import 'package:voice_journal/core/models/queue_models.dart';
+import 'package:voice_journal/core/models/session_models.dart';
+import 'package:voice_journal/core/network/api_client.dart';
+import 'package:voice_journal/core/storage/token_storage.dart';
 import 'package:voice_journal/core/models/trend_models.dart';
 
 void main() {
@@ -202,6 +205,49 @@ void main() {
     test('샘플 모드는 줄을 서지 않는다', () async {
       final repo = SampleJournalRepository(delay: Duration.zero);
       expect(await repo.startSession(), isA<SessionOpened>());
+    });
+  });
+
+  group('§2-5-1 이어하기 응답 (2026-09-06 통합 회귀)', () {
+    // **실제로 여기서 앱이 죽었다.** 계약은 `resumedChatGroupId`를 필수로
+    // 적어 뒀지만 값이 없을 때를 정하지 않았고, 백엔드는 보관된 값이 없으면
+    // null을 준다. `String`으로 받다가 TypeError가 났는데 화면에는 "지금은
+    // 대화를 시작할 수 없습니다"만 떠서 원인이 보이지 않았다.
+    Map<String, dynamic> body(Object? chatGroup) => {
+          'sessionId': '550e8400-e29b-41d4-a716-446655440000',
+          'humeAccessToken': 'tok',
+          'resumedChatGroupId': chatGroup,
+          'remainingSec': 240,
+          'thresholdMode': 'fixed',
+          'gapThreshold': 0.9,
+          'demoMode': false,
+          'humeConfigId': 'cfg',
+        };
+
+    test('값이 있으면 그대로 쓴다', () {
+      expect(SessionResume.fromJson(body('cg_1')).resumedChatGroupId, 'cg_1');
+    });
+
+    test('null이어도 깨지지 않는다 — 이어하기는 되고 맥락만 안 붙는다', () {
+      final r = SessionResume.fromJson(body(null));
+      expect(r.resumedChatGroupId, isNull);
+      expect(r.remainingSec, 240, reason: '나머지 필드는 정상이어야 한다');
+    });
+
+    test('빈 문자열도 "없음"이다 — 계약이 어느 쪽으로 정해져도 산다', () {
+      expect(SessionResume.fromJson(body('')).resumedChatGroupId, isNull);
+    });
+  });
+
+  group('콜드 스타트 (2026-09-06 통합)', () {
+    // Render 무료는 유휴 15분에 잠들고 **실측 17.7초** 만에 깨어난다.
+    // 종전 타임아웃(연결 10초·수신 15초)으로는 깨는 동안 반드시 실패했고,
+    // 화면은 "네트워크를 확인해 주세요"로 **사용자 잘못처럼** 말했다.
+    test('타임아웃이 깨어나는 시간을 견딘다', () {
+      final client = ApiClient(tokens: TokenStorage());
+      expect(client.connectTimeout.inSeconds, greaterThanOrEqualTo(20));
+      expect(client.receiveTimeout.inSeconds, greaterThanOrEqualTo(45),
+          reason: '17.7초를 견디고도 여유가 있어야 한다');
     });
   });
 }

@@ -205,15 +205,28 @@ final lastSessionEndProvider = StateProvider<SessionEnd?>((_) => null);
 ///
 /// **간격은 서버가 준 `livePollIntervalSec`을 쓴다.** 앱에 상수로 박지 않는다.
 /// 세션이 없으면 폴링하지 않는다.
-final liveSignalProvider = StreamProvider<LiveSignal>((ref) async* {
+/// **`autoDispose`다.** 대화 화면이 사라지면 듣는 사람이 없어 폴링이 저절로
+/// 멈춘다 — 화면이 프로바이더를 직접 비우려 하면 "위젯 트리를 만드는 중에
+/// 프로바이더를 고쳤다"로 걸린다 (2026-09-06 위젯 테스트).
+final liveSignalProvider = StreamProvider.autoDispose<LiveSignal>((ref) {
   final session = ref.watch(activeSessionProvider);
-  if (session == null) return;
+  if (session == null) return const Stream<LiveSignal>.empty();
   final repo = ref.watch(journalRepositoryProvider);
   final every = Duration(seconds: session.livePollIntervalSec);
-  while (true) {
-    yield await repo.live(session.sessionId);
-    await Future<void>.delayed(every);
-  }
+
+  // **`Stream.periodic`을 쓴다.** 예전에는 `while(true)` + `Future.delayed`
+  // 였는데, 구독이 끊겨도 **대기 중인 타이머가 남았다** — 화면을 나가도
+  // 폴링이 한 번 더 깨어나고, 위젯 테스트가 "트리를 버렸는데 타이머가
+  // 남아 있다"로 잡았다. `periodic`은 구독 취소와 함께 타이머도 끊긴다.
+  return Stream<void>.periodic(every).asyncMap((_) async {
+    try {
+      return await repo.live(session.sessionId);
+    } on Object {
+      // **한 번 실패했다고 폴링을 멈추지 않는다.** 이 폴링이 위기 신호를
+      // 나르므로(§2-13), 잠깐의 실패로 끊기면 그 대화 내내 S07이 안 뜬다.
+      return null;
+    }
+  }).where((s) => s != null).cast<LiveSignal>();
 });
 
 // ---------------------------------------------------------------------------

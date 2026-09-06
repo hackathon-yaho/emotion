@@ -71,7 +71,16 @@ class SessionResume {
   final String humeAccessToken;
 
   /// EVI handshake의 `resumed_chat_group_id` — 이전 맥락이 복원된다.
-  final String resumedChatGroupId;
+  ///
+  /// **null일 수 있다.** 계약 §2-5-1은 이 필드를 필수로 적어 뒀지만 값이
+  /// 없을 때를 정하지 않았고, 백엔드는 보관된 값이 없으면 `null`을 준다
+  /// (`response/backend/chat-group-id.md`에서 정리를 요청해 둔 항목).
+  /// **실제로 여기서 앱이 죽었다** — 2026-09-06 통합에서 `String`으로 받다가
+  /// `TypeError`가 났고, 화면에는 "지금은 대화를 시작할 수 없습니다"만
+  /// 떠서 원인이 보이지 않았다.
+  ///
+  /// 값이 없으면 이어하기는 되고 **이전 대화 맥락만 복원되지 않는다.**
+  final String? resumedChatGroupId;
 
   /// `hardCutSec − usedSec`. **새 7분을 주지 않는다** (NFR-06).
   final int remainingSec;
@@ -86,7 +95,12 @@ class SessionResume {
   factory SessionResume.fromJson(Map<String, dynamic> j) => SessionResume(
         sessionId: j['sessionId'] as String,
         humeAccessToken: j['humeAccessToken'] as String,
-        resumedChatGroupId: j['resumedChatGroupId'] as String,
+        // 빈 문자열도 "없음"으로 다룬다 — 어느 쪽으로 정해지든 앱이 깨지지
+        // 않는다.
+        resumedChatGroupId: switch (j['resumedChatGroupId']) {
+          final String v when v.isNotEmpty => v,
+          _ => null,
+        },
         remainingSec: j['remainingSec'] as int,
         thresholdMode: j['thresholdMode'] as String,
         gapThreshold: (j['gapThreshold'] as num).toDouble(),

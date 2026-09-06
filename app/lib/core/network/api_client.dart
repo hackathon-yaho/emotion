@@ -21,8 +21,12 @@ class ApiClient {
   ApiClient({required this.tokens, Dio? dio}) : _dio = dio ?? Dio() {
     _dio.options
       ..baseUrl = Env.apiBaseUrl
-      ..connectTimeout = const Duration(seconds: 10)
-      ..receiveTimeout = const Duration(seconds: 15)
+      // **Render 무료는 유휴 15분이면 잠들고 깨는 데 오래 걸린다.**
+      // 2026-09-06 통합에서 실측 **17.7초**(두 번째 요청은 0.5초). 종전
+      // 10초/15초로는 깨어나는 동안 반드시 실패했고, 화면에는 "네트워크를
+      // 확인해 주세요"가 떴다 — **사용자 잘못이 아닌데 그렇게 말했다.**
+      ..connectTimeout = const Duration(seconds: 20)
+      ..receiveTimeout = const Duration(seconds: 45)
       ..contentType = 'application/json; charset=utf-8'
       // 오류 본문을 우리가 직접 해석한다.
       ..validateStatus = (_) => true;
@@ -45,6 +49,11 @@ class ApiClient {
   final Dio _dio;
   final TokenStorage tokens;
 
+  /// 설정값을 밖에서 확인할 수 있게 열어 둔다 — 콜드 스타트를 견디는지
+  /// 테스트가 본다.
+  Duration get connectTimeout => _dio.options.connectTimeout!;
+  Duration get receiveTimeout => _dio.options.receiveTimeout!;
+
   static const _noAuth = 'noAuth';
 
   /// JWT 만료 시 호출되는 콜백.
@@ -53,20 +62,29 @@ class ApiClient {
   /// 보내지 않고, 이 신호를 받은 쪽이 "대화 중인가"를 보고 판단한다.
   void Function()? onTokenExpired;
 
+  /// GET은 **네트워크 실패에서 한 번만 다시 시도한다.**
+  ///
+  /// 서버가 잠에서 깨는 동안 첫 요청이 죽는데(위 타임아웃 주석), 그 뒤에는
+  /// 대개 살아 있다. **GET에만 건다** — `session/start` 같은 POST를 다시
+  /// 보내면 세션이 둘 생긴다.
   Future<T> get<T>(
     String path, {
     Map<String, dynamic>? query,
     bool authenticated = true,
     required T Function(Map<String, dynamic> json) parse,
-  }) =>
-      _send(
-        () => _dio.get<dynamic>(
+  }) async {
+    Future<Response<dynamic>> call() => _dio.get<dynamic>(
           path,
           queryParameters: query,
           options: Options(extra: {_noAuth: !authenticated}),
-        ),
-        parse,
-      );
+        );
+    try {
+      return await _send(call, parse);
+    } on ApiException catch (e) {
+      if (!e.isNetwork) rethrow;
+      return _send(call, parse);
+    }
+  }
 
   Future<T> post<T>(
     String path, {

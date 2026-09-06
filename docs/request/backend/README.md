@@ -13,6 +13,7 @@
 
 | 문서 | 상태 | 반영 |
 | --- | --- | --- |
+| [cors-on-401.md](cors-on-401.md) | ⏳ **회신 대기** (2026-09-06) | **401 응답에만 CORS 헤더가 없다.** 브라우저가 막아 앱이 인증 실패를 못 본다 — **F1-02(만료 처리)가 구조적으로 안 돈다**, 오류 문구가 네트워크 탓으로 거짓말한다 |
 | [session-id-in-url.md](session-id-in-url.md) | ⏳ **회신 대기** (2026-09-05) | 앱이 S05-1 경로에 `sessionId`를 싣는다. §1-1이 이 값을 "비밀과 동급"으로 규정 — **이대로 둘지, 공개용 식별자를 따로 둘지** 결정 필요. 막는 작업은 없음 |
 | [cors-origin.md](cors-origin.md) | ✅ **회신 완료** (2026-09-04) | 허용 오리진·프리플라이트·자격증명 확정. `response/app/cors-origin.md`. 계약 개정 없음(배포 설정) |
 | [tag-gap-endpoint.md](tag-gap-endpoint.md) | ✅ **회신 완료** (2026-09-04) | `GET /api/trend`에 `tagGaps`·`userAvgGap` 신설. `response/app/tag-gap-endpoint.md`, 계약 v1.4 §2-8 |

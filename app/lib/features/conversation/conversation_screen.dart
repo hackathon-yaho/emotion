@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/live_models.dart';
 import '../../core/config/env.dart';
+import '../../core/data/journal_repository.dart';
 import '../../core/models/queue_models.dart';
 import '../../core/models/session_models.dart';
 import '../../core/network/api_exception.dart';
@@ -24,6 +25,11 @@ import '../../shared/widgets/ring_pair.dart';
 import '../../shared/widgets/screen_scaffold.dart';
 import '../../shared/widgets/small_label.dart';
 import '../crisis/crisis_sheet.dart';
+
+/// 줄을 섰다는 내부 신호 — 오류가 아니다.
+class _Queued implements Exception {
+  const _Queued();
+}
 
 /// 대화 상태 — 실제로는 EVI 이벤트가 바꾼다.
 enum TalkState {
@@ -141,15 +147,26 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     try {
       final open = await repo.me().then((m) => m.openSession);
       final SessionStart session;
-      if (open != null) {
-        final r = await repo.resumeSession(open.sessionId);
+      // **이어할 수 있는지 먼저 본다.** 30분 창이 지난 세션에 `resume`을 부르면
+      // 409 `SESSION_NOT_RESUMABLE`이 오고, 그걸 "시작할 수 없습니다"로
+      // 보여주면 사용자는 앱이 고장 난 줄 안다 — 실제로는 새로 시작하면 되는
+      // 상황이다 (design-system §7 결정 14).
+      if (open != null && open.isResumable) {
+        final SessionResume r;
+        try {
+          r = await repo.resumeSession(open.sessionId);
+        } on ApiException catch (e) {
+          // 창이 방금 지났거나 서버가 이미 정리했다 — 새 대화로 간다.
+          if (e.code != ApiErrorCode.sessionNotResumable) rethrow;
+          _enter(await _startFresh(repo));
+          return;
+        }
         if (!mounted) return;
         // 이어하기는 새 7분을 주지 않는다 (NFR-06) — 남은 시간을 그대로 쓴다.
         session = _asStart(r);
-        // 이전 대화 맥락은 이 값으로 복원된다. 백엔드가 아직 null만 주므로
-        // (`request/app/chat-group-id.md`) 같은 세션 안에서 받은 값을 쓴다.
-        ref.read(chatGroupIdProvider.notifier).state =
-            r.resumedChatGroupId.isEmpty ? null : r.resumedChatGroupId;
+        // 이전 대화 맥락은 이 값으로 복원된다. 없으면 이어하기는 되고
+        // 맥락만 안 붙는다 (`request/app/chat-group-id.md`).
+        ref.read(chatGroupIdProvider.notifier).state = r.resumedChatGroupId;
       } else {
         final started = await repo.startSession();
         if (!mounted) return;
@@ -164,10 +181,32 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         }
       }
       _enter(session, resumed: true);
-    } catch (_) {
+    } on _Queued {
+      // 줄을 섰다 — 오류가 아니다. 화면은 이미 대기 상태다.
+    } catch (e) {
       if (!mounted) return;
       // 원인별 문구는 F2-04 — 여기서는 "시작할 수 없다"로 모은다.
-      setState(() => _state = TalkState.cannotStart);
+      setState(() {
+        _heard = Env.showErrorDetail
+            ? (e is ApiException ? '${e.statusCode} ${e.code} ${e.message}' : '$e')
+            : null;
+        _state = TalkState.cannotStart;
+      });
+    }
+  }
+
+  /// 이어하기가 성립하지 않을 때 새 대화로 넘어간다.
+  ///
+  /// 대기열이 켜져 있으면 줄을 서고, 이 함수는 돌아오지 않는다.
+  Future<SessionStart> _startFresh(JournalRepository repo) async {
+    final started = await repo.startSession();
+    switch (started) {
+      case SessionOpened(:final session):
+        return session;
+      case SessionQueued(:final ticket):
+        _waitInQueue(ticket);
+        // 줄을 섰다 — 세션은 폴링이 가져온다.
+        throw const _Queued();
     }
   }
 
@@ -507,9 +546,41 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     _nearEndTimer?.cancel();
     _hardCutTimer?.cancel();
     _eviSub?.cancel();
-    // 화면을 벗어나면 폴링이 멈추도록 세션을 놓는다.
-    ref.read(inConversationProvider.notifier).state = false;
     super.dispose();
+  }
+
+  /// 화면이 트리에서 빠질 때 — **여기서 정리한다.**
+  ///
+  /// `dispose()`에서는 `ref`를 쓸 수 없다("Cannot use ref after the widget was
+  /// disposed"). 처음에 거기 넣었다가 위젯 테스트가 잡았다.
+  @override
+  void deactivate() {
+    // **화면을 어떻게 벗어나든 마이크를 끈다.**
+    //
+    // 「대화 마치기」는 `_end()`가 정리하지만 **뒤로 가기는 그 경로를 타지
+    // 않는다.** 2026-09-06 통합에서 실제로 걸렸다 — 홈으로 돌아온 뒤에도
+    // 마이크가 열려 있어 소리가 계속 Hume으로 나갔다. 화면에는 아무 표시가
+    // 없으므로 **사용자는 자기 말이 나가는 줄 모른다.** 요금보다 이쪽이 더
+    // 무겁다.
+    //
+    // `dispose`는 기다릴 수 없어 던져만 둔다. `stop()`은 예외를 밖으로
+    // 내보내지 않는다.
+    ref.read(eviServiceProvider).stop();
+
+    // 세션을 놓는다. 폴링(§2-13)은 `liveSignalProvider`가 `autoDispose`라
+    // 듣는 사람이 없어지는 순간 알아서 멈춘다. 세션 자체는 서버가
+    // 타임아웃으로 정리한다 (§2-6 `endReason: timeout`).
+    //
+    // **상태 쓰기는 한 박자 미룬다** — 생명주기 콜백 안에서 프로바이더를
+    // 고치면 "위젯 트리를 만드는 중"이라 막힌다. 알림 객체는 위젯이 아니라
+    // 컨테이너의 것이라 나중에 써도 안전하다.
+    final session = ref.read(activeSessionProvider.notifier);
+    final inConversation = ref.read(inConversationProvider.notifier);
+    Future.microtask(() {
+      session.state = null;
+      inConversation.state = false;
+    });
+    super.deactivate();
   }
 
   /// S07은 `crisisDetected`의 **false → true 전이에서 한 번만** 띄운다
@@ -599,6 +670,17 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
 
   @override
   Widget build(BuildContext context) {
+    // **`ref.listen`은 build 안에서만 쓸 수 있다.** 한때 `_body()`에서 불렀는데
+    // 그건 `LayoutBuilder`의 빌더 안이라 규약 위반이다 — 릴리스에서는
+    // assert가 꺼져 조용히 돌지만 구독이 새는 자리다 (2026-09-06 위젯
+    // 테스트가 잡았다).
+    //
+    // 위기 신호는 전이에서 한 번만 (§2-13).
+    ref.listen(liveSignalProvider, (_, next) {
+      final v = next.valueOrNull;
+      if (v != null) onCrisisSignal(v.crisisDetected);
+    });
+
     return LayoutBuilder(
       builder: (context, c) => _body(
         context,
@@ -622,12 +704,6 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   Widget _body(BuildContext context, {required bool sidePanel}) {
     final t = context.tokens;
     final r = _ring;
-
-    // 위기 신호 — 전이에서 한 번만 (§2-13).
-    ref.listen(liveSignalProvider, (_, next) {
-      final v = next.valueOrNull;
-      if (v != null) onCrisisSignal(v.crisisDetected);
-    });
 
     final main = Column(
       crossAxisAlignment: CrossAxisAlignment.start,

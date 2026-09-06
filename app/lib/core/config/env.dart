@@ -57,5 +57,13 @@ abstract final class Env {
   static const _eviWsUrl = String.fromEnvironment('EVI_WS_URL');
 
   static String? get eviWsUrl => _eviWsUrl.isEmpty ? null : _eviWsUrl;
+
+  /// 실패 원인을 화면에 그대로 띄운다 — **개발·통합 전용, 기본 꺼짐.**
+  ///
+  /// F2-04는 원인을 사용자 말로 옮기라고 하고 상태 코드·`traceId`를 화면에
+  /// 쓰지 않는다(§7-1). 그런데 통합 중에는 그 규칙이 **원인을 통째로 숨겨서**
+  /// 2026-09-06에 한참을 헤맸다(모델 파싱 실패가 "지금은 대화를 시작할 수
+  /// 없습니다" 한 줄로만 보였다). 그때만 켠다.
+  static const showErrorDetail = bool.fromEnvironment('SHOW_ERROR_DETAIL');
   static bool get hasEviOverride => eviWsUrl != null;
 }
