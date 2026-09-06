@@ -3,6 +3,8 @@
 여기서 안 잡으면 값이 조용히 틀린 채로 들어가고, 나중에 401을 몇 시간 디버깅하게 된다.
 """
 
+from pathlib import Path
+
 import pytest
 
 from app.setsecret import apply_to_lines, mask, validate
@@ -96,3 +98,60 @@ def test_첫_번째_것만_바꾼다():
 def test_값을_통째로_보여주지_않는다():
     secret = "AIzaSyABCDEF1234567890abcdefGHIJKLMNOP"
     assert secret not in mask(secret)
+
+
+# ── Secret Manager 경로 ───────────────────────────────────────────
+
+
+def test_gcloud를_cmd로_찾는다():
+    """`.ps1`이면 실행 정책에 막힌다. `.cmd`나 확장자 없는 실행 파일이어야 한다."""
+    from app.setsecret import find_gcloud
+
+    found = find_gcloud()
+    if found is not None:
+        assert not found.lower().endswith(".ps1")
+
+
+def test_임시_파일이_남지_않는다(monkeypatch, tmp_path):
+    """gcloud가 실패해도 평문 키 파일이 디스크에 남으면 안 된다.
+
+    런북이 실제로 당한 사고다 — 루프 중간에 멈춰서 임시 키 파일이 남았다.
+    """
+    import subprocess
+
+    from app import setsecret
+
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        # gcloud가 보는 시점에는 파일이 있어야 하고, 그 경로를 기억해 둔다.
+        path = [c for c in cmd if str(c).startswith("--data-file=")][0].split("=", 1)[1]
+        seen["path"] = path
+        assert Path(path).exists()
+        return subprocess.CompletedProcess(cmd, 1, "", "boom")
+
+    monkeypatch.setattr(setsecret, "find_gcloud", lambda: "gcloud.cmd")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert setsecret.write_to_cloud("X", "v" * 20) == 1
+    assert not Path(seen["path"]).exists()
+
+
+def test_값을_명령_인자로_넘기지_않는다(monkeypatch):
+    """인자는 셸 기록과 프로세스 목록에 평문으로 남는다."""
+    import subprocess
+
+    from app import setsecret
+
+    SECRET = "s3cr3t-value-do-not-log-0123456789"
+    captured = {}
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = [str(c) for c in cmd]
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(setsecret, "find_gcloud", lambda: "gcloud.cmd")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    setsecret.write_to_cloud("X", SECRET)
+
+    assert all(SECRET not in part for part in captured["cmd"])

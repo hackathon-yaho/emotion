@@ -67,9 +67,20 @@ make eval     # 20쌍 · 위기 합성 세트 · 태그 · 관찰 문장 → eva
 **시크릿은 도구로 넣는다.** 값이 화면에도 셸 명령 기록에도 남지 않는다.
 
 ```powershell
+# 로컬 .env
 .\.venv\Scripts\python.exe -m app.setsecret INTERNAL_SHARED_SECRET
 .\.venv\Scripts\python.exe -m app.setsecret GOOGLE_API_KEY
+
+# 배포용 Secret Manager (프로젝트 emotion-voice-ai)
+.\.venv\Scripts\python.exe -m app.setsecret INTERNAL_SHARED_SECRET --cloud
 ```
+
+`--cloud`는 Secret Manager에 **새 버전**을 추가한다. 값을 명령 인자로 넘기지 않고
+임시 파일로 넘긴 뒤 `finally`에서 지운다 — 인자는 셸 기록과 프로세스 목록에 남고,
+gcloud가 중간에 실패하면 평문 키 파일이 디스크에 남는다(런북이 실제로 당한 사고).
+
+**새 버전을 넣어도 바로 반영되지 않는다.** Cloud Run은 배포 시점에 값을 읽으므로
+재배포해야 적용된다.
 
 **PowerShell 스크립트(`scripts/set-secret.ps1`)도 같은 일을 하지만 기본 경로가 아니다.**
 Windows 실행 정책이 `.ps1`을 막는 머신에서는 `PSSecurityException`이 나서 한 줄도 돌지
