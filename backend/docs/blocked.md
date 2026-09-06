@@ -21,16 +21,27 @@
 
 > **그 과정에서 결함 1건을 잡았다** — Hume 토큰 엔드포인트가 **200에 `Content-Type`을 안 싣는다.** 응답을 `Map`으로 받으면 Spring이 변환기를 못 골라 `UnknownContentTypeException`이 나고, **겉으로는 키가 틀린 것과 똑같은 503**으로 보인다. `String`으로 받아 직접 파싱하도록 고치고 회귀 테스트로 묶었다. **대역으로는 절대 안 보이는 종류**다.
 
-### Config가 지금 제품을 못 돌린다 (`23d6162d-…`, 콘솔 기본값)
+### Config — **CLM이 붙었다** (2026-09-07 확인, version 0 → 1)
+
+**`language_model`이 채워졌다.** `hume-config-setup.md`에서 요청한 것 중 가장 큰 것이 닫혔다.
+
+```
+model_provider: CUSTOM_LANGUAGE_MODEL
+model_resource: https://emotion-ai-server-gq7yhdrrlq-du.a.run.app/chat/completions
+```
+
+**`prompt.text`도 `null`이 됐다** — 종전 `"You are a helpful assistant."`가 사라졌으니 우리 프롬프트와 겹칠 걱정이 없다.
+
+**남은 3건은 그대로다.** 셋 다 배포와 무관해서 지금 바꿀 수 있다.
 
 | 항목 | 현재 | 왜 문제인가 |
 | --- | --- | --- |
-| **`language_model`** | **`null`** | **CLM이 안 붙어 있다.** Hume이 내장 LLM으로 대답하고 **우리 AI서버는 한 번도 안 불린다** — 갭·되묻기·위기 감지가 전부 그 서버에 있다 |
-| `voice` | Kora (**영어**) | 한국어 제품이다 |
-| `timeouts.inactivity` | **120초** | 감정 대화에서 2분 침묵은 흔하다. 하드컷 7분보다 **먼저 끊긴다** |
+| `timeouts.inactivity` | **120초** | 감정 대화에서 2분 침묵은 흔하다. **하드컷 420초보다 먼저 끊긴다** — 세션 상한을 우리가 정한다는 설계(F2-03·FR-011)가 성립하지 않는다 |
 | `nudges` | **3초마다** | 우는 사람에게 3초마다 말을 건다 |
-| `evi_version` | `"3"` | EVI 3에서 CLM 지원 방식 확인 필요 |
+| `voice` | Kora (**영어**) | 한국어 제품이다 |
+| `evi_version` | `"3"` | CLM이 실제로 불리는지는 첫 대화에서 확인된다 |
 
+> **CLM이 붙었어도 아직 대화는 안 된다.** AI서버의 세션 조회가 **공유 시크릿 불일치로 401**이고, 그건 CLM 인증을 겸하므로(계약 §3-4) 거기서 끊긴다 — `../../docs/request/backend/deploy-secret-handoff.md` (⏳). **값 하나가 남았다.**
 
 | 못 한 것 | 근거 | 오면 어떻게 되나 |
 | --- | --- | --- |
