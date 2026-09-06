@@ -9,6 +9,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:voice_journal/core/providers.dart';
 import 'package:voice_journal/core/voice/evi_event.dart';
 import 'package:voice_journal/core/voice/evi_service.dart';
+import 'package:record/record.dart';
+
 import 'package:voice_journal/core/voice/mic.dart';
 import 'package:voice_journal/core/voice/speaker.dart';
 
@@ -32,6 +34,13 @@ class _FakeChannel implements WebSocketChannel {
 
   @override
   WebSocketSink get sink => _Sink(this);
+
+  // 닫힘 코드는 진단용이다 — 대역에서는 없다.
+  @override
+  int? get closeCode => null;
+
+  @override
+  String? get closeReason => null;
 
   @override
   noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -58,21 +67,30 @@ class _FakeMic implements Mic {
   _FakeMic({this.denied = false});
 
   final bool denied;
-  final _bytes = StreamController<Uint8List>();
+
+  /// **열 때마다 새 스트림.** 실제 `RecordMic`도 대화마다 레코더를 새로
+  /// 만든다 — 하나를 재사용하면 두 번째 `listen`에서 죽어, 테스트가 제품에
+  /// 없는 실패를 만든다.
+  StreamController<Uint8List>? _bytes;
   bool opened = false;
   bool closedMic = false;
 
-  void speak(List<int> pcm) => _bytes.add(Uint8List.fromList(pcm));
+  void speak(List<int> pcm) => _bytes?.add(Uint8List.fromList(pcm));
 
   @override
   Future<Stream<Uint8List>> open() async {
     if (denied) throw const MicDenied();
     opened = true;
-    return _bytes.stream;
+    final c = _bytes = StreamController<Uint8List>();
+    return c.stream;
   }
 
   @override
-  Future<void> close() async => closedMic = true;
+  Future<void> close() async {
+    closedMic = true;
+    await _bytes?.close();
+    _bytes = null;
+  }
 }
 
 class _FakeSpeaker implements Speaker {
@@ -155,6 +173,17 @@ void main() {
       expect((first['audio'] as Map)['sample_rate'], 16000);
     });
 
+    test('custom_session_id를 session_settings로도 보낸다 (계약 §4)', () async {
+      // **쿼리로만 보내면 Hume이 CLM 호출에 세션 id를 싣지 않는다.** 그러면
+      // AI서버가 fail-closed로 401을 주고 Hume은 채팅을 끝내는데, 앱에는
+      // `closed 1000`으로 보여 원인이 안 보인다 (2026-09-06).
+      await start();
+      final first = jsonDecode(channel.sent.first) as Map<String, dynamic>;
+      expect(first['custom_session_id'], 'sess-uuid');
+      expect(opened.queryParameters['custom_session_id'], 'sess-uuid',
+          reason: '쿼리에도 계속 싣는다 — 어느 쪽을 읽든 걸리지 않게');
+    });
+
     test('language_model_api_key를 절대 보내지 않는다 (계약 §4 · 웹 번들 노출)', () async {
       await start();
       mic.speak([1, 2, 3]);
@@ -174,6 +203,28 @@ void main() {
           .toList();
       expect(audio, hasLength(1));
       expect(base64Decode(audio.single['data'] as String), [0, 1, 2, 3]);
+    });
+
+    test('홀수 길이 조각에도 죽지 않고 소리 크기를 잰다 (진단)', () async {
+      await start();
+      // 조용한 조각 → 0. 홀수 길이여도 던지지 않는다.
+      mic.speak(List<int>.filled(401, 0));
+      await settle();
+      expect(evi.micPeak, 0);
+      // 큰 조각 → 0보다 크게.
+      final loud = Int16List(400);
+      for (var i = 0; i < loud.length; i++) {
+        loud[i] = i.isEven ? 12000 : -12000;
+      }
+      mic.speak(Uint8List.sublistView(loud));
+      await settle();
+      expect(evi.micPeak, greaterThan(0));
+      expect(
+        channel.sent
+            .map((s) => jsonDecode(s) as Map<String, dynamic>)
+            .where((m) => m['type'] == 'audio_input'),
+        hasLength(2),
+      );
     });
 
     test('권한 거부는 예외가 아니라 micDenied 사건이다 (F2-04)', () async {
@@ -231,9 +282,12 @@ void main() {
 
     test('user_interruption은 재생을 즉시 버린다', () async {
       await start();
+      // `start()`가 앞선 연결을 정리하며 스피커도 한 번 멈춘다 — 여기서
+      // 보는 것은 **끼어들기 때문에 한 번 더 멈췄는가**다.
+      final before = speaker.stops;
       channel.push({'type': 'user_interruption'});
       await settle();
-      expect(speaker.stops, 1);
+      expect(speaker.stops, before + 1);
       expect(events.whereType<EviUserInterruption>(), hasLength(1));
     });
 
@@ -341,4 +395,149 @@ void main() {
       );
     });
   });
+
+  group('마이크 수명 (2026-09-06 실사용 회귀)', () {
+    // **첫 대화 이후 계속 연결이 끊어졌다.** `RecordMic`이 `AudioRecorder`를
+    // 하나 만들어 앱 수명 내내 들고 있었는데 `close()`가 그것을 폐기했고,
+    // 프로바이더는 같은 `RecordMic`을 계속 주므로 **두 번째 대화가 죽은
+    // 레코더로 시작**했다.
+    test('대화마다 레코더를 새로 만든다', () async {
+      var made = 0;
+      final mic = RecordMic(() {
+        made++;
+        return AudioRecorder();
+      });
+
+      // 테스트 환경에는 플러그인이 없어 `open()`은 실패한다 — 우리가 보는
+      // 것은 **레코더를 새로 만들었는가**다.
+      for (var i = 0; i < 2; i++) {
+        try {
+          await mic.open();
+        } on Object {
+          // 플러그인 없음
+        }
+      }
+
+      expect(made, 2, reason: '두 번째 대화도 자기 레코더를 가져야 한다');
+    });
+  });
+
+  group('연결 세대 (2026-09-06 실사용 회귀)', () {
+    // **"첫 대화 이후 계속 연결이 끊어진다"의 실제 원인.**
+    //
+    // `EviService`는 인스턴스 하나를 앱 내내 쓴다. 그런데 `start()`가 이전
+    // 연결을 닫지 않고 `_channel`을 덮어써서, **옛 소켓이 살아남아 나중에
+    // 닫힐 때 그 `onDone`이 새 대화 화면을 "연결이 끊어졌습니다"로** 만들었다.
+    // 사용자는 "이전 대화가 남아 있는 것 같다"고 했고 정확했다.
+    test('옛 연결이 늦게 닫혀도 새 대화를 끊지 않는다', () async {
+      final first = _FakeChannel();
+      final second = _FakeChannel();
+      final channels = <_FakeChannel>[first, second];
+      final mic = _FakeMic();
+      final evi = EviService(
+        mic: mic,
+        speaker: _FakeSpeaker(),
+        connect: (_) => channels.removeAt(0),
+      );
+      final seen = <EviEvent>[];
+      evi.events.listen(seen.add);
+
+      await evi.start(accessToken: 't', configId: 'c', sessionId: 's1');
+      await evi.stop();
+      await evi.start(accessToken: 't', configId: 'c', sessionId: 's2');
+      seen.clear();
+
+      // 첫 소켓이 이제서야 닫힌다 — 새 대화는 멀쩡해야 한다.
+      first.hangUp();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen.whereType<EviClosed>(), isEmpty,
+          reason: '옛 연결의 닫힘이 새 대화를 끊으면 안 된다');
+      expect(seen.whereType<EviFailed>(), isEmpty);
+    });
+
+    test('새로 시작하면 이전 소켓을 먼저 닫는다', () async {
+      final first = _FakeChannel();
+      final second = _FakeChannel();
+      final channels = <_FakeChannel>[first, second];
+      final evi = EviService(
+        mic: _FakeMic(),
+        speaker: _FakeSpeaker(),
+        connect: (_) => channels.removeAt(0),
+      );
+
+      await evi.start(accessToken: 't', configId: 'c', sessionId: 's1');
+      await evi.start(accessToken: 't', configId: 'c', sessionId: 's2');
+
+      expect(first.closed, isTrue, reason: '이전 소켓이 남아 있으면 안 된다');
+      expect(second.closed, isFalse);
+    });
+
+    test('옛 소켓의 프레임이 새 대화에 섞이지 않는다', () async {
+      final first = _FakeChannel();
+      final second = _FakeChannel();
+      final channels = <_FakeChannel>[first, second];
+      final evi = EviService(
+        mic: _FakeMic(),
+        speaker: _FakeSpeaker(),
+        connect: (_) => channels.removeAt(0),
+      );
+      final seen = <EviEvent>[];
+      evi.events.listen(seen.add);
+
+      await evi.start(accessToken: 't', configId: 'c', sessionId: 's1');
+      await evi.start(accessToken: 't', configId: 'c', sessionId: 's2');
+      seen.clear();
+
+      first.push({
+        'type': 'user_message',
+        'message': {'role': 'user', 'content': '이전 대화의 발화'},
+      });
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen, isEmpty, reason: '옛 소켓의 발화가 새 화면에 뜨면 안 된다');
+    });
+  });
+
+  group('재생 큐 (2026-09-06 실사용 회귀)', () {
+    // **"AI가 혼자 말하다 혼자 끊긴다".** 조각 하나의 완료 신호를 놓치면
+    // 큐가 그대로 멈춰 남은 말이 영영 안 나온다. WAV 길이를 읽어 시계를
+    // 걸어 두면, 신호가 안 와도 다음 조각으로 넘어간다.
+    Uint8List wav({required int millis, int rate = 16000}) {
+      final bytes = (rate * 2 * millis / 1000).round();
+      final b = BytesBuilder()
+        ..add(ascii.encode('RIFF'))
+        ..add(_u32(36 + bytes))
+        ..add(ascii.encode('WAVE'))
+        ..add(ascii.encode('fmt '))
+        ..add(_u32(16))
+        ..add(_u16(1)) // PCM
+        ..add(_u16(1)) // mono
+        ..add(_u32(rate))
+        ..add(_u32(rate * 2)) // byte rate
+        ..add(_u16(2))
+        ..add(_u16(16))
+        ..add(ascii.encode('data'))
+        ..add(_u32(bytes))
+        ..add(Uint8List(bytes));
+      return b.toBytes();
+    }
+
+    test('WAV 길이를 읽어낸다 — 시계의 근거', () {
+      expect(
+        AudioPlayersSpeaker.debugWavDuration(wav(millis: 400)),
+        const Duration(milliseconds: 400),
+      );
+    });
+
+    test('WAV가 아니면 시계를 걸지 않는다 — 억지로 끊지 않는다', () {
+      expect(
+        AudioPlayersSpeaker.debugWavDuration(Uint8List.fromList([1, 2, 3])),
+        isNull,
+      );
+    });
+  });
 }
+
+Uint8List _u32(int v) => Uint8List(4)..buffer.asByteData().setUint32(0, v, Endian.little);
+Uint8List _u16(int v) => Uint8List(2)..buffer.asByteData().setUint16(0, v, Endian.little);

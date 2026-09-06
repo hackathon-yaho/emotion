@@ -13,6 +13,8 @@ import '../../core/network/api_exception.dart';
 import '../../core/providers.dart';
 import '../../core/session/app_session.dart';
 import '../../core/session/session_clock.dart';
+import '../../core/voice/evi_service.dart';
+import '../../core/voice/speaker.dart';
 import '../../core/voice/evi_event.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
@@ -32,6 +34,9 @@ class _Queued implements Exception {
 }
 
 /// 대화 상태 — 실제로는 EVI 이벤트가 바꾼다.
+// **링에 목업 발화를 넣지 않는다.** 디자인 프로토타입 때 넣은 "오늘 완전
+// 괜찮았어요"가 실제 대화에서 계속 떠 있었다 (2026-09-06). 이 자리에는
+// **실제로 들은 말만** 온다 (`_heard`).
 enum TalkState {
   connecting,
   resumed,
@@ -147,6 +152,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     try {
       final open = await repo.me().then((m) => m.openSession);
       final SessionStart session;
+      String? resumedChatGroupId;
       // **이어할 수 있는지 먼저 본다.** 30분 창이 지난 세션에 `resume`을 부르면
       // 409 `SESSION_NOT_RESUMABLE`이 오고, 그걸 "시작할 수 없습니다"로
       // 보여주면 사용자는 앱이 고장 난 줄 안다 — 실제로는 새로 시작하면 되는
@@ -164,9 +170,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         if (!mounted) return;
         // 이어하기는 새 7분을 주지 않는다 (NFR-06) — 남은 시간을 그대로 쓴다.
         session = _asStart(r);
-        // 이전 대화 맥락은 이 값으로 복원된다. 없으면 이어하기는 되고
-        // 맥락만 안 붙는다 (`request/app/chat-group-id.md`).
-        ref.read(chatGroupIdProvider.notifier).state = r.resumedChatGroupId;
+        resumedChatGroupId = r.resumedChatGroupId;
       } else {
         final started = await repo.startSession();
         if (!mounted) return;
@@ -180,7 +184,19 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             return;
         }
       }
+      // **지금은 `chat_group_id`를 소켓에 싣지 않는다** (2026-09-06).
+      //
+      // 실사용에서 **이어하기로 들어간 대화가 매번 `closed 1000`으로 끊겼다.**
+      // 그 연결에만 다른 것이 이 값 하나였다 — Hume이 이미 끝난 대화 그룹을
+      // 이어달라는 요청으로 받고 **연결을 수락한 뒤 정상 종료**한 것으로
+      // 보인다. 값을 빼면 이어하기는 그대로 되고 **이전 대화 맥락만**
+      // 복원되지 않는다(백엔드도 같은 판단 — `request/app/chat-group-id.md`).
+      //
+      // F2-07은 P1이고 스코프 컷 3번이다. **대화가 아예 안 되는 것보다
+      // 맥락이 안 붙는 편이 낫다.** 원인이 확정되면 되돌린다 —
+      // `request/ai/hume-chat-group-resume.md`.
       _enter(session, resumed: true);
+      _unusedChatGroup = resumedChatGroupId;
     } on _Queued {
       // 줄을 섰다 — 오류가 아니다. 화면은 이미 대기 상태다.
     } catch (e) {
@@ -213,6 +229,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   /// 이어하기로 들어온 세션인지 — `E0700` 처리가 갈린다.
   bool _resumed = false;
 
+  /// 백엔드가 준 `chat_group_id`. **지금은 소켓에 싣지 않는다**(위 주석).
+  /// 값 자체는 계속 받아 두어 원인이 밝혀지면 바로 되돌릴 수 있게 한다.
+  // ignore: unused_field
+  String? _unusedChatGroup;
+
   /// Hume 동시 접속 상한을 소켓에서 만났다 (`E0700`, §2-14).
   ///
   /// **이어하기면 새 세션을 시작하지 않는다.** 시작하는 순간 중단된 세션이
@@ -233,9 +254,15 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   }
 
   /// 세션을 손에 넣었다 — 시계를 걸고 소켓을 연다.
-  void _enter(SessionStart session, {bool resumed = false}) {
+  void _enter(
+    SessionStart session, {
+    bool resumed = false,
+    String? chatGroupId,
+  }) {
     _stopQueue();
     _resumed = resumed;
+    // 새 대화면 이전 그룹을 지운다 — 남겨두면 다음 소켓에 실린다.
+    ref.read(chatGroupIdProvider.notifier).state = chatGroupId;
     ref.read(activeSessionProvider.notifier).state = session;
     setState(() =>
         _state = resumed ? TalkState.resumed : TalkState.listening);
@@ -246,7 +273,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     if (ref.read(dataModeProvider) == DataMode.sample && !Env.hasEviOverride) {
       return;
     }
-    _connectVoice(session);
+    _connectVoice(session, chatGroupId);
   }
 
   // ---------------------------------------------------------------------
@@ -335,7 +362,15 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   }
 
   /// EVI 소켓을 열고 사건을 화면 상태로 옮긴다.
-  Future<void> _connectVoice(SessionStart session) async {
+  /// EVI 소켓을 연다.
+  ///
+  /// **[chatGroupId]는 이어하기일 때만 값이 있다.** 한때 공유 상태
+  /// (`chatGroupIdProvider`)를 여기서 직접 읽었는데, 그 값이 **이전 대화의
+  /// 것으로 남아 있어 새 대화의 소켓에 실렸다** — Hume은 이미 끝난 대화
+  /// 그룹을 이어달라는 요청으로 받고 **연결을 받아들인 뒤 정상 종료(1000)**
+  /// 했다. 2026-09-06 실사용에서 "첫 대화 이후 계속 연결이 끊어진다"로
+  /// 드러났다. 넘겨받은 값만 쓴다.
+  Future<void> _connectVoice(SessionStart session, String? chatGroupId) async {
     final evi = ref.read(eviServiceProvider);
     _eviSub?.cancel();
     _eviSub = evi.events.listen(_onEvi);
@@ -343,7 +378,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
       accessToken: session.humeAccessToken,
       configId: session.humeConfigId,
       sessionId: session.sessionId,
-      resumedChatGroupId: ref.read(chatGroupIdProvider),
+      resumedChatGroupId: chatGroupId,
     );
   }
 
@@ -379,9 +414,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         _stopThinking();
         setState(() => _state = TalkState.listening);
 
-      case EviClosed():
+      case EviClosed(:final code, :final reason):
         // 대화 중 끊긴 것이면 알린다. 우리가 끊은 경우는 이미 화면을 떠났다.
-        setState(() => _state = TalkState.networkLost);
+        setState(() {
+          if (Env.showErrorDetail) {
+            _heard = 'closed ${code ?? '-'} ${reason ?? ''}'.trim();
+          }
+          _state = TalkState.networkLost;
+        });
 
       case EviFailed(:final reason):
         if (reason == EviFailure.busy) {
@@ -389,6 +429,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
           return;
         }
         _stopThinking();
+        if (Env.showErrorDetail) {
+          _heard = '$reason ${ref.read(eviServiceProvider).lastSocketError ?? ''}'
+              .trim();
+        }
         setState(() => _state = switch (reason) {
               EviFailure.micDenied => TalkState.micDenied,
               EviFailure.network => TalkState.networkLost,
@@ -576,9 +620,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     // 컨테이너의 것이라 나중에 써도 안전하다.
     final session = ref.read(activeSessionProvider.notifier);
     final inConversation = ref.read(inConversationProvider.notifier);
+
+    // **홈이 `openSession`을 다시 읽게 한다.** 「대화 마치기」는 이미
+    // 무효화하지만 **뒤로 가기는 그 경로를 타지 않아서**, 대화 도중에 나오면
+    // 홈이 새로고침 전까지 "오늘 이야기하기"를 그대로 보여줬다 — 실제로는
+    // 이어할 대화가 열려 있는데도(F2-07). 2026-09-06 실사용에서 나왔다.
+    final container = ProviderScope.containerOf(context, listen: false);
     Future.microtask(() {
       session.state = null;
       inConversation.state = false;
+      container.invalidate(meProvider);
     });
     super.deactivate();
   }
@@ -604,7 +655,6 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             offset: 8,
             cool: 0.85,
             warm: 0.60,
-            caption: '오늘 완전 괜찮았어요',
           ),
         TalkState.speaking =>
           const _Ring('말하고 있습니다', size: 168, offset: 3, cool: 0.50, warm: 0.35),
@@ -626,7 +676,6 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             offset: 7,
             cool: 0.80,
             warm: 0.55,
-            caption: '그래서 좀 지치더라고요',
             nearEnd: true,
           ),
         // 아직 대화가 아니라 **기다림**이다 — 링을 작고 흐리게 둔다.
@@ -758,12 +807,17 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
                 child: Column(
                   children: [
                     SmallLabel(r.label),
+                    // 진단 줄. **클래스만 만들어 놓고 붙이는 것을 잊어
+                    // 「숫자를 보라」고 말하면서 화면에는 없던 일이 있었다**
+                    // (2026-09-06). 만든 계측은 반드시 보이는 곳에 둔다.
+                    if (Env.showErrorDetail)
+                      _DiagnosticLine(evi: ref.read(eviServiceProvider)),
                     // 실제 발화가 들어오면 대본 문구 대신 그것을 띄운다.
                     // **AI 발화는 여기 오지 않는다** — 소리로만 듣는다 (§6-1).
-                    if ((_heard ?? r.caption) != null) ...[
+                    if (_heard != null) ...[
                       const SizedBox(height: Space.lg + 2),
                       Text(
-                        _heard ?? r.caption!,
+                        _heard!,
                         textAlign: TextAlign.center,
                         style: AppType.serif(
                           size: 22,
@@ -873,7 +927,6 @@ class _Ring {
     required this.offset,
     required this.cool,
     required this.warm,
-    this.caption,
     this.sub,
     this.error,
     this.cta,
@@ -885,11 +938,62 @@ class _Ring {
   final double offset;
   final double cool;
   final double warm;
-  final String? caption;
   final String? sub;
   final String? error;
   final String? cta;
   final bool nearEnd;
+}
+
+/// 진단 한 줄 — **`SHOW_ERROR_DETAIL`에서만 나온다.**
+///
+/// 끊김의 책임을 가르기 위한 것이다. `끼어들기`가 늘면 Hume이 사용자가
+/// 말한다고 판단한 것이고(에코·VAD), `조각`만 늘고 소리가 멈추면 우리 재생이다.
+class _DiagnosticLine extends StatefulWidget {
+  const _DiagnosticLine({required this.evi});
+
+  final EviService evi;
+
+  @override
+  State<_DiagnosticLine> createState() => _DiagnosticLineState();
+}
+
+class _DiagnosticLineState extends State<_DiagnosticLine> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final speaker = widget.evi.speaker;
+    final chunks = speaker is AudioPlayersSpeaker ? speaker.received : -1;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.md),
+      child: Text(
+        '마이크 ${widget.evi.micLevel} (최대 ${widget.evi.micPeak}) · '
+        'AI 발화 ${widget.evi.assistantTurns} · 조각 $chunks · '
+        '끼어들기 ${widget.evi.interruptions}',
+        textAlign: TextAlign.center,
+        style: AppType.sans(
+          size: AppType.labelSize,
+          color: t.faint,
+          height: 1.2,
+        ),
+      ),
+    );
+  }
 }
 
 /// F11-01 데모 모드 — 노출 판정은 [_ConversationScreenState._showDemo]가 한다.

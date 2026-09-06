@@ -48,8 +48,18 @@ class EviUserInterruption extends EviEvent {
 }
 
 /// 소켓이 닫혔다 — 정상 종료 포함.
+///
+/// [code]·[reason]은 **왜 닫혔는지를 아는 유일한 단서**다. Hume은 거절을
+/// 오류 프레임 없이 close로만 알리는 경우가 있어, 이게 없으면 화면에는
+/// "연결이 끊어졌습니다"만 남고 원인이 사라진다.
 class EviClosed extends EviEvent {
-  const EviClosed();
+  const EviClosed({this.code, this.reason});
+
+  final int? code;
+  final String? reason;
+
+  @override
+  String toString() => 'closed ${code ?? '-'} ${reason ?? ''}'.trim();
 }
 
 /// 실패. **원인별로 화면 문구가 갈린다** (F2-04, design-system §7-1).
