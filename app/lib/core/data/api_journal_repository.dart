@@ -2,6 +2,7 @@ import '../models/auth_models.dart';
 import '../models/live_models.dart';
 import '../models/observation_models.dart';
 import '../models/paged.dart';
+import '../models/queue_models.dart';
 import '../models/record_models.dart';
 import '../models/session_models.dart';
 import '../models/trend_models.dart';
@@ -92,10 +93,22 @@ class ApiJournalRepository implements JournalRepository {
       );
 
   @override
-  Future<SessionStart> startSession() => _api.post(
+  Future<SessionStartResult> startSession() => _api.postByStatus(
         Endpoints.sessionStart,
-        parse: SessionStart.fromJson,
+        parse: (json, status) => status == 202
+            ? SessionQueued(QueueTicket.fromJson(json))
+            : SessionOpened(SessionStart.fromJson(json)),
       );
+
+  @override
+  Future<QueueTicket> queueTicket(String ticketId) => _api.get(
+        Endpoints.sessionQueue(ticketId),
+        parse: QueueTicket.fromJson,
+      );
+
+  @override
+  Future<void> leaveQueue(String ticketId) =>
+      _api.deleteNoContent(Endpoints.sessionQueue(ticketId));
 
   @override
   Future<SessionResume> resumeSession(String sessionId) => _api.post(
@@ -109,6 +122,13 @@ class ApiJournalRepository implements JournalRepository {
         Endpoints.sessionEnd(sessionId),
         body: {'endReason': endReason},
         parse: SessionEnd.fromJson,
+      );
+
+  @override
+  Future<void> putChatGroup(String sessionId, String chatGroupId) =>
+      _api.postNoContent(
+        Endpoints.sessionChatGroup(sessionId),
+        body: {'chatGroupId': chatGroupId},
       );
 
   @override

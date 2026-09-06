@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_journal/core/data/journal_repository.dart';
 import 'package:voice_journal/core/data/sample_journal_repository.dart';
 import 'package:voice_journal/core/models/paged.dart';
+import 'package:voice_journal/core/models/queue_models.dart';
 import 'package:voice_journal/core/models/trend_models.dart';
 
 void main() {
@@ -49,7 +50,10 @@ void main() {
     final repo = SampleJournalRepository(delay: Duration.zero);
 
     test('세션 시작이 주는 Hume 토큰은 가짜다 — 실제 통화가 열리지 않는다', () async {
-      final s = await repo.startSession();
+      // 샘플 모드는 줄을 서지 않는다 — 대기열은 Hume 상한 때문에 있는 것이고
+      // 여기서는 Hume에 붙지 않는다 (§2-14).
+      final opened = await repo.startSession();
+      final s = (opened as SessionOpened).session;
       expect(s.humeAccessToken, 'sample-not-a-real-token');
       expect(s.humeAccessToken.contains('.'), isFalse,
           reason: 'JWT 모양이면 실수로 EVI에 붙일 수 있다');
@@ -152,6 +156,52 @@ void main() {
       await repo.startSession();
       final end = await repo.endSession('s', endReason: 'hard_cut');
       expect(end.sessionId, 's');
+    });
+  });
+
+  group('대기열 (계약 v1.9 §2-14)', () {
+    test('202 본문을 티켓으로 읽는다 — position은 1부터', () {
+      final t = QueueTicket.fromJson(const {
+        'ticketId': 'b2f4c1a0',
+        'position': 3,
+        'pollIntervalSec': 2,
+        'session': null,
+      });
+      expect(t.position, 3);
+      expect(t.isReady, isFalse, reason: '내 차례가 아니다');
+      expect(t.session, isNull, reason: '자리를 미리 잡아 두지 않는다');
+    });
+
+    test('position 0이면 session이 입장권이다', () {
+      final t = QueueTicket.fromJson({
+        'ticketId': 'b2f4c1a0',
+        'position': 0,
+        'pollIntervalSec': 2,
+        'session': {
+          'sessionId': '550e8400-e29b-41d4-a716-446655440000',
+          'humeAccessToken': 'tok',
+          'humeTokenExpiresAt': '2026-09-06T00:30:00Z',
+          'thresholdMode': 'fixed',
+          'gapThreshold': 0.9,
+          'softWrapSec': 300,
+          'hardCutSec': 420,
+          'demoMode': false,
+          'humeConfigId': 'cfg',
+          'livePollIntervalSec': 2,
+        },
+      });
+      expect(t.isReady, isTrue);
+      expect(t.session!.humeConfigId, 'cfg');
+    });
+
+    test('pollIntervalSec이 없으면 2초 — 앱에 상수로 박지 않는다', () {
+      final t = QueueTicket.fromJson(const {'ticketId': 'x', 'position': 1});
+      expect(t.pollIntervalSec, 2);
+    });
+
+    test('샘플 모드는 줄을 서지 않는다', () async {
+      final repo = SampleJournalRepository(delay: Duration.zero);
+      expect(await repo.startSession(), isA<SessionOpened>());
     });
   });
 }

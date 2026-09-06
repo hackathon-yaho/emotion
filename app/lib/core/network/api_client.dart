@@ -89,6 +89,10 @@ class ApiClient {
   }) =>
       _send(() => _dio.delete<dynamic>(path), parse);
 
+  /// 204(본문 없음) 응답용 POST — 예: `POST /api/session/{id}/chat-group`.
+  Future<void> postNoContent(String path, {Object? body}) =>
+      _send<void>(() => _dio.post<dynamic>(path, data: body), (_) {});
+
   /// 204(본문 없음) 응답용.
   ///
   /// `body`는 `DELETE /api/account`처럼 **본문이 선택인** 경우에만 쓴다
@@ -96,10 +100,32 @@ class ApiClient {
   Future<void> deleteNoContent(String path, {Object? body}) =>
       _send<void>(() => _dio.delete<dynamic>(path, data: body), (_) {});
 
+  /// 상태 코드까지 보고 파싱해야 하는 경우 (예: `POST /api/session/start`가
+  /// **200이면 세션, 202면 대기 티켓**이다 — 계약 §2-4·§2-14).
+  ///
+  /// 본문 모양으로 짐작하지 않는다. 모양이 겹치는 날 조용히 틀린다.
+  Future<T> postByStatus<T>(
+    String path, {
+    Object? body,
+    bool authenticated = true,
+    required T Function(Map<String, dynamic> json, int status) parse,
+  }) =>
+      _send(
+        () => _dio.post<dynamic>(
+          path,
+          data: body,
+          options: Options(extra: {_noAuth: !authenticated}),
+        ),
+        // 실제로는 아래 `withStatus`가 쓰인다. 이 자리는 도달하지 않는다.
+        (json) => parse(json, 200),
+        withStatus: parse,
+      );
+
   Future<T> _send<T>(
     Future<Response<dynamic>> Function() call,
-    T Function(Map<String, dynamic> json) parse,
-  ) async {
+    T Function(Map<String, dynamic> json) parse, {
+    T Function(Map<String, dynamic> json, int status)? withStatus,
+  }) async {
     final Response<dynamic> res;
     try {
       res = await call();
@@ -112,7 +138,8 @@ class ApiClient {
     final status = res.statusCode ?? 0;
     if (status >= 200 && status < 300) {
       final data = res.data;
-      return parse(data is Map<String, dynamic> ? data : const {});
+      final json = data is Map<String, dynamic> ? data : const <String, dynamic>{};
+      return withStatus == null ? parse(json) : withStatus(json, status);
     }
 
     final err = _parseError(res);

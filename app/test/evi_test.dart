@@ -246,6 +246,25 @@ void main() {
       expect(events.whereType<EviClosed>(), isEmpty);
     });
 
+    test('E0700은 busy다 — 이어하기에서 새 세션을 만들면 안 되는 신호', () async {
+      // 계약 §2-14: 정원이 찬 순간에 이어하기하면 소켓에서 이 오류가 온다.
+      // 새로 시작하면 중단된 세션이 닫혀 이어할 대화가 사라진다.
+      await start();
+      channel.push({'type': 'error', 'slug': 'E0700'});
+      await settle();
+      expect(events.whereType<EviFailed>().last.reason, EviFailure.busy);
+    });
+
+    test('코드가 없어도 문구로 잡는다 — 슬러그는 바뀔 수 있다', () async {
+      await start();
+      channel.push({
+        'type': 'error',
+        'message': 'You have too many active chats associated with your account',
+      });
+      await settle();
+      expect(events.whereType<EviFailed>().last.reason, EviFailure.busy);
+    });
+
     test('인증 오류와 그 외를 갈라낸다 — 분류 못 한 것을 auth로 뭉개지 않는다', () async {
       await start();
       channel.push({'type': 'error', 'slug': 'invalid_token'});

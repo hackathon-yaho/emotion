@@ -10,6 +10,13 @@ abstract final class Endpoints {
   static String sessionEnd(String id) => '/api/session/$id/end';
   static String sessionResume(String id) => '/api/session/$id/resume';
 
+  /// 대기열 순번 폴링 · 기다리기 그만두기 (계약 v1.9 §2-14).
+  static String sessionQueue(String ticketId) =>
+      '/api/session/queue/$ticketId';
+
+  /// EVI가 준 `chat_group_id` 보관 (계약 v1.8 §2-5-2).
+  static String sessionChatGroup(String id) => '/api/session/$id/chat-group';
+
   /// 대화 중 턴 신호 (계약 v1.3 §2-13). **S02에서만 폴링한다.**
   static String sessionLive(String id) => '/api/session/$id/live';
 

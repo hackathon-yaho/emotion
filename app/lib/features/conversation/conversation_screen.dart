@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/live_models.dart';
+import '../../core/models/queue_models.dart';
 import '../../core/models/session_models.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/providers.dart';
 import '../../core/session/app_session.dart';
 import '../../core/session/session_clock.dart';
@@ -27,7 +29,21 @@ enum TalkState {
   connecting,
   resumed,
   listening,
+
+  /// 발화가 끝나고 첫 음성이 나오기 전 (F2-02, `request/app/conversation-latency.md`).
+  ///
+  /// **실측 p50 2.4초 · p95 3.2초다.** 그 사이 화면이 안 바뀌면 사용자는 앱이
+  /// 멈췄다고 판단한다 — 감정 대화는 한 마디가 무거워서 침묵이 더 길게
+  /// 느껴진다.
+  thinking,
+
   speaking,
+
+  /// 정원이 차서 줄을 서고 있다 (계약 v1.9 §2-14).
+  ///
+  /// **Hume 동시 접속 상한 때문이다** — Free 1 · Starter 5. 넘긴 연결은
+  /// 기다리지 못하고 `E0700`으로 거절당하므로 순번은 우리 서버가 만든다.
+  queued,
   quiet,
   nearEnd,
   micDenied,
@@ -66,7 +82,8 @@ class ConversationScreen extends ConsumerStatefulWidget {
   ConsumerState<ConversationScreen> createState() => _ConversationScreenState();
 }
 
-class _ConversationScreenState extends ConsumerState<ConversationScreen> {
+class _ConversationScreenState extends ConsumerState<ConversationScreen>
+    with SingleTickerProviderStateMixin {
   late TalkState _state = widget.initial;
 
   /// 방금 들은 사용자 발화 — 잠깐만 띄운다 (design-system §6-1).
@@ -77,6 +94,23 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   /// F2-03 — 하드컷 60초 전 표시 · 하드컷 자동 종료.
   Timer? _nearEndTimer;
   Timer? _hardCutTimer;
+
+  /// 「생각 중」이 길어졌는지. 실측 p95가 3.2초라 **그 위에서만** 한 줄 더
+  /// 붙인다 — 정상 범위에서 문구가 뜨면 매 턴 사과하는 화면이 된다.
+  static const _slowAfter = Duration(seconds: 4);
+  bool _slowThinking = false;
+  Timer? _slowTimer;
+
+  /// 「생각 중」의 느린 숨 — **기다림을 링이 감당한다.**
+  ///
+  /// 별도 표시(점 세 개·스피너)를 두지 않는다. 이 화면의 유일한 그림이 두
+  /// 링이고, 거기에 로딩 기호를 얹으면 조용한 언어가 깨진다.
+  ///
+  /// **생각 중일 때만 돈다.** 계속 돌리면 웹에서 매 프레임을 다시 그린다.
+  late final AnimationController _breath = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  );
 
   @override
   void initState() {
@@ -116,22 +150,144 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         ref.read(chatGroupIdProvider.notifier).state =
             r.resumedChatGroupId.isEmpty ? null : r.resumedChatGroupId;
       } else {
-        session = await repo.startSession();
+        final started = await repo.startSession();
         if (!mounted) return;
+        switch (started) {
+          case SessionOpened(:final session):
+            // 자리가 있었다 — 줄이 없거나 대기열이 꺼져 있다.
+            _enter(session);
+            return;
+          case SessionQueued(:final ticket):
+            _waitInQueue(ticket);
+            return;
+        }
       }
-      ref.read(activeSessionProvider.notifier).state = session;
-      setState(() => _state = open != null
-          ? TalkState.resumed
-          : TalkState.listening);
-      _startClock(session.hardCutSec);
-
-      if (ref.read(dataModeProvider) == DataMode.sample) return;
-      await _connectVoice(session);
+      _enter(session, resumed: true);
     } catch (_) {
       if (!mounted) return;
       // 원인별 문구는 F2-04 — 여기서는 "시작할 수 없다"로 모은다.
       setState(() => _state = TalkState.cannotStart);
     }
+  }
+
+  /// 이어하기로 들어온 세션인지 — `E0700` 처리가 갈린다.
+  bool _resumed = false;
+
+  /// Hume 동시 접속 상한을 소켓에서 만났다 (`E0700`, §2-14).
+  ///
+  /// **이어하기면 새 세션을 시작하지 않는다.** 시작하는 순간 중단된 세션이
+  /// 닫혀 이어할 대화가 사라진다 — 잠시 뒤 이어하기를 다시 시도한다.
+  /// 새 대화였다면 §2-4부터 다시 태운다(그러면 서버가 줄을 세워 준다).
+  void _onBusy() {
+    _stopThinking();
+    setState(() {
+      _state = TalkState.queued;
+      _ticket = null;
+    });
+    _queueTimer?.cancel();
+    _queueTimer = Timer(const Duration(seconds: 3), () {
+      // `_open()`은 `me().openSession`을 먼저 보므로, 이어하기 중이었다면
+      // 다시 이어하기로 들어간다 — 새 세션을 만들지 않는다.
+      if (mounted) _open();
+    });
+  }
+
+  /// 세션을 손에 넣었다 — 시계를 걸고 소켓을 연다.
+  void _enter(SessionStart session, {bool resumed = false}) {
+    _stopQueue();
+    _resumed = resumed;
+    ref.read(activeSessionProvider.notifier).state = session;
+    setState(() =>
+        _state = resumed ? TalkState.resumed : TalkState.listening);
+    _startClock(session.hardCutSec);
+
+    if (ref.read(dataModeProvider) == DataMode.sample) return;
+    _connectVoice(session);
+  }
+
+  // ---------------------------------------------------------------------
+  // 대기열 (§2-14)
+  // ---------------------------------------------------------------------
+
+  QueueTicket? _ticket;
+  Timer? _queueTimer;
+
+  String? get _queueSub {
+    final t = _ticket;
+    if (t == null) {
+      // 티켓 없이 기다리는 경우 — 소켓에서 상한을 만나 다시 시도하는 중이다.
+      return _resumed
+          ? '이어할 대화는 그대로 있습니다 · 잠시 뒤 다시 연결합니다'
+          : '자리가 나면 바로 시작됩니다';
+    }
+    return '${t.position}번째로 기다리고 있습니다 · 자리가 나면 바로 시작됩니다';
+  }
+
+  /// 줄을 선다. **간격은 서버가 준 `pollIntervalSec`을 쓴다.**
+  void _waitInQueue(QueueTicket ticket) {
+    setState(() {
+      _ticket = ticket;
+      _state = TalkState.queued;
+    });
+    _scheduleQueuePoll(ticket.pollIntervalSec);
+  }
+
+  void _scheduleQueuePoll(int seconds) {
+    _queueTimer?.cancel();
+    _queueTimer = Timer(Duration(seconds: seconds), _pollQueue);
+  }
+
+  /// 순번 폴링.
+  ///
+  /// **멈추면 티켓이 만료된다** — 브라우저를 닫은 사람이 줄을 영원히 막기
+  /// 때문이다. 만료(404)면 조용히 §2-4부터 다시 시작한다.
+  Future<void> _pollQueue() async {
+    final ticket = _ticket;
+    if (ticket == null || !mounted) return;
+    try {
+      final next =
+          await ref.read(journalRepositoryProvider).queueTicket(ticket.ticketId);
+      if (!mounted) return;
+      final session = next.session;
+      if (next.isReady && session != null) {
+        _enter(session);
+        return;
+      }
+      setState(() => _ticket = next);
+      _scheduleQueuePoll(next.pollIntervalSec);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 404) {
+        // 티켓이 만료됐다. 사용자에게 알릴 것이 없다 — 다시 줄을 선다.
+        _stopQueue();
+        await _open();
+        return;
+      }
+      // 그 외 실패는 폴링만 한 번 건너뛴다. 줄에서 밀려나지 않는다.
+      _scheduleQueuePoll(ticket.pollIntervalSec);
+    } on Object {
+      if (mounted) _scheduleQueuePoll(ticket.pollIntervalSec);
+    }
+  }
+
+  /// 기다리기 그만두기 — 줄에서 빠지고 화면을 떠난다.
+  Future<void> _leaveQueue() async {
+    final ticket = _ticket;
+    _stopQueue();
+    if (ticket != null) {
+      ref
+          .read(journalRepositoryProvider)
+          .leaveQueue(ticket.ticketId)
+          .ignore();
+    }
+    ref.read(inConversationProvider.notifier).state = false;
+    if (mounted) context.pop();
+  }
+
+  void _stopQueue() {
+    _queueTimer?.cancel();
+    _queueTimer = null;
+    _ticket = null;
   }
 
   /// EVI 소켓을 열고 사건을 화면 상태로 옮긴다.
@@ -156,9 +312,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     if (!mounted) return;
     switch (e) {
       case EviConnected(:final chatGroupId):
-        // F2-07의 원천. 백엔드에 넘길 엔드포인트는 아직 없다.
+        // F2-07의 원천 — 받자마자 서버에 올린다 (§2-5-2).
         if (chatGroupId != null) {
           ref.read(chatGroupIdProvider.notifier).state = chatGroupId;
+          _saveChatGroup(chatGroupId);
         }
         setState(() => _state = TalkState.listening);
 
@@ -167,12 +324,15 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         _showHeard(text);
 
       case EviAssistantSpoke():
+        _stopThinking();
         setState(() => _state = TalkState.speaking);
 
       case EviAssistantDone():
+        _stopThinking();
         setState(() => _state = TalkState.listening);
 
       case EviUserInterruption():
+        _stopThinking();
         setState(() => _state = TalkState.listening);
 
       case EviClosed():
@@ -180,25 +340,63 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         setState(() => _state = TalkState.networkLost);
 
       case EviFailed(:final reason):
+        if (reason == EviFailure.busy) {
+          _onBusy();
+          return;
+        }
+        _stopThinking();
         setState(() => _state = switch (reason) {
               EviFailure.micDenied => TalkState.micDenied,
               EviFailure.network => TalkState.networkLost,
               EviFailure.auth => TalkState.cannotStart,
-              EviFailure.unknown => TalkState.cannotStart,
+              EviFailure.busy || EviFailure.unknown => TalkState.cannotStart,
             });
     }
   }
 
-  /// 방금 들은 말을 잠깐 띄운다 (§6-1 절충안).
+  /// 방금 들은 말을 잠깐 띄우고 **「생각 중」으로 넘어간다** (§6-1 절충안).
+  ///
+  /// EVI가 `user_message`를 주는 시점이 전사가 확정된 순간이고, 그 뒤로
+  /// 분석·응답 호출이 순차로 돈다 — 여기서부터가 사용자가 기다리는 구간이다.
   void _showHeard(String text) {
     _heardTimer?.cancel();
+    _slowTimer?.cancel();
     setState(() {
       _heard = text;
-      _state = TalkState.listening;
+      _slowThinking = false;
+      _state = TalkState.thinking;
     });
+    _breath.repeat(reverse: true);
     _heardTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _heard = null);
     });
+    _slowTimer = Timer(_slowAfter, () {
+      if (mounted && _state == TalkState.thinking) {
+        setState(() => _slowThinking = true);
+      }
+    });
+  }
+
+  /// `chat_group_id`를 서버에 올린다 (§2-5-2, v1.8).
+  ///
+  /// **실패해도 재시도하지 않고 사용자에게도 알리지 않는다.** 이 값이 없으면
+  /// 그 세션만 이어하기의 맥락 복원이 빠질 뿐 대화는 멀쩡하고, 대화 중에
+  /// 재시도 루프를 돌릴 이유가 없다. 서버가 멱등이라 재연결 때 다시 보낸다.
+  void _saveChatGroup(String chatGroupId) {
+    final session = ref.read(activeSessionProvider);
+    if (session == null) return;
+    ref
+        .read(journalRepositoryProvider)
+        .putChatGroup(session.sessionId, chatGroupId)
+        .ignore();
+  }
+
+  /// 기다림이 끝났다 — 응답이 오기 시작했거나 상태가 바뀌었다.
+  void _stopThinking() {
+    _slowTimer?.cancel();
+    _slowThinking = false;
+    if (_breath.isAnimating) _breath.stop();
+    _breath.value = 0;
   }
 
   /// F2-03 — 하드컷을 향한 두 개의 타이머.
@@ -231,6 +429,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   /// 않는다.
   bool get _isTalking => switch (_state) {
         TalkState.listening ||
+        TalkState.thinking ||
         TalkState.speaking ||
         TalkState.quiet ||
         TalkState.resumed =>
@@ -296,7 +495,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
   @override
   void dispose() {
+    _queueTimer?.cancel();
+    _breath.dispose();
     _heardTimer?.cancel();
+    _slowTimer?.cancel();
     _nearEndTimer?.cancel();
     _hardCutTimer?.cancel();
     _eviSub?.cancel();
@@ -332,6 +534,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           const _Ring('말하고 있습니다', size: 168, offset: 3, cool: 0.50, warm: 0.35),
         TalkState.quiet =>
           const _Ring('듣고 있습니다', size: 184, offset: 5, cool: 0.50, warm: 0.32),
+        // 듣는 중보다 링이 **조금 작고 가깝다** — 밖으로 열려 있던 것이
+        // 안으로 모이는 모양이다. 색은 그대로다 (FR-030).
+        TalkState.thinking => _Ring(
+            '생각하고 있습니다',
+            size: 188,
+            offset: 4,
+            cool: 0.62,
+            warm: 0.44,
+            sub: _slowThinking ? '조금 오래 걸리고 있습니다' : null,
+          ),
         TalkState.nearEnd => const _Ring(
             '듣고 있습니다',
             size: 196,
@@ -340,6 +552,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             warm: 0.55,
             caption: '그래서 좀 지치더라고요',
             nearEnd: true,
+          ),
+        // 아직 대화가 아니라 **기다림**이다 — 링을 작고 흐리게 둔다.
+        TalkState.queued => _Ring(
+            '기다리고 있습니다',
+            size: 164,
+            offset: 3,
+            cool: 0.22,
+            warm: 0.16,
+            sub: _queueSub,
+            cta: '기다리기 그만두기',
           ),
         TalkState.micDenied => const _Ring(
             '마이크가 꺼져 있습니다',
@@ -428,12 +650,27 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              RingPair(
-                size: r.size,
-                offset: r.offset,
-                coolOpacity: r.cool,
-                warmOpacity: r.warm,
-              ),
+              if (_state == TalkState.thinking)
+                AnimatedBuilder(
+                  animation: _breath,
+                  builder: (context, _) {
+                    // 폭이 좁다 — 숨이지 깜빡임이 아니다.
+                    final t = Curves.easeInOut.transform(_breath.value);
+                    return RingPair(
+                      size: r.size + t * 6,
+                      offset: r.offset + t * 3,
+                      coolOpacity: r.cool - t * 0.14,
+                      warmOpacity: r.warm - t * 0.10,
+                    );
+                  },
+                )
+              else
+                RingPair(
+                  size: r.size,
+                  offset: r.offset,
+                  coolOpacity: r.cool,
+                  warmOpacity: r.warm,
+                ),
               const SizedBox(height: 44),
               ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 120),
@@ -512,6 +749,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
         if (r.cta == null)
           OutlineAction(label: '대화 마치기', height: 56, onPressed: _end)
+        else if (_state == TalkState.queued)
+          // 줄에서 빠지는 것은 파괴적 동작이 아니다 — 테두리 버튼으로 둔다.
+          OutlineAction(label: r.cta!, height: 56, onPressed: _leaveQueue)
         else
           FilledAction(label: r.cta!, height: 56, onPressed: _open),
         const SizedBox(height: 40),
@@ -660,12 +900,14 @@ class _StatePicker extends StatelessWidget {
     TalkState.connecting: '연결 중',
     TalkState.resumed: '이어하기',
     TalkState.listening: '듣는 중',
+    TalkState.thinking: '생각 중',
     TalkState.speaking: '말하는 중',
     TalkState.quiet: '조용',
     TalkState.nearEnd: '마무리 임박',
     TalkState.micDenied: '마이크 거부',
     TalkState.networkLost: '네트워크 끊김',
     TalkState.cannotStart: '연결 불가',
+    TalkState.queued: '대기열',
   };
 
   @override

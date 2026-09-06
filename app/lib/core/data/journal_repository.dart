@@ -2,6 +2,7 @@ import '../models/auth_models.dart';
 import '../models/live_models.dart';
 import '../models/observation_models.dart';
 import '../models/paged.dart';
+import '../models/queue_models.dart';
 import '../models/record_models.dart';
 import '../models/session_models.dart';
 import '../models/trend_models.dart';
@@ -47,11 +48,30 @@ abstract interface class JournalRepository {
 
   Future<SessionDeleteResult> deleteSession(String sessionId);
 
-  Future<SessionStart> startSession();
+  /// 세션 시작 (§2-4). **200이면 세션, 202면 대기 티켓**이다 (§2-14).
+  ///
+  /// 대기열이 꺼져 있으면(서버 기본) 항상 [SessionOpened]다.
+  Future<SessionStartResult> startSession();
+
+  /// 대기 순번 폴링 (§2-14). `position == 0`이면 `session`이 입장권이다.
+  ///
+  /// **폴링을 멈추면 티켓이 만료된다** — 브라우저를 닫은 사람이 줄을 영원히
+  /// 막기 때문이다. 만료·남의 티켓은 404다.
+  Future<QueueTicket> queueTicket(String ticketId);
+
+  /// 기다리기 그만두기 (§2-14). 없는 티켓이어도 204다.
+  Future<void> leaveQueue(String ticketId);
   Future<SessionResume> resumeSession(String sessionId);
   /// 세션 종료 (§2-5). `endReason`은 `user_end` | `soft_wrap` | `hard_cut`
   /// 중 하나다 — **앱은 `timeout`·`resumed`를 보내지 않는다.**
   Future<SessionEnd> endSession(String sessionId, {required String endReason});
+
+  /// EVI 소켓 직후 받은 `chat_group_id`를 올린다 (§2-5-2, v1.8).
+  ///
+  /// **멱등하고, 종료된 세션에도 204다.** 그래서 앱은 재연결마다 그냥 보내고
+  /// 실패해도 재시도하지 않는다 — 이 값이 없으면 그 세션만 맥락 복원이
+  /// 안 되고, 대화 자체는 멀쩡하다.
+  Future<void> putChatGroup(String sessionId, String chatGroupId);
 
   /// S02 폴링 — 위기 신호와 데모용 턴 (§2-13).
   Future<LiveSignal> live(String sessionId);

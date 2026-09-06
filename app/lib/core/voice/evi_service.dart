@@ -196,9 +196,16 @@ class EviService {
         // 갈라내고 나머지는 unknown이다 — 분류하지 못한 것을 auth로 뭉개면
         // "다시 시도"가 소용없는 상황에서도 다시 시도를 권하게 된다.
         final slug = (json['slug'] ?? json['code'] ?? '').toString();
-        _fail(slug.contains('auth') || slug.contains('token')
-            ? EviFailure.auth
-            : EviFailure.unknown);
+        final message = (json['message'] ?? '').toString().toLowerCase();
+        // E0700 — 동시 접속 상한. 코드가 바뀔 수 있어 문구도 함께 본다.
+        final busy = slug.contains('E0700') ||
+            message.contains('too many active chats');
+        _fail(switch (true) {
+          _ when busy => EviFailure.busy,
+          _ when slug.contains('auth') || slug.contains('token') =>
+            EviFailure.auth,
+          _ => EviFailure.unknown,
+        });
     }
   }
 

@@ -3,6 +3,7 @@ import '../models/auth_models.dart';
 import '../models/live_models.dart';
 import '../models/observation_models.dart';
 import '../models/paged.dart';
+import '../models/queue_models.dart';
 import '../models/record_models.dart';
 import '../models/session_models.dart';
 import '../models/trend_models.dart';
@@ -85,13 +86,28 @@ class SampleJournalRepository implements JournalRepository {
         ),
       );
 
+  /// **샘플 모드는 줄을 서지 않는다.** 대기열은 Hume 동시 접속 상한 때문에
+  /// 있는 것인데 여기서는 Hume에 붙지 않는다.
   @override
-  Future<SessionStart> startSession() {
+  Future<SessionStartResult> startSession() {
     _startedAt = DateTime.now();
     _crisisFired = false;
     _turnIndex = 0;
-    return _wait(Sample.sessionStart);
+    return _wait(SessionOpened(Sample.sessionStart));
   }
+
+  @override
+  Future<QueueTicket> queueTicket(String ticketId) => _wait(
+        QueueTicket(
+          ticketId: ticketId,
+          position: 0,
+          pollIntervalSec: 2,
+          session: Sample.sessionStart,
+        ),
+      );
+
+  @override
+  Future<void> leaveQueue(String ticketId) => Future.delayed(delay);
 
   @override
   Future<SessionResume> resumeSession(String sessionId) {
@@ -134,6 +150,10 @@ class SampleJournalRepository implements JournalRepository {
       turns: [Sample.liveTurn(_turnIndex)],
     ));
   }
+
+  @override
+  Future<void> putChatGroup(String sessionId, String chatGroupId) =>
+      Future.delayed(delay);
 
   @override
   Future<void> deleteAccount({String? kakaoAuthCode, String? redirectUri}) =>

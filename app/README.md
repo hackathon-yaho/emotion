@@ -184,6 +184,7 @@ flutter run -d chrome --dart-define=SAMPLE_DATA=true
 | `sessionsProvider` | S01 · S05 |
 | `sessionDetailProvider(id)` | S05-1 |
 | `activeSessionProvider` · `liveSignalProvider` | S02 |
+| `chatGroupIdProvider` | S02 — EVI가 준 값을 §2-5-2로 올린다 |
 | `themeModeProvider` · `demoModeProvider` | S06 — **저장됩니다**(기기 저장소) |
 | `pendingSignOutProvider` | F1-02 — 대화 중 만료를 미뤄 두는 표시 |
 | `lastSessionEndProvider` | S02-1 |
