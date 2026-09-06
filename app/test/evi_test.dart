@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'package:voice_journal/core/providers.dart';
 import 'package:voice_journal/core/voice/evi_event.dart';
 import 'package:voice_journal/core/voice/evi_service.dart';
 import 'package:voice_journal/core/voice/mic.dart';
@@ -306,6 +308,37 @@ void main() {
       channel.hangUp();
       await settle();
       expect(events.whereType<EviClosed>(), isEmpty);
+    });
+  });
+
+  group('서비스 수명 (2026-09-06 회귀)', () {
+    // **한때 `eviServiceProvider`가 `autoDispose`였다.** 화면이 `ref.read`로
+    // 집으면 듣는 사람이 없어 **읽자마자 폐기**됐고, `dispose()`가
+    // `mic.close()`를 불러 레코더를 죽였다. 그 뒤 `startStream`이 실패하는데
+    // 이벤트 스트림도 이미 닫혀 있어 **화면은 실패조차 듣지 못하고 "듣고
+    // 있습니다"로 남았다** — 마이크가 조용한 채 대화가 흘러가는 모양이다.
+    //
+    // 가짜 EVI 서버로 잡았다. 소켓은 붙고 `session_settings`도 갔는데
+    // `audio_input`이 한 프레임도 오지 않았다.
+    test('read만 해도 인스턴스가 살아 있고 다시 읽으면 같은 것이다', () async {
+      final container = ProviderContainer(overrides: [
+        micProvider.overrideWithValue(_FakeMic()),
+        speakerProvider.overrideWithValue(_FakeSpeaker()),
+      ]);
+      addTearDown(container.dispose);
+
+      final first = container.read(eviServiceProvider);
+      await Future<void>.delayed(Duration.zero);
+      final second = container.read(eviServiceProvider);
+
+      expect(identical(first, second), isTrue);
+      // 폐기됐다면 이벤트 스트림이 닫혀 있다.
+      expect(first.events.isBroadcast, isTrue);
+      await expectLater(
+        first.events.timeout(const Duration(milliseconds: 20),
+            onTimeout: (sink) => sink.close()).toList(),
+        completes,
+      );
     });
   });
 }

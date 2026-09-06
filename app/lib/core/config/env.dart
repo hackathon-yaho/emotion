@@ -46,4 +46,16 @@ abstract final class Env {
   /// 백엔드·Hume을 타지 않고 화면과 흐름만 확인한다. 주소에 `?sample=1`을
   /// 붙여도 같다 (`dataModeProvider`).
   static const sampleData = bool.fromEnvironment('SAMPLE_DATA');
+
+  /// EVI 소켓 주소를 갈아끼운다 — **개발·검증 전용**.
+  ///
+  /// 마이크 왕복을 확인하려면 Hume 토큰이 필요한데 그 토큰은 로그인 →
+  /// `session/start`를 거쳐야만 나온다. 이 값을 주면 **가짜 EVI 서버**에
+  /// 붙어 마이크 캡처·PCM 프레이밍·전송·재생까지를 Hume 없이 확인할 수 있다.
+  ///
+  /// **비어 있으면 항상 `wss://api.hume.ai`다.** 배포 빌드에는 값이 없다.
+  static const _eviWsUrl = String.fromEnvironment('EVI_WS_URL');
+
+  static String? get eviWsUrl => _eviWsUrl.isEmpty ? null : _eviWsUrl;
+  static bool get hasEviOverride => eviWsUrl != null;
 }

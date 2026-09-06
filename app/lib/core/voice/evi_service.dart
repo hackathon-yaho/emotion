@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../config/env.dart';
+
 import 'evi_event.dart';
 import 'mic.dart';
 import 'speaker.dart';
@@ -43,12 +45,20 @@ class EviService {
   final WebSocketChannel Function(Uri) connect;
   final Uri Function(Map<String, String>) _endpoint;
 
-  static Uri _defaultEndpoint(Map<String, String> query) => Uri(
-        scheme: 'wss',
-        host: 'api.hume.ai',
-        path: '/v0/evi/chat',
-        queryParameters: query,
-      );
+  static Uri _defaultEndpoint(Map<String, String> query) {
+    // 개발·검증용 주소가 있으면 그쪽으로 (Env.eviWsUrl). 배포 빌드에는 값이
+    // 없어 항상 Hume이다.
+    final override = Env.eviWsUrl;
+    if (override != null) {
+      return Uri.parse(override).replace(queryParameters: query);
+    }
+    return Uri(
+      scheme: 'wss',
+      host: 'api.hume.ai',
+      path: '/v0/evi/chat',
+      queryParameters: query,
+    );
+  }
 
   final _events = StreamController<EviEvent>.broadcast();
   Stream<EviEvent> get events => _events.stream;

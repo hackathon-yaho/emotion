@@ -220,11 +220,25 @@ final liveSignalProvider = StreamProvider<LiveSignal>((ref) async* {
 // 음성 (EVI)
 // ---------------------------------------------------------------------------
 
-/// EVI 소켓. **샘플 모드에서는 만들지 않는다** — 붙을 토큰 자체가 가짜다.
+/// EVI 소켓.
 ///
 /// 화면이 직접 만들지 않고 여기서 주는 이유는 테스트에서 갈아끼우기 위함이다.
-final eviServiceProvider = Provider.autoDispose<EviService>((ref) {
-  final service = EviService(mic: RecordMic(), speaker: AudioPlayersSpeaker());
+///
+/// **`autoDispose`가 아니다.** 한때 그랬는데, 화면이 `ref.read`로 집으면
+/// **읽자마자 폐기**되어 `dispose()`가 `mic.close()`를 부르고 — 그 뒤에 오는
+/// `startStream`이 죽은 레코더에 걸렸다. 게다가 그때는 이벤트 스트림도 이미
+/// 닫혀 있어 **화면은 실패조차 듣지 못하고 "듣고 있습니다"로 남았다.**
+/// 마이크가 조용한 채로 대화가 진행되는 최악의 모양이라, 수명을 앱에 묶는다.
+/// 세션이 끝날 때는 화면이 `stop()`을 부른다.
+/// 마이크·스피커는 따로 둔다 — 테스트가 갈아끼운다.
+final micProvider = Provider<Mic>((_) => RecordMic());
+final speakerProvider = Provider<Speaker>((_) => AudioPlayersSpeaker());
+
+final eviServiceProvider = Provider<EviService>((ref) {
+  final service = EviService(
+    mic: ref.watch(micProvider),
+    speaker: ref.watch(speakerProvider),
+  );
   ref.onDispose(service.dispose);
   return service;
 });

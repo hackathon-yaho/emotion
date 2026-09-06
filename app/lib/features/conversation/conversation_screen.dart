@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/live_models.dart';
+import '../../core/config/env.dart';
 import '../../core/models/queue_models.dart';
 import '../../core/models/session_models.dart';
 import '../../core/network/api_exception.dart';
@@ -201,7 +202,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         _state = resumed ? TalkState.resumed : TalkState.listening);
     _startClock(session.hardCutSec);
 
-    if (ref.read(dataModeProvider) == DataMode.sample) return;
+    // 샘플 모드는 소켓을 열지 않는다 — 단, 검증용 주소가 주어졌으면 그쪽으로
+    // 붙는다. 그 주소는 Hume이 아니다 (`Env.eviWsUrl`).
+    if (ref.read(dataModeProvider) == DataMode.sample && !Env.hasEviOverride) {
+      return;
+    }
     _connectVoice(session);
   }
 

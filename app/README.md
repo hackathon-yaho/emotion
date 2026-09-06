@@ -258,7 +258,7 @@ lib/
 | ~~데이터 연결~~ | ✅ 해결 — 화면이 `JournalRepository`를 봅니다. 기본은 실제 API이고, 샘플은 **샘플 모드에서만** 나옵니다(위 「데이터는 어디서 오나」) |
 | **제출 전 필수** | **`SAMPLE_DATA` 저장소 변수를 끄고 재빌드**해야 합니다. 지금은 켜져 있어 배포본이 준비된 데이터로 돕니다 — 위 경고 참조 |
 | 로그인 | 흐름은 확정(인가 코드)이고 **계약 v1.6 §2-1도 확정**인데 카카오 키가 없어 아직 구현하지 않았습니다. `POST /api/auth/kakao` 호출은 그래서 리포지토리에 없습니다 |
-| EVI 음성 | 구현했습니다(`core/voice/`, 테스트 17건). **마이크 음성 왕복만 미검증** — 토큰이 `session/start`에서만 나와 백엔드가 붙는 날 확인합니다 |
+| EVI 음성 | 구현·검증했습니다(`core/voice/`, 테스트 19건 + 가짜 EVI 서버 왕복). **Hume 실서버 왕복만 남았습니다** — 로그인해서 받는 단기 토큰이 있어야 합니다 |
 
 ## 디자인 캔버스
 
@@ -291,13 +291,31 @@ wss://api.hume.ai/v0/evi/chat?access_token={humeAccessToken}&config_id={humeConf
 - **`user_interruption`에서 재생 큐를 비웁니다.** 안 비우면 사용자가 끊었는데도 AI가 계속 말합니다
 - **자막을 쌓지 않습니다** (design-system §6-1). 사용자 발화만 3초간 띄우고, AI 발화는 텍스트로 그리지 않습니다 — 소리로 듣는 것을 글로 또 보여주면 채팅앱이 됩니다
 
-### 아직 검증되지 않은 것
+### 마이크 왕복 — 앱 구간은 검증했습니다 (2026-09-06)
 
-**마이크 음성 왕복은 실측하지 못했습니다** (PRD §14-4에 남아 있는 항목). 카카오 키도 백엔드도 없어 실제 세션을 열 수 없고, **Hume 토큰은 `session/start`에서만 나옵니다.** 프로토콜·상태 전이·실패 경로는 테스트로 덮었지만, **브라우저에서 실제 소리가 오가는 것은 백엔드가 붙는 날 확인해야 합니다.**
+헤드리스 크롬의 **가짜 마이크**와 **가짜 EVI 서버**로 왕복을 돌렸습니다. Hume 토큰 없이 확인할 수 있는 전 구간입니다.
 
-웹에서 쓰는 형식은 16kHz · 모노 · PCM16(`linear16`)이고, `record_web`이 AudioWorklet으로 스트림을 줍니다(`assets/packages/record_web/assets/js/record.worklet.js` — 빌드에 포함되는 것 확인했습니다). 마이크는 **HTTPS나 localhost에서만** 열립니다 — Pages는 HTTPS라 문제없습니다.
+| 확인 | 결과 |
+| --- | --- |
+| 마이크 열림 | ✅ `getUserMedia` → AudioWorklet |
+| 형식 | ✅ `session_settings`가 **먼저** 나가고 `linear16 · 16000 · 1` |
+| 전송 | ✅ `audio_input` **356프레임 · 529KB**, base64가 유효한 PCM16 (14초 · 16kHz) |
+| 수신 | ✅ `user_message` · `assistant_message` · `audio_output` |
+| 재생 | ✅ 앱이 WAV를 디코드해 **재생을 시작**(`play()` 호출을 후킹해 확인) |
 
-**샘플 모드에서는 소켓을 아예 열지 않습니다.** 토큰이 가짜라 붙지도 못하지만, 시도 자체를 하지 않아야 실수로 실제 통화가 열릴 여지가 없습니다.
+**Hume 실서버 왕복은 아직입니다** — 그쪽은 로그인해서 받은 단기 토큰이 있어야 열립니다. 여기서 확인한 것은 **우리 쪽 전 구간**이고, Hume 프로토콜 자체는 `test/evi_test.dart` 19건이 가짜 소켓으로 봅니다.
+
+**검증하다 실제 결함을 하나 잡았습니다.** `eviServiceProvider`가 `autoDispose`였는데 화면이 `ref.read`로 집으면 듣는 사람이 없어 **읽자마자 폐기**됐습니다. 폐기가 `mic.close()`를 부르고, 그 뒤 `startStream`이 죽은 레코더에 걸리는데 **이벤트 스트림도 이미 닫혀 있어 화면은 실패조차 듣지 못했습니다** — 마이크가 조용한 채 "듣고 있습니다"로 대화가 흘러가는 모양입니다. 단위 테스트로는 안 보이고 **소켓에 프레임이 한 건도 안 오는 것**으로 드러났습니다. 회귀 테스트를 넣었습니다.
+
+#### 다시 돌리는 방법
+
+```bash
+flutter build web --release \
+  --dart-define=SAMPLE_DATA=true \
+  --dart-define=EVI_WS_URL=ws://localhost:8110/chat
+```
+
+`EVI_WS_URL`은 **개발·검증 전용**입니다 — 비어 있으면 항상 `wss://api.hume.ai`이고, 배포 빌드에는 값이 없습니다. 크롬은 `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`로 띄웁니다. **`--use-file-for-fake-audio-capture`에 `%noloop`을 붙이면 `NotReadableError`로 마이크가 안 열립니다** — 파일을 쓸 거면 접미사 없이 쓰고, 그마저도 무음이 나와서 저는 크롬 내장 톤을 썼습니다.
 
 ---
 
