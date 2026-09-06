@@ -109,6 +109,20 @@ http://localhost:3000/
 
 ### 샘플 모드 — 있는 이유는 Hume 과금입니다
 
+> ### ⚠️ 지금 배포본은 **샘플 모드**입니다 (2026-09-06)
+>
+> 저장소 변수 `SAMPLE_DATA=true`가 켜져 있어, 배포된 링크는 **백엔드도 Hume도 부르지 않습니다.** 배포 링크는 팀 밖에서도 열리는데, 라이브면 「오늘 이야기하기」를 누르는 순간 **실제 EVI 통화가 열려 과금**되기 때문입니다.
+>
+> **제출 전에 반드시 꺼야 합니다.** 켠 채로 제출하면 심사자가 준비된 데이터를 실제 기록으로 봅니다.
+>
+> ```sh
+> gh variable delete SAMPLE_DATA --repo hackathon-yaho/emotion
+> gh workflow run app-web.yml --repo hackathon-yaho/emotion
+> ```
+>
+> 백엔드 주소는 이미 구워져 있습니다 — `API_BASE_URL=https://emotion-6yeh.onrender.com`. **변수가 켜져 있는 동안에는 몇 번을 다시 빌드해도 샘플 모드입니다.**
+
+
 **실제 Hume API를 켜 두고 테스트할 수 없습니다.** EVI는 통화 시간만큼 돈이 나가므로, 화면·흐름을 확인할 때마다 실제 세션을 열면 무료 한도가 개발 중에 사라집니다. 샘플 모드는
 
 - 백엔드가 없어도 **11개 화면이 다 그려지고**,
@@ -241,6 +255,7 @@ lib/
 | 제품 이름 | 미확정(PRD §14-6). Dart 패키지명 `voice_journal`, 번들 ID `com.hackathonyaho.voiceJournal`은 임시입니다. 확정되면 `main.dart`의 `title`과 **`web/index.html`의 `<title>`·`apple-mobile-web-app-title`, `manifest.json`의 `name`·`short_name`** 을 함께 고칩니다. **커스텀 도메인이 정해지면 백엔드에 알립니다** — 허용 오리진이 환경변수 한 줄이라 재배포 없이 들어갑니다 |
 | 카카오 로그인 | **흐름은 다 구현했습니다** — 인가 URL 조립·복귀 시 `?code=` 교환·주소창 정리까지. **값만 없습니다**(`KAKAO_REST_KEY` repo variable). 키가 없으면 버튼이 조용히 죽지 않고 "아직 로그인을 켤 수 없습니다"를 띄웁니다 |
 | ~~데이터 연결~~ | ✅ 해결 — 화면이 `JournalRepository`를 봅니다. 기본은 실제 API이고, 샘플은 **샘플 모드에서만** 나옵니다(위 「데이터는 어디서 오나」) |
+| **제출 전 필수** | **`SAMPLE_DATA` 저장소 변수를 끄고 재빌드**해야 합니다. 지금은 켜져 있어 배포본이 준비된 데이터로 돕니다 — 위 경고 참조 |
 | 로그인 | 흐름은 확정(인가 코드)이고 **계약 v1.6 §2-1도 확정**인데 카카오 키가 없어 아직 구현하지 않았습니다. `POST /api/auth/kakao` 호출은 그래서 리포지토리에 없습니다 |
 | EVI 음성 | 구현했습니다(`core/voice/`, 테스트 17건). **마이크 음성 왕복만 미검증** — 토큰이 `session/start`에서만 나와 백엔드가 붙는 날 확인합니다 |
 
