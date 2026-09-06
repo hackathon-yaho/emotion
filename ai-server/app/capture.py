@@ -58,6 +58,21 @@ def shape_of(value: Any, depth: int = 0) -> Any:
     return type(value).__name__
 
 
+def _log_quietly(event: str, **fields) -> None:
+    """진단 로그는 실패해도 조용히 넘어간다.
+
+    캡처는 **대화 경로가 아니다.** 여기서 예외가 올라가면 CLM 요청 전체가 죽는다.
+    남기지 못한 로그보다 끊긴 대화가 나쁘다.
+    """
+    try:
+        if fields.pop("level", None) == "warning":
+            error_log(event, **fields)
+        else:
+            log(event, **fields)
+    except Exception:
+        pass
+
+
 def _stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")[:-3]
 
@@ -80,15 +95,15 @@ def capture_shape(body: dict[str, Any], out_dir: Path) -> Path | None:
         path.write_text(blob + "\n", encoding="utf-8", newline="\n")
         # **로그에도 남긴다.** Cloud Run에서는 파일이 인스턴스와 함께 사라져서,
         # 첫 연결의 모양을 되찾을 수 있는 곳은 로그뿐이다. 무료 5분이라 다시 찍을 수도 없다.
-        log("clm_shape_captured", status=path.name, shape=skeleton)
+        #
+        # **로그가 터져도 대화를 막지 않는다.** 이건 진단 기능이지 대화 경로가 아니다.
+        # 스트림이 닫힌 상태에서 쓰면 예외가 나는데, 그게 CLM 요청을 죽이면 안 된다.
+        _log_quietly("clm_shape_captured", status=path.name, shape=skeleton)
         return path
     except OSError:
         # 파일을 못 써도 모양은 남긴다 — 그게 이 기능의 목적이다.
-        error_log("shape_capture_file_failed")
-        try:
-            log("clm_shape_captured", status="log-only", shape=shape_of(body))
-        except Exception:
-            pass
+        _log_quietly("shape_capture_file_failed", level="warning")
+        _log_quietly("clm_shape_captured", status="log-only", shape=shape_of(body))
         return None
 
 

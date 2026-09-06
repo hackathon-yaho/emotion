@@ -107,3 +107,22 @@ def test_뼈대가_로그에도_남는다(tmp_path, capsys):
     assert "prosody" in out and "Tiredness" in out   # 스키마는 남고
     assert "오늘 완전 괜찮았어요" not in out          # 발화는 안 남는다
     assert "0.71" not in out                          # 점수 값도 안 남는다
+
+
+def test_로그가_터져도_캡처가_예외를_안_던진다(tmp_path, monkeypatch):
+    """캡처는 진단 기능이지 대화 경로가 아니다.
+
+    여기서 예외가 올라가면 CLM 요청 전체가 죽는다. 실제로 테스트 순서에 따라
+    닫힌 스트림에 쓰다가 그렇게 됐다.
+    """
+    from app import capture
+
+    def boom(*a, **kw):
+        raise ValueError("I/O operation on closed file")
+
+    monkeypatch.setattr(capture, "log", boom)
+    monkeypatch.setattr(capture, "error_log", boom)
+
+    # 예외가 새어 나오지 않아야 한다
+    capture.capture_shape(BODY, tmp_path)
+    assert len(list(tmp_path.glob("clm-request-*.json"))) == 1
