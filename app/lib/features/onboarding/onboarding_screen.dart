@@ -35,6 +35,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   bool _busy = false;
   String? _error;
 
+  /// 카카오에서 막 돌아왔는가 — 주소에 인가 코드가 실려 있다.
+  ///
+  /// **첫 프레임부터 알아야 한다.** 교환이 끝날 때까지 카카오 버튼을 그대로
+  /// 그리면, 사용자는 로그인이 실패해서 처음으로 되돌아온 줄 안다. 실제로는
+  /// 되는 중이다.
+  late final bool _returningRaw =
+      KakaoLogin.codeFrom(Uri.base) != null && !KakaoLogin.deniedIn(Uri.base);
+
+  /// 교환이 실패하면 다시 버튼을 보여줘야 한다.
+  bool _returningFailed = false;
+
+  bool get _returning => _returningRaw && !_returningFailed;
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +82,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
+          _returningFailed = true;
           _error = e.isNetwork
               ? '연결이 되지 않습니다. 네트워크를 확인해 주세요.'
               : '로그인이 완료되지 않았습니다. 다시 시도해 주세요.';
@@ -79,6 +93,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
+          _returningFailed = true;
           _error = '로그인이 완료되지 않았습니다. 다시 시도해 주세요.';
         });
       }
@@ -185,10 +200,30 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ),
             const SizedBox(height: Space.lg),
           ],
-          KakaoButton(onPressed: _busy ? null : _start),
+          // 로그인이 진행 중이면 버튼 자리에 상태를 쓴다 — **버튼을 흐리게
+          // 두지 않는다.** 눌러도 되는 것처럼 보이면 두 번 누르게 되고,
+          // 인가 코드는 1회용이라 두 번째는 400이다.
+          if (_returning || _busy)
+            SizedBox(
+              height: KakaoButton.height,
+              child: Center(
+                child: Text(
+                  '로그인하고 있습니다',
+                  style: AppType.sans(
+                    size: AppType.captionSizeLg,
+                    color: t.muted,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            )
+          else
+            KakaoButton(onPressed: _start),
           const SizedBox(height: Space.lg),
           Text(
-            '시작하면 위 내용에 동의한 것으로 봅니다',
+            _returning || _busy
+                ? '카카오 확인이 끝나면 바로 시작됩니다'
+                : '시작하면 위 내용에 동의한 것으로 봅니다',
             textAlign: TextAlign.center,
             style: AppType.sans(
               size: AppType.smallLabelSize,

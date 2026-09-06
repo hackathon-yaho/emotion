@@ -15,6 +15,9 @@ class KakaoButton extends StatelessWidget {
 
   final VoidCallback? onPressed;
 
+  /// 카카오 규격 높이 — 로그인 중에 자리를 대신 채우는 쪽도 이 값을 쓴다.
+  static const height = 54.0;
+
   static const _yellow = Color(0xFFFEE500);
   static const _ink = Color(0xD9000000); // 검정 85%
 
@@ -24,7 +27,7 @@ class KakaoButton extends StatelessWidget {
       onTap: onPressed,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        height: 54,
+        height: height,
         decoration: BoxDecoration(
           color: _yellow,
           borderRadius: BorderRadius.circular(6),
