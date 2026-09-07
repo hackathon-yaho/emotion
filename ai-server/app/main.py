@@ -276,6 +276,8 @@ async def chat_completions(
     async def body_stream() -> AsyncIterator[str]:
         yield sse.first_chunk(custom_session_id)
         collected: list[str] = []
+        stream_at = time.monotonic()
+        ttft_ms: int | None = None
         try:
             async for piece in respond_call.stream(
                 history=body.text_history(),
@@ -285,9 +287,28 @@ async def chat_completions(
                 api_key=_cfg.google_api_key,
                 base_url=_cfg.ai_llm_base_url,
             ):
+                if ttft_ms is None:
+                    ttft_ms = int((time.monotonic() - stream_at) * 1000)
                 collected.append(piece)
                 yield sse.content_chunk(custom_session_id, piece)
         finally:
+            # **응답 경로의 유일한 실측 지점이다.** 위 `turn_log`는 스트림이 시작되기
+            # **전에** 나가므로 `respondTtftMs`·`respondTotalMs`를 담을 수 없다 —
+            # 화이트리스트에는 있는데 값이 한 번도 안 찍히고 있었고, 그래서 배포본의
+            # 응답 지연을 볼 방법이 없었다. `ttft`가 비어 있으면 **한 글자도 못 받고
+            # 끝난 턴**이라는 뜻이라, 실패의 모양을 가르는 데도 쓰인다.
+            #
+            # **로그가 터져도 스트림을 막지 않는다** — 진단이 대화를 끊으면 안 된다.
+            try:
+                log(
+                    "respond",
+                    sessionRef=session_ref(custom_session_id),
+                    turnIndex=assistant_idx,
+                    respondTtftMs=ttft_ms,
+                    respondTotalMs=int((time.monotonic() - stream_at) * 1000),
+                )
+            except Exception:  # noqa: BLE001
+                pass
             for line in sse.close(custom_session_id):
                 yield line
             _sessions.mark_turn(ctx)

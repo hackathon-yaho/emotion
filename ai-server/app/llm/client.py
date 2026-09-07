@@ -146,6 +146,20 @@ async def create(
         return await c.chat.completions.create(messages=messages, **retry)
 
 
+def failure_code(exc: BaseException) -> str:
+    """예외를 **코드로만** 바꾼다 — 로그에 붙일 수 있는 형태.
+
+    벤더 오류 메시지에는 우리가 보낸 내용이 되비쳐 오는 경우가 있어서
+    **본문은 담지 않고** 클래스 이름과 HTTP 상태까지만 남긴다(FR-092).
+    429(`RateLimitError:429`)인지 끊김(`APIConnectionError`)인지
+    타임아웃(`APITimeoutError`)인지 가르는 데는 그것으로 충분하고,
+    그 구별이 없어서 실제로 진단이 반나절 늦었다.
+    """
+    status = getattr(exc, "status_code", None)
+    name = type(exc).__name__
+    return f"{name}:{status}" if isinstance(status, int) else name
+
+
 def text_of(completion: Any) -> str:
     """응답에서 텍스트만 뽑는다. 거부는 예외로 올린다."""
     choice = completion.choices[0]

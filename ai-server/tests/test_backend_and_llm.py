@@ -279,3 +279,64 @@ def test_같은_세션은_같은_참조를_갖는다():
 
 def test_세션이_없으면_대시다():
     assert session_ref(None) == "-" and session_ref("") == "-"
+
+
+# ── 실패 원인 코드 (request/ai/respond-fallback.md) ────────────────────
+
+
+def test_실패_코드는_클래스와_상태만_담는다():
+    """벤더 오류 메시지에는 우리가 보낸 내용이 되비쳐 올 수 있다 (FR-092)."""
+
+    class Boom(Exception):
+        status_code = 429
+
+    exc = Boom("오늘 완전 괜찮았어요 라는 요청이 거부됨")
+    code = llm.failure_code(exc)
+    assert code == "Boom:429"
+    assert "괜찮았어요" not in code
+
+
+def test_상태가_없는_예외는_이름만_남는다():
+    assert llm.failure_code(TimeoutError("...")) == "TimeoutError"
+
+
+@pytest.mark.asyncio
+async def test_응답_실패는_원인_코드를_달고_남는다(capsys, monkeypatch):
+    """`respond_failed` 한 줄로는 429인지 끊김인지 알 수 없다.
+
+    그 구별이 없어서 앱이 원인을 마이크 쪽에서 반나절 찾았다
+    (`docs/request/ai/respond-fallback.md`).
+    """
+    from openai import RateLimitError
+
+    from app.telemetry import configure
+
+    exc = RateLimitError.__new__(RateLimitError)
+    Exception.__init__(exc, "quota")
+    exc.status_code = 429
+
+    async def boom(*_a, **_k):
+        raise exc
+        yield  # pragma: no cover — 제너레이터로 만들기 위한 것
+
+    monkeypatch.setattr(respond_call, "_iter", boom)
+    configure("info")
+
+    flags = respond_call.build_flags(
+        gap_triggered=False, crisis=False, crisis_by=None,
+        soft_wrap=False, advice_requested=False, elapsed_min=1,
+    )
+    out = [
+        p
+        async for p in respond_call.stream(
+            history=[{"role": "user", "content": "오늘 완전 괜찮았어요"}],
+            flags=flags, model="m", effort=None, api_key="k", base_url="http://x/v1/",
+        )
+    ]
+
+    printed = capsys.readouterr().out
+    assert "respond_failed:RateLimitError:429" in printed
+    # 스트리밍 경로에도 429 로그가 남아야 한다 — 종전에는 비스트리밍에만 있었다.
+    assert "llm_rate_limited" in printed
+    assert "오늘 완전 괜찮았어요" not in printed
+    assert out == [respond_call.FALLBACK]

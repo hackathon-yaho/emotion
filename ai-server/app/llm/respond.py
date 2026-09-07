@@ -15,13 +15,38 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncIterator
 
-from openai import BadRequestError
+from openai import BadRequestError, RateLimitError
 
 from ..telemetry import error_log
 from . import client as llm
 
+
+def _log_failure(exc: Exception, *, sent: bool, model: str | None) -> None:
+    """실패에 **원인 코드를 반드시 붙인다.**
+
+    종전에는 `respond_failed` 한 줄뿐이라 429인지 끊김인지 타임아웃인지 구별할
+    수 없었다. 그래서 앱이 원인을 마이크·샘플레이트 쪽에서 반나절 찾았다
+    (`docs/request/ai/respond-fallback.md`). **구별할 수 없는 실패는 진단을 늦춘다.**
+
+    **메시지 본문은 담지 않는다.** 벤더 오류에는 우리가 보낸 내용이 되비쳐 오는
+    경우가 있다 — 클래스 이름과 HTTP 상태까지만 남긴다(FR-092).
+
+    **스트리밍 경로에는 `client.create()`의 429 로그가 없다.** 그쪽은 비스트리밍
+    전용이라, 응답 호출이 한도에 걸려도 `llm_rate_limited`가 한 번도 안 찍혔다.
+    여기서 같이 남긴다.
+    """
+    if isinstance(exc, RateLimitError):
+        error_log("llm_rate_limited", model=model)
+    code = llm.failure_code(exc)
+    error_log(f"respond_failed_midstream:{code}" if sent else f"respond_failed:{code}")
+
 # 응답 호출이 실패했을 때 내보내는 문장. 템플릿이지만 대화를 멈추지 않는다.
-FALLBACK = "지금은 제가 잘 듣지 못했어요. 한 번만 다시 말씀해 주시겠어요?"
+# **실패 원인은 우리 쪽인데 종전 문장은 사용자의 말을 탓했다** — "잘 듣지 못했어요.
+# 한 번만 다시 말씀해 주시겠어요?". 그래서 사용자는 더 크게 또박또박 다시 말하고 또
+# 실패한다. 앱 개발자도 같은 이유로 마이크·샘플레이트를 반나절 팠다
+# (`docs/request/ai/respond-fallback.md`, 앱 제안 채택).
+# 원인을 노출하지 않으면서 **헛수고를 시키지 않는** 문장으로 바꾼다.
+FALLBACK = "잠깐 제가 말이 막혔어요. 조금 뒤에 다시 이어가도 될까요?"
 FALLBACK_CRISIS = (
     "지금 많이 힘드신 것 같아요. 혼자 견디지 않으셔도 됩니다. "
     "자살예방 상담전화 109에서 24시간 이야기하실 수 있어요. 저도 여기 있을게요."
@@ -116,7 +141,7 @@ async def stream(
         return
     except BadRequestError as exc:
         if sent:
-            error_log("respond_failed_midstream")
+            _log_failure(exc, sent=True, model=kwargs.get("model"))
             return
         retry = llm.learn_unsupported(exc, kwargs)
         if retry is None:
@@ -124,9 +149,9 @@ async def stream(
             yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
             return
         kwargs = retry
-    except Exception:
+    except Exception as exc:
         # 이미 말을 시작했다면 정형 문장을 덧붙이지 않는다 — 문장이 겹쳐 들린다.
-        error_log("respond_failed_midstream" if sent else "respond_failed")
+        _log_failure(exc, sent=sent, model=kwargs.get("model"))
         if not sent:
             yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
         return
@@ -134,6 +159,6 @@ async def stream(
     try:
         async for piece in _iter(messages, kwargs, api_key, base_url):
             yield piece
-    except Exception:
-        error_log("respond_failed")
+    except Exception as exc:
+        _log_failure(exc, sent=False, model=kwargs.get("model"))
         yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
