@@ -20,6 +20,8 @@ ENV_EXAMPLE = Path(__file__).resolve().parent.parent / ".env.example"
 # 비교하지 않는 것: 시크릿(빈 값이 정상)과 배포마다 달라지는 주소.
 SKIP = {
     "GOOGLE_API_KEY",
+    "GOOGLE_API_KEY_2",
+    "GOOGLE_API_KEY_3",
     "INTERNAL_SHARED_SECRET",
     "AI_PUBLIC_URL",
     "BACKEND_BASE_URL",

@@ -35,9 +35,16 @@ class Settings(BaseSettings):
     # OpenAI 호환 엔드포인트를 쓰므로 SDK는 그대로다. 벤더를 또 바꾸려면
     # 키와 base_url과 모델 이름만 바꾸면 된다 — 코드는 손대지 않는다.
     google_api_key: str = ""
+    # 무료 티어 한도는 **키마다** 따로 센다. 팀원이 각자 키를 내면 그만큼 늘어난다
+    # (2026-09-07 실측: 응답 12턴 중 10턴이 429). 없으면 그냥 안 쓴다.
+    google_api_key_2: str = ""
+    google_api_key_3: str = ""
     ai_llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     ai_model_analyze: str = "gemini-3.5-flash-lite"
     ai_model_respond: str = "gemini-3.8-flash"
+    # 응답 모델이 한도에 걸렸을 때 내려갈 자리. 분석이 같은 모델로 100% 성공하고
+    # 있으므로 이쪽에는 여유가 있다 — 정형 문장보다 가벼운 모델이 낫다.
+    ai_model_respond_fallback: str = "gemini-3.5-flash-lite"
     # thinking을 끄지 않으면 사고 토큰이 출력 예산을 먹어 문장이 잘린다(실측).
     ai_respond_effort: str = "none"
     ai_model_observe: str = "gemini-3.8-flash"

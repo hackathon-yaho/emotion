@@ -17,7 +17,7 @@ from typing import Any, AsyncIterator
 
 from openai import BadRequestError, RateLimitError
 
-from ..telemetry import error_log
+from ..telemetry import error_log, log
 from . import client as llm
 
 
@@ -97,7 +97,12 @@ def build_messages(
 async def _iter(
     messages: list[dict[str, str]], kwargs: dict[str, Any], api_key: str, base_url: str = ""
 ):
-    stream = await llm.client(api_key, base_url).chat.completions.create(
+    # **SDK 자동 재시도(기본 2회)를 끈다.** 429 한 번이 요청 3건이 되고, 그 3건이
+    # 분당 한도를 더 밀어붙여 다음 턴까지 429로 만든다. 실측에서 6 RPM으로 말하는데
+    # 실제 요청은 18 RPM이었다 — 한도를 우리가 스스로 만들고 있었다.
+    # 재시도는 `stream()`의 사다리가 **다른 키·다른 모델로** 대신 한다.
+    client = llm.client(api_key, base_url).with_options(max_retries=0)
+    stream = await client.chat.completions.create(
         messages=messages, stream=True, **kwargs
     )
     async for chunk in stream:
@@ -113,6 +118,24 @@ async def _iter(
             yield piece
 
 
+def _ladder(
+    model: str, fallback_model: str, api_key: str, spare_keys: tuple[str, ...]
+) -> list[tuple[str, str]]:
+    """429에서 갈아탈 (키, 모델) 순서.
+
+    **같은 키로 같은 모델을 다시 부르지 않는다.** 한도에 걸린 조합을 재시도하면
+    요청 수만 늘어 한도를 더 깊게 판다 — 실제로 그 악순환이 있었다(아래 주석).
+
+    순서는 **품질을 먼저, 용량을 나중에** 둔다. 남는 키가 있으면 좋은 모델을
+    그대로 쓰고, 키가 다 걸렸을 때만 가벼운 모델로 내려간다.
+    """
+    rungs = [(api_key, model)]
+    rungs += [(k, model) for k in spare_keys if k and k != api_key]
+    if fallback_model and fallback_model != model:
+        rungs.append((api_key, fallback_model))
+    return rungs
+
+
 async def stream(
     *,
     history: list[dict[str, str]],
@@ -122,8 +145,19 @@ async def stream(
     api_key: str = "",
     base_url: str = "",
     prompts_dir=None,
+    fallback_model: str = "",
+    spare_keys: tuple[str, ...] = (),
 ) -> AsyncIterator[str]:
-    """텍스트 조각을 그대로 흘린다. 실패하면 정형 문장 하나를 흘리고 끝낸다."""
+    """텍스트 조각을 그대로 흘린다. 실패하면 정형 문장 하나를 흘리고 끝낸다.
+
+    **429는 정형 문장으로 끝내지 않고 갈아탄다** (2026-09-07 실측). 실사용에서
+    12턴 중 10턴이 `RateLimitError:429`로 떨어졌다 — 무료 티어 한도다.
+
+    **SDK 자동 재시도를 끈다.** 기본값은 2회라 429 한 번이 요청 3건이 되고,
+    그 3건이 분당 한도를 더 밀어붙여 다음 턴도 429가 된다. 6 RPM으로 말하고
+    있었는데 실제 요청은 18 RPM이었다 — **한도를 우리가 스스로 만들고 있었다.**
+    빠르게 실패하고 다른 조합으로 넘어가는 편이 사용자에게도 빠르다.
+    """
     system = (
         llm.system_prompt("respond", prompts_dir)
         if prompts_dir
@@ -133,32 +167,50 @@ async def stream(
     # 사고 토큰이 이 예산을 함께 쓰므로 넉넉히 준다. 길이는 프롬프트가 잡는다(1~3문장).
     kwargs = llm.build_kwargs(model=model, max_tokens=1000, effort=effort)
 
+    rungs = _ladder(model, fallback_model, api_key, spare_keys)
     sent = False
-    try:
-        async for piece in _iter(messages, kwargs, api_key, base_url):
-            sent = True
-            yield piece
-        return
-    except BadRequestError as exc:
-        if sent:
-            _log_failure(exc, sent=True, model=kwargs.get("model"))
-            return
-        retry = llm.learn_unsupported(exc, kwargs)
-        if retry is None:
-            error_log("respond_bad_request")
-            yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
-            return
-        kwargs = retry
-    except Exception as exc:
-        # 이미 말을 시작했다면 정형 문장을 덧붙이지 않는다 — 문장이 겹쳐 들린다.
-        _log_failure(exc, sent=sent, model=kwargs.get("model"))
-        if not sent:
-            yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
-        return
 
-    try:
-        async for piece in _iter(messages, kwargs, api_key, base_url):
-            yield piece
-    except Exception as exc:
-        _log_failure(exc, sent=False, model=kwargs.get("model"))
-        yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
+    for index, (key, rung_model) in enumerate(rungs):
+        kwargs = {**kwargs, "model": rung_model}
+        last = index == len(rungs) - 1
+        try:
+            async for piece in _iter(messages, kwargs, key, base_url):
+                sent = True
+                yield piece
+            if index:
+                # 갈아타서 살아난 턴. 사용자에게는 안 보이지만 한도의 증거다.
+                log("respond_switched", model=rung_model, status=f"rung{index}")
+            return
+        except RateLimitError as exc:
+            _log_failure(exc, sent=sent, model=rung_model)
+            if sent or last:
+                if not sent:
+                    yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
+                return
+            continue  # 다음 (키, 모델)로
+        except BadRequestError as exc:
+            if sent:
+                _log_failure(exc, sent=True, model=rung_model)
+                return
+            retry = llm.learn_unsupported(exc, kwargs)
+            if retry is None:
+                error_log("respond_bad_request")
+                yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
+                return
+            kwargs = retry
+            try:
+                async for piece in _iter(messages, kwargs, key, base_url):
+                    sent = True
+                    yield piece
+                return
+            except Exception as inner:
+                _log_failure(inner, sent=sent, model=rung_model)
+                if not sent:
+                    yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
+                return
+        except Exception as exc:
+            # 이미 말을 시작했다면 정형 문장을 덧붙이지 않는다 — 문장이 겹쳐 들린다.
+            _log_failure(exc, sent=sent, model=rung_model)
+            if not sent:
+                yield FALLBACK_CRISIS if flags.get("crisis") else FALLBACK
+            return

@@ -340,3 +340,93 @@ async def test_응답_실패는_원인_코드를_달고_남는다(capsys, monkey
     assert "llm_rate_limited" in printed
     assert "오늘 완전 괜찮았어요" not in printed
     assert out == [respond_call.FALLBACK]
+
+
+# ── 429 사다리 (response/ai/respond-fallback.md, 2026-09-07 실측) ───────
+
+
+def test_사다리는_같은_조합을_다시_부르지_않는다():
+    """한도에 걸린 조합을 재시도하면 요청 수만 늘어 한도를 더 깊게 판다."""
+    rungs = respond_call._ladder("big", "small", "k1", ("k2", "", "k1"))
+    assert rungs == [("k1", "big"), ("k2", "big"), ("k1", "small")]
+
+
+def test_여벌_키가_없으면_모델만_내려간다():
+    assert respond_call._ladder("big", "small", "k1", ()) == [
+        ("k1", "big"),
+        ("k1", "small"),
+    ]
+
+
+def test_대체_모델이_같으면_한_칸이다():
+    assert respond_call._ladder("big", "big", "k1", ()) == [("k1", "big")]
+
+
+@pytest.mark.asyncio
+async def test_429면_다음_칸으로_갈아타고_정형문장을_안_쓴다(capsys, monkeypatch):
+    """실사용에서 12턴 중 10턴이 429였다. 그때마다 정형 문장이 나가면 대화가 끊긴다."""
+    from openai import RateLimitError
+
+    from app.telemetry import configure
+
+    seen: list[str] = []
+
+    async def flaky(_messages, kwargs, _key, _base=""):
+        seen.append(kwargs["model"])
+        if kwargs["model"] == "big":
+            exc = RateLimitError.__new__(RateLimitError)
+            Exception.__init__(exc, "quota")
+            exc.status_code = 429
+            raise exc
+        yield "괜찮으셨다니 다행이에요."
+
+    monkeypatch.setattr(respond_call, "_iter", flaky)
+    configure("info")
+
+    flags = respond_call.build_flags(
+        gap_triggered=False, crisis=False, crisis_by=None,
+        soft_wrap=False, advice_requested=False, elapsed_min=1,
+    )
+    out = [
+        p
+        async for p in respond_call.stream(
+            history=[{"role": "user", "content": "오늘 완전 괜찮았어요"}],
+            flags=flags, model="big", effort=None, api_key="k1",
+            base_url="http://x/v1/", fallback_model="small",
+        )
+    ]
+
+    assert seen == ["big", "small"]
+    assert out == ["괜찮으셨다니 다행이에요."]
+    assert respond_call.FALLBACK not in out
+    printed = capsys.readouterr().out
+    assert "respond_switched" in printed
+
+
+@pytest.mark.asyncio
+async def test_사다리를_다_쓰면_그때_정형_문장이다(monkeypatch):
+    from openai import RateLimitError
+
+    async def always_429(_messages, kwargs, _key, _base=""):
+        exc = RateLimitError.__new__(RateLimitError)
+        Exception.__init__(exc, "quota")
+        exc.status_code = 429
+        raise exc
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(respond_call, "_iter", always_429)
+    flags = respond_call.build_flags(
+        gap_triggered=False, crisis=True, crisis_by="rule",
+        soft_wrap=False, advice_requested=False, elapsed_min=1,
+    )
+    out = [
+        p
+        async for p in respond_call.stream(
+            history=[{"role": "user", "content": "..."}],
+            flags=flags, model="big", effort=None, api_key="k1",
+            base_url="http://x/v1/", fallback_model="small",
+        )
+    ]
+    # 위기에서는 109 안내가 든 문장이어야 한다 — 실패해도 해야 할 말을 한다.
+    assert out == [respond_call.FALLBACK_CRISIS]
+    assert "109" in out[0]

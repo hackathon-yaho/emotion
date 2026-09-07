@@ -286,6 +286,8 @@ async def chat_completions(
                 effort=_cfg.ai_respond_effort,
                 api_key=_cfg.google_api_key,
                 base_url=_cfg.ai_llm_base_url,
+                fallback_model=_cfg.ai_model_respond_fallback,
+                spare_keys=(_cfg.google_api_key_2, _cfg.google_api_key_3),
             ):
                 if ttft_ms is None:
                     ttft_ms = int((time.monotonic() - stream_at) * 1000)
