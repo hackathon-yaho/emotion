@@ -29,6 +29,9 @@ CONFIG_URL = "https://api.hume.ai/v0/evi/configs/{config_id}"
 REQUIRED_EVI_VERSION = "4-mini"
 REQUIRED_INACTIVITY_SEC = 420
 CLM_URL_SUFFIX = "/chat/completions"
+# Hume 기본값은 각각 800ms다(허용 범위 500~3000 / 50~2000). 이 제품에는 둘 다 짧다.
+MIN_END_OF_TURN_MS = 1800
+MIN_INTERRUPTION_MS = 1200
 
 
 def fetch(config_id: str, api_key: str) -> dict[str, Any]:
@@ -101,6 +104,30 @@ def check(cfg: dict[str, Any], expected_clm: str) -> list[tuple[bool, str, str]]
         bool(first),
         "첫 인사말",
         f"{first[:44] if first else '(자동 생성 — 매번 달라진다)'}",
+    ))
+
+    # 발화 종료 판정. **기본 800ms는 이 제품에 짧다** — 감정 대화에서 사람은 말을
+    # 고르느라 1~2초를 쉰다. 그 침묵을 "끝났다"로 읽으면 한 마디가 여러 턴으로
+    # 쪼개지고, (a) 대화가 끊기는 느낌이 들고 (b) CLM 호출이 그만큼 늘어 무료 티어
+    # 한도를 더 빨리 먹는다. 실측: 2분에 assistant 턴 12번(평균 10초에 한 번).
+    turn = cfg.get("turn_detection") or {}
+    silence = turn.get("end_of_turn_silence_ms") if isinstance(turn, dict) else None
+    out.append((
+        silence is not None and int(silence) >= MIN_END_OF_TURN_MS,
+        "발화 종료 대기",
+        f"{silence if silence is not None else '(기본 800ms)'} — {MIN_END_OF_TURN_MS}ms 이상이어야"
+        " 말을 고르는 침묵을 턴 종료로 읽지 않는다",
+    ))
+
+    # 끼어들기 판정. 짧으면 "음…", "네…" 같은 맞장구에 AI가 말을 멈춘다.
+    interruption = cfg.get("interruption") or {}
+    min_int = (
+        interruption.get("min_interruption_ms") if isinstance(interruption, dict) else None
+    )
+    out.append((
+        min_int is not None and int(min_int) >= MIN_INTERRUPTION_MS,
+        "끼어들기 최소",
+        f"{min_int if min_int is not None else '(기본 800ms)'} — 짧으면 맞장구에도 AI가 말을 끊는다",
     ))
 
     # 넛지: 켜져 있으면 간격을 본다. 감정 대화에서 짧은 넛지는 재촉이 된다.
