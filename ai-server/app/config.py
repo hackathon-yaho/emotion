@@ -67,7 +67,11 @@ class Settings(BaseSettings):
     # Hume Config 점검용 (app/humeconfig.py). 대화에는 쓰지 않는다 —
     # EVI 토큰 발급은 백엔드 몫이고, 여기서는 Config를 읽기만 한다.
     hume_api_key: str = ""
-    hume_config_id: str = "23d6162d-d334-44dd-9c2d-f5858de19a06"
+    # **기본값을 두지 않는다.** Config는 Hume 계정에 딸린 값이라 계정이 바뀌면 죽는다
+    # (2026-09-07: 공용 구글 계정이 잠겨 계정을 새로 팠다). 코드에 박아 두면 `.env`를
+    # 안 채운 사람이 **남의 계정에 있던 죽은 Config를 검사하고 통과했다고 믿는다.**
+    # 비어 있으면 도구가 "채우세요"라고 말한다 — 그게 맞다.
+    hume_config_id: str = ""
 
     # 캡처 (app/capture.py)
     ai_shape_capture: bool = True
