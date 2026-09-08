@@ -87,6 +87,27 @@ def build_payload(clm_url: str) -> dict[str, Any]:
     }
 
 
+def _save_config_id(config_id: str) -> bool:
+    """새 Config id를 `.env`에 넣는다. **시크릿이 아니다** — 계정 안의 이름표일 뿐이라
+    화면에 띄워도 되고, 그래서 손으로 옮기게 둘 이유가 없다. 옮기다 한 글자 틀리면
+    "없는 Config로 소켓을 연다"는 조용한 실패가 된다.
+    """
+    from .setsecret import ENV_PATH, apply_to_lines
+
+    try:
+        if not ENV_PATH.exists():
+            return False
+        lines = ENV_PATH.read_text(encoding="utf-8").splitlines()
+        ENV_PATH.write_text(
+            "\n".join(apply_to_lines(lines, "HUME_CONFIG_ID", config_id)) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        return True
+    except OSError:
+        return False
+
+
 def create(payload: dict[str, Any], api_key: str) -> dict[str, Any]:
     r = httpx.post(
         CREATE_URL, headers={"X-Hume-Api-Key": api_key}, json=payload, timeout=30
@@ -249,9 +270,18 @@ def main(argv: list[str] | None = None) -> int:
         if bad:
             print(f"⚠ 만들어졌지만 {bad}개 항목이 뜻대로 안 들어갔습니다. 콘솔에서 확인하세요.")
             return 1
-        print("전부 통과했습니다. 다음 순서로 넣으세요 —")
-        print(f"  1) ai-server/.env 의  HUME_CONFIG_ID={new_id}")
-        print( "  2) 백엔드 Render 환경변수  HUME_API_KEY · HUME_SECRET_KEY · HUME_CONFIG_ID")
+        print("전부 통과했습니다.")
+        # **`.env`에 직접 써 준다.** 사람이 손으로 옮기면 오타가 나고, 오타 난
+        # Config id는 "없는 Config로 소켓을 연다"는 조용한 실패가 된다.
+        # 시크릿이 아니라서 화면에 띄워도 되고, 그래서 자동으로 넣어도 된다.
+        if _save_config_id(new_id):
+            print(f"  ai-server/.env 의 HUME_CONFIG_ID 를 {new_id} 로 바꿨습니다.")
+        else:
+            print(f"  ai-server/.env 에 직접 넣으세요:  HUME_CONFIG_ID={new_id}")
+        print("\n백엔드에 넘길 값 3개 (한 세트로 같이 바뀝니다) —")
+        print( "  HUME_API_KEY      새 계정 API key")
+        print( "  HUME_SECRET_KEY   새 계정 Secret key   ← AI서버는 안 씁니다")
+        print(f"  HUME_CONFIG_ID    {new_id}")
         return 0
 
     if not api_key or not config_id:
