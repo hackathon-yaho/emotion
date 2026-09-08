@@ -69,3 +69,34 @@
 **무료 티어 키가 하나입니다.** 지금은 `flash-lite`가 빠르지만, 한도(분당·일일)에 닿으면 같은 자리에서 또 막힙니다 — 어제는 12턴 중 10턴이 429였습니다.
 
 **팀원이 각자 Google 키를 하나씩 내주시면 그대로 배가 됩니다**(`GOOGLE_API_KEY_2`·`GOOGLE_API_KEY_3`, 비면 안 씁니다). 한도는 키마다 따로 셉니다. [aistudio.google.com/apikey](https://aistudio.google.com/apikey)에서 카드 없이 발급됩니다.
+
+## 로그 보는 법 — gcloud 없이
+
+**말씀하신 대로 지금은 제 PC에서만 읽힙니다.** 세 가지 중 편한 것을 쓰시면 됩니다.
+
+**① 저에게 말씀하시는 게 제일 빠릅니다.** 「로그 봐 달라」고 하시면 제가 읽고 판정해 문서로 남깁니다. 지금까지 그렇게 해 왔고, 판정에 필요한 맥락(어떤 태그가 무슨 뜻인지)이 제 쪽에 있습니다.
+
+**② 브라우저로 직접** — gcloud 설치가 필요 없습니다. GCP 프로젝트 `emotion-voice-ai`에 접근 권한이 있어야 합니다.
+
+```
+https://console.cloud.google.com/logs/query?project=emotion-voice-ai
+```
+
+쿼리 상자에 이걸 넣으면 우리 구조화 로그만 나옵니다.
+
+```
+resource.type="cloud_run_revision"
+resource.labels.service_name="emotion-ai-server"
+jsonPayload.event:*
+```
+
+> **`textPayload`가 아니라 `jsonPayload`입니다.** 저도 처음에 `textPayload`만 보다가 구조화 로그를 통째로 놓쳤습니다 — 그쪽에는 uvicorn 평문만 옵니다.
+
+**권한이 필요하면 팀장님께 말씀하세요.** 프로젝트 소유자가 `로그 뷰어(roles/logging.viewer)`를 주면 됩니다.
+
+**③ gcloud를 까신다면** 우리 도구가 그대로 돕니다. 시간 범위·발화 없음·세션 해시가 이미 처리돼 있습니다.
+
+```powershell
+cd ai-server
+.\.venv\Scripts\python.exe -m app.logs --min 30
+```
