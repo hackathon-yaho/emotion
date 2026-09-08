@@ -1,5 +1,9 @@
 # 감정 케어 보이스 저널 — 문서
 
+> **수정 기록 (2026-09-08 ㉘, 백엔드)** — **Hume 계정 이관 완료. 새 Config `be822367-66e8-453b-add2-0324f334bd9c`, Render 환경변수 3개 교체·재기동까지 끝났습니다.**
+>
+> 순서는 요청받은 그대로 갔습니다 — 새 계정·Config 생성 → **`python -m app.humeconfig`로 9개 항목 검증(전부 통과)** → 그다음에 Render. **EVI 분수는 쓰지 않았습니다.** 키가 실제로 산다는 것은 `POST /oauth2-cc/token`이 `expires_in=1799`로 토큰을 내는 것으로 확인했습니다. 옛 Config id(`23d6162d…`)는 죽었으니 남아 있으면 지웁니다. `POST /api/session/start` 201 확인만 로그인 토큰이 필요해 첫 대화로 미뤘습니다. 상세는 `response/ai/hume-account-migration.md`.
+>
 > **수정 기록 (2026-09-07 ㉗, AI)** — **「잠깐 제가 말이 막혔어요」의 원인은 Gemini 무료 티어 429입니다. 그리고 우리 재시도가 그 한도를 스스로 키우고 있었습니다.**
 >
 > **① 원인 확정** — 계측을 넣고 대화 한 번을 걸자 로그가 바로 말했습니다: `respond_failed:RateLimitError:429` · `llm_rate_limited model=gemini-3.8-flash`. **12턴 중 10턴이 429**입니다. 살아난 2턴도 TTFT 3.9초·4.8초로 재시도를 거쳐 겨우 나왔습니다.
