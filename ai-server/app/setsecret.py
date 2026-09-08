@@ -26,6 +26,10 @@ from pathlib import Path
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 GCP_PROJECT = "emotion-voice-ai"
+# Cloud Run 리비전이 쓰는 기본 서비스 계정. **새로 만든 시크릿에는 접근권이 없어서**
+# 그냥 물리면 리비전이 뜨다 만다(실측 2026-09-09: `Permission denied on secret`).
+# 만들 때 같이 붙여 준다 — 나중에 배포가 실패하고 나서 찾는 것보다 낫다.
+CLOUD_RUN_SA = "88562702025-compute@developer.gserviceaccount.com"
 
 
 def mask(value: str) -> str:
@@ -106,6 +110,17 @@ def write_to_cloud(name: str, value: str, project: str = GCP_PROJECT) -> int:
             )
             if made.returncode == 0:
                 print(f"({name} 시크릿이 없어 새로 만들었습니다)")
+                # 새 시크릿은 Cloud Run 서비스 계정이 못 읽는다. 여기서 붙여 두지
+                # 않으면 나중에 배포가 `Permission denied on secret`으로 실패한다.
+                bind = subprocess.run(
+                    [gcloud, "secrets", "add-iam-policy-binding", name,
+                     f"--member=serviceAccount:{CLOUD_RUN_SA}",
+                     "--role=roles/secretmanager.secretAccessor",
+                     f"--project={project}", "--quiet"],
+                    capture_output=True, text=True,
+                )
+                print("(Cloud Run 읽기 권한도 붙였습니다)" if bind.returncode == 0
+                      else "⚠ 읽기 권한 부여에 실패했습니다 — 배포 전에 AI 담당에게 알려주세요.")
                 result = subprocess.run(add, capture_output=True, text=True)
     finally:
         try:

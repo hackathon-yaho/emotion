@@ -83,6 +83,12 @@ async def _warmup() -> None:
 
     실패해도 무시한다 — 워밍업은 편의이지 기동 조건이 아니다.
     """
+    # **키가 몇 개 잡혔는지 남긴다 — 개수만, 값은 아니다.**
+    # 여벌 키는 넣어도 배포본에 안 물릴 수 있다(시크릿 권한·재배포 누락). 그러면
+    # 429가 나기 전까지 아무도 모른다. 기동에서 한 줄로 보이게 해 둔다.
+    keys = {k for k in (_cfg.google_api_key, _cfg.google_api_key_2, _cfg.google_api_key_3) if k}
+    log("llm_keys", status=f"{len(keys)}개")
+
     if not _cfg.ai_warmup_on_start or not _cfg.google_api_key:
         return
 

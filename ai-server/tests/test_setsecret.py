@@ -172,8 +172,7 @@ def test_시크릿이_없으면_만들고_다시_넣는다(monkeypatch):
 
     def fake_run(cmd, **_kw):
         calls.append(cmd)
-        verb = cmd[1:4]
-        if verb == ["secrets", "versions", "add"] and len(calls) == 1:
+        if cmd[1:4] == ["secrets", "versions", "add"] and len(calls) == 1:
             return R(1, "ERROR: NOT_FOUND: Secret [GOOGLE_API_KEY_2] not found.")
         return R(0)
 
@@ -181,7 +180,12 @@ def test_시크릿이_없으면_만들고_다시_넣는다(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     assert setsecret.write_to_cloud("GOOGLE_API_KEY_2", "AIzaSyTEST") == 0
-    verbs = [c[1:3] for c in calls]
-    assert verbs == [["secrets", "versions"], ["secrets", "create"], ["secrets", "versions"]]
+    verbs = [c[2] for c in calls]
+    assert verbs == ["versions", "create", "add-iam-policy-binding", "versions"]
+    # **만들면서 Cloud Run 읽기 권한까지 붙인다.** 안 붙이면 나중에 배포가
+    # `Permission denied on secret`으로 실패한다(실측 2026-09-09).
+    bind = " ".join(calls[2])
+    assert "roles/secretmanager.secretAccessor" in bind
+    assert setsecret.CLOUD_RUN_SA in bind
     # 값은 어느 명령에도 인자로 들어가지 않는다.
     assert all("AIzaSyTEST" not in " ".join(c) for c in calls)
