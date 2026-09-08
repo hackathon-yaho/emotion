@@ -70,6 +70,35 @@
 
 **팀원이 각자 Google 키를 하나씩 내주시면 그대로 배가 됩니다**(`GOOGLE_API_KEY_2`·`GOOGLE_API_KEY_3`, 비면 안 씁니다). 한도는 키마다 따로 셉니다. [aistudio.google.com/apikey](https://aistudio.google.com/apikey)에서 카드 없이 발급됩니다.
 
+## ⛔ 코드를 고쳤는데 배포본이 안 바뀌었습니다 — 함정 하나 더
+
+모델 이름이 **세 곳**에 있었습니다.
+
+| 곳 | 누가 지키나 |
+| --- | --- |
+| `app/config.py` 기본값 | 코드 리뷰·테스트 |
+| `ai-server/.env.example` | **테스트가 지킨다**(`test_env_example.py`) |
+| `ai-server/.env` (각자 로컬) | **아무도 안 지킨다** |
+| **Cloud Run 환경변수** | **아무도 안 지킨다** |
+
+**뒤의 둘이 앞의 둘을 덮습니다.** 그래서 코드를 고치고 배포까지 했는데도 배포본은 계속 죽은 모델을 불렀습니다 — 워밍업 로그에 `gemini-3.8-flash`가 찍히는 것을 보고서야 알았습니다.
+
+**배포 환경변수에서 모델 못을 뽑았습니다.** `AI_MODEL_RESPOND`·`AI_MODEL_OBSERVE`·`AI_MODEL_ANALYZE`·`AI_MODEL_SUMMARY`·`AI_RESPOND_EFFORT`·`AI_OBSERVE_EFFORT`를 제거해서 **이제 `config.py`가 단일 출처**입니다. 모델을 바꾸려면 커밋하고 배포하면 되고, 그 이력이 남습니다.
+
+> **급할 때는 여전히 30초 만에 덮을 수 있습니다** — 모델이 또 죽으면 재빌드 없이 이렇게 갈아탑니다.
+> ```
+> gcloud run services update emotion-ai-server --region asia-northeast3 >   --project emotion-voice-ai --update-env-vars AI_MODEL_RESPOND=<다른모델>
+> ```
+> 다만 **그 못을 뽑는 것까지가 한 세트**입니다. 안 뽑으면 다음 사람이 같은 자리에서 하루를 씁니다.
+
+**확인 방법은 워밍업 로그입니다.** 기동 시 어떤 모델을 깨우는지가 그대로 찍히므로, 배포본이 실제로 무엇을 쓰는지 눈으로 봅니다.
+
+```
+14:36:29  llm_param_dropped                        ← reasoning_effort 를 기동 때 학습
+14:36:34  llm_warmed  model=gemini-3.5-flash-lite
+14:36:50  llm_warmed  model=gemini-3.5-flash       ← 3.8-flash 가 없다
+```
+
 ## 로그 보는 법 — gcloud 없이
 
 **말씀하신 대로 지금은 제 PC에서만 읽힙니다.** 세 가지 중 편한 것을 쓰시면 됩니다.
