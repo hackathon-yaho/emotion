@@ -155,3 +155,33 @@ def test_값을_명령_인자로_넘기지_않는다(monkeypatch):
     setsecret.write_to_cloud("X", SECRET)
 
     assert all(SECRET not in part for part in captured["cmd"])
+
+
+def test_시크릿이_없으면_만들고_다시_넣는다(monkeypatch):
+    """여기서 멈추면 사람이 gcloud 명령을 따로 찾아 치고, 그 과정에서 값을
+    명령 인자로 넘기게 된다 — 셸 기록에 평문으로 남는다. 그 길을 막는다."""
+    import subprocess
+
+    from app import setsecret
+
+    calls: list[list[str]] = []
+
+    class R:
+        def __init__(self, code, err=""):
+            self.returncode, self.stderr, self.stdout = code, err, ""
+
+    def fake_run(cmd, **_kw):
+        calls.append(cmd)
+        verb = cmd[1:4]
+        if verb == ["secrets", "versions", "add"] and len(calls) == 1:
+            return R(1, "ERROR: NOT_FOUND: Secret [GOOGLE_API_KEY_2] not found.")
+        return R(0)
+
+    monkeypatch.setattr(setsecret, "find_gcloud", lambda: "gcloud.cmd")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert setsecret.write_to_cloud("GOOGLE_API_KEY_2", "AIzaSyTEST") == 0
+    verbs = [c[1:3] for c in calls]
+    assert verbs == [["secrets", "versions"], ["secrets", "create"], ["secrets", "versions"]]
+    # 값은 어느 명령에도 인자로 들어가지 않는다.
+    assert all("AIzaSyTEST" not in " ".join(c) for c in calls)

@@ -92,11 +92,21 @@ def write_to_cloud(name: str, value: str, project: str = GCP_PROJECT) -> int:
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(value.encode("utf-8"))  # BOM 없음
-        result = subprocess.run(
-            [gcloud, "secrets", "versions", "add", name,
-             f"--data-file={tmp}", f"--project={project}"],
-            capture_output=True, text=True,
-        )
+        add = [gcloud, "secrets", "versions", "add", name,
+               f"--data-file={tmp}", f"--project={project}"]
+        result = subprocess.run(add, capture_output=True, text=True)
+        if result.returncode != 0 and "NOT_FOUND" in (result.stderr or ""):
+            # **없으면 만들고 다시 넣는다.** 여기서 멈추면 사람이 gcloud 명령을
+            # 따로 찾아 치게 되고, 그 과정에서 값을 명령 인자로 넘기게 된다 —
+            # 그러면 셸 기록에 평문으로 남는다. 그 길을 아예 막는 편이 낫다.
+            made = subprocess.run(
+                [gcloud, "secrets", "create", name,
+                 "--replication-policy=automatic", f"--project={project}"],
+                capture_output=True, text=True,
+            )
+            if made.returncode == 0:
+                print(f"({name} 시크릿이 없어 새로 만들었습니다)")
+                result = subprocess.run(add, capture_output=True, text=True)
     finally:
         try:
             os.unlink(tmp)
