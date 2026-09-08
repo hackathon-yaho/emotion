@@ -108,6 +108,28 @@ def _save_config_id(config_id: str) -> bool:
         return False
 
 
+def find_by_name(name: str, api_key: str) -> dict[str, Any] | None:
+    """계정에서 이름으로 Config를 찾는다.
+
+    **409의 메시지에 실린 id는 저장된 것이 아니다** — 거부된 요청에 붙었던 번호다.
+    그걸 진짜 id로 읽고 조회하면 404가 난다(실측 2026-09-08). 이름으로 다시 찾는
+    이 경로가 유일하게 맞는 답이다.
+    """
+    r = httpx.get(
+        CREATE_URL,
+        headers={"X-Hume-Api-Key": api_key},
+        params={"page_size": 50},
+        timeout=30,
+    )
+    r.raise_for_status()
+    body = r.json()
+    page = body.get("configs_page", []) if isinstance(body, dict) else (body or [])
+    for item in page:
+        if isinstance(item, dict) and item.get("name") == name:
+            return item
+    return None
+
+
 def create(payload: dict[str, Any], api_key: str) -> dict[str, Any]:
     r = httpx.post(
         CREATE_URL, headers={"X-Hume-Api-Key": api_key}, json=payload, timeout=30
@@ -248,17 +270,32 @@ def main(argv: list[str] | None = None) -> int:
             print(f"⚠ HUME_CONFIG_ID 가 이미 있습니다: {config_id}")
             print("  새로 만들면 .env 와 백엔드 환경변수를 새 id로 바꿔야 합니다.\n")
         payload = build_payload(f"{expected}{CLM_URL_SUFFIX}")
+        made: dict[str, Any] | None = None
+        verb = "만들었습니다"
         try:
             made = create(payload, api_key)
         except httpx.HTTPStatusError as e:
-            print(f"생성 실패: HTTP {e.response.status_code}")
-            print(e.response.text[:600])
-            return 1
+            if e.response.status_code != 409:
+                print(f"생성 실패: HTTP {e.response.status_code}")
+                print(e.response.text[:600])
+                return 1
+            # **같은 이름이 이미 있다 = 앞선 실행이 성공했다는 뜻이다.**
+            # 409 메시지에 실린 id는 거부된 요청의 번호라 조회하면 404다 —
+            # 이름으로 다시 찾아야 진짜 id가 나온다(실측 2026-09-08).
+            print(f"\n같은 이름의 Config가 이미 있습니다 — 앞선 실행이 성공했습니다.")
+            try:
+                made = find_by_name(CONFIG_NAME, api_key)
+            except httpx.HTTPError:
+                made = None
+            if made is None:
+                print("그런데 목록에서 찾지 못했습니다. 콘솔에서 확인하세요.")
+                return 1
+            verb = "이미 있습니다"
         except httpx.HTTPError:
             print("생성 실패: 네트워크")
             return 1
         new_id = made.get("id", "(id 없음)")
-        print(f"\n만들었습니다.  HUME_CONFIG_ID={new_id}\n")
+        print(f"\n{verb}.  HUME_CONFIG_ID={new_id}\n")
         # **만든 것을 그 자리에서 검사한다.** 만들었다는 응답과 실제로 그렇게
         # 저장됐는지는 다른 문제다 — 무시된 필드가 있으면 여기서 드러난다.
         bad = 0
