@@ -41,13 +41,21 @@ class Settings(BaseSettings):
     google_api_key_3: str = ""
     ai_llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     ai_model_analyze: str = "gemini-3.5-flash-lite"
-    ai_model_respond: str = "gemini-3.8-flash"
-    # 응답 모델이 한도에 걸렸을 때 내려갈 자리. 분석이 같은 모델로 100% 성공하고
-    # 있으므로 이쪽에는 여유가 있다 — 정형 문장보다 가벼운 모델이 낫다.
-    ai_model_respond_fallback: str = "gemini-3.5-flash-lite"
+    # 2026-09-08 실측 TTFT — **3.8-flash 188초**, 3.5-flash 8.3초, **flash-lite 1.0초**.
+    # 3.8-flash 로는 Hume이 기다려 주지 않아 **답변 음성이 아예 안 나갔다.**
+    # 분석이 매 턴 flash-lite 로 1초 안에 돌아오고 있었다 — 그 실적을 따른다.
+    ai_model_respond: str = "gemini-3.5-flash-lite"
+    # 한도·장애로 못 쓸 때 내려갈 자리. 느리지만(8.3초) 정형 문장보다는 낫다.
+    ai_model_respond_fallback: str = "gemini-3.5-flash"
     # thinking을 끄지 않으면 사고 토큰이 출력 예산을 먹어 문장이 잘린다(실측).
+    # flash-lite 는 이 파라미터 자체를 거부하는데, `learn_unsupported`가 400을 한 번
+    # 맞고 빼 버린 뒤 기억한다 — 값은 그대로 두는 편이 안전하다.
     ai_respond_effort: str = "none"
-    ai_model_observe: str = "gemini-3.8-flash"
+    # **첫 글자까지의 시한.** 넘으면 다음 (키·모델) 칸으로 넘어간다.
+    # 늦게 오는 답은 Hume이 이미 끊은 뒤라 안 온 것과 같다 — 기다리느니 갈아탄다.
+    ai_respond_ttft_timeout_ms: int = 5000
+    # 관찰도 3.8-flash 였다. 배치라 지연이 덜 아프지만 188초면 어차피 실패한다.
+    ai_model_observe: str = "gemini-3.5-flash-lite"
     ai_observe_effort: str = "none"
     ai_model_summary: str = "gemini-3.5-flash-lite"
     # 실측 p95 1209ms(2026-09-05 재측정, 턴 간격 15초). 여유를 두되 지나치게 길면

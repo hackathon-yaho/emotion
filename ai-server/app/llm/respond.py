@@ -12,13 +12,40 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any, AsyncIterator
 
-from openai import BadRequestError, RateLimitError
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    BadRequestError,
+    InternalServerError,
+    RateLimitError,
+)
 
 from ..telemetry import error_log, log
 from . import client as llm
+
+
+class RespondTimeout(Exception):
+    """첫 글자가 시한 안에 오지 않았다.
+
+    **늦게 오는 답은 안 온 답이다.** Hume은 그때까지 기다려 주지 않고, 사용자는
+    답변 음성을 아예 못 듣는다 — 실측에서 응답 모델의 TTFT가 188초까지 갔다
+    (2026-09-08). 기다리느니 다른 조합으로 넘어가는 편이 낫다.
+    """
+
+
+# 이 실패들은 **다음 칸으로 넘어가면 살아날 수 있는** 것들이다.
+# 요청 자체가 틀린 경우(BadRequest)는 갈아타도 같은 결과라 여기 없다.
+CLIMB = (
+    RateLimitError,      # 429 — 무료 티어 한도
+    InternalServerError,  # 5xx — 모델 과부하
+    APITimeoutError,
+    APIConnectionError,
+    RespondTimeout,
+)
 
 
 def _log_failure(exc: Exception, *, sent: bool, model: str | None) -> None:
@@ -118,6 +145,29 @@ async def _iter(
             yield piece
 
 
+async def _deadline(agen, seconds: float):
+    """**첫 조각까지만** 시한을 건다.
+
+    말을 시작한 뒤에는 자르지 않는다 — 중간에 끊긴 문장이 TTS로 나가면
+    사용자는 말이 잘리는 것을 듣는다. 늦게 시작하는 것보다 그쪽이 나쁘다.
+    """
+    it = agen.__aiter__()
+    try:
+        first = await asyncio.wait_for(it.__anext__(), timeout=seconds)
+    except asyncio.TimeoutError as exc:
+        # 버려질 스트림은 닫아 준다. 닫다 실패해도 갈아타는 일을 막지는 않는다.
+        try:
+            await agen.aclose()
+        except Exception:  # noqa: BLE001
+            pass
+        raise RespondTimeout() from exc
+    except StopAsyncIteration:
+        return
+    yield first
+    async for piece in it:
+        yield piece
+
+
 def _ladder(
     model: str, fallback_model: str, api_key: str, spare_keys: tuple[str, ...]
 ) -> list[tuple[str, str]]:
@@ -147,6 +197,7 @@ async def stream(
     prompts_dir=None,
     fallback_model: str = "",
     spare_keys: tuple[str, ...] = (),
+    ttft_timeout_ms: int = 5000,
 ) -> AsyncIterator[str]:
     """텍스트 조각을 그대로 흘린다. 실패하면 정형 문장 하나를 흘리고 끝낸다.
 
@@ -170,18 +221,22 @@ async def stream(
     rungs = _ladder(model, fallback_model, api_key, spare_keys)
     sent = False
 
+    deadline = ttft_timeout_ms / 1000
+
     for index, (key, rung_model) in enumerate(rungs):
         kwargs = {**kwargs, "model": rung_model}
         last = index == len(rungs) - 1
         try:
-            async for piece in _iter(messages, kwargs, key, base_url):
+            async for piece in _deadline(
+                _iter(messages, kwargs, key, base_url), deadline
+            ):
                 sent = True
                 yield piece
             if index:
-                # 갈아타서 살아난 턴. 사용자에게는 안 보이지만 한도의 증거다.
+                # 갈아타서 살아난 턴. 사용자에게는 안 보이지만 한도·장애의 증거다.
                 log("respond_switched", model=rung_model, status=f"rung{index}")
             return
-        except RateLimitError as exc:
+        except CLIMB as exc:
             _log_failure(exc, sent=sent, model=rung_model)
             if sent or last:
                 if not sent:
@@ -199,7 +254,9 @@ async def stream(
                 return
             kwargs = retry
             try:
-                async for piece in _iter(messages, kwargs, key, base_url):
+                async for piece in _deadline(
+                    _iter(messages, kwargs, key, base_url), deadline
+                ):
                     sent = True
                     yield piece
                 return

@@ -86,11 +86,11 @@ async def _warmup() -> None:
     if not _cfg.ai_warmup_on_start or not _cfg.google_api_key:
         return
 
-    async def one(model: str) -> None:
+    async def one(model: str, effort: str | None = None) -> None:
         try:
             await llm_client.create(
                 [{"role": "user", "content": "hi"}],
-                llm_client.build_kwargs(model=model, max_tokens=8),
+                llm_client.build_kwargs(model=model, max_tokens=8, effort=effort),
                 _cfg.google_api_key,
                 _cfg.ai_llm_base_url,
             )
@@ -98,15 +98,23 @@ async def _warmup() -> None:
         except Exception:
             error_log("llm_warmup_failed", model=model)
 
-    models = {
-        _cfg.ai_model_analyze,
-        _cfg.ai_model_respond,
-        _cfg.ai_model_observe,
-        _cfg.ai_model_summary,
-    }
+    # **응답 모델은 effort까지 얹어서 깨운다.** 모델이 `reasoning_effort`를 거부하면
+    # `learn_unsupported`가 400을 한 번 맞고 빼 버린 뒤 기억하는데, 그 한 번을
+    # 여기서 치러야 **사용자의 첫 턴이 왕복 한 번을 더 기다리지 않는다.**
+    jobs: list[tuple[str, str | None]] = [
+        (_cfg.ai_model_respond, _cfg.ai_respond_effort),
+        (_cfg.ai_model_respond_fallback, _cfg.ai_respond_effort),
+    ]
+    warmed = {_cfg.ai_model_respond, _cfg.ai_model_respond_fallback}
+    for model in (_cfg.ai_model_analyze, _cfg.ai_model_observe, _cfg.ai_model_summary):
+        if model and model not in warmed:
+            warmed.add(model)
+            jobs.append((model, None))
 
     async def all_of_them() -> None:
-        await asyncio.gather(*(one(m) for m in models), return_exceptions=True)
+        await asyncio.gather(
+            *(one(m, e) for m, e in jobs if m), return_exceptions=True
+        )
 
     _spawn(all_of_them())
 
@@ -288,6 +296,7 @@ async def chat_completions(
                 base_url=_cfg.ai_llm_base_url,
                 fallback_model=_cfg.ai_model_respond_fallback,
                 spare_keys=(_cfg.google_api_key_2, _cfg.google_api_key_3),
+                ttft_timeout_ms=_cfg.ai_respond_ttft_timeout_ms,
             ):
                 if ttft_ms is None:
                     ttft_ms = int((time.monotonic() - stream_at) * 1000)

@@ -430,3 +430,102 @@ async def test_사다리를_다_쓰면_그때_정형_문장이다(monkeypatch):
     # 위기에서는 109 안내가 든 문장이어야 한다 — 실패해도 해야 할 말을 한다.
     assert out == [respond_call.FALLBACK_CRISIS]
     assert "109" in out[0]
+
+
+# ── 첫 글자 시한 (2026-09-08: 응답 모델 TTFT 188초) ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_첫_글자가_늦으면_다음_칸으로_넘어간다(monkeypatch):
+    """**늦게 오는 답은 안 온 답이다.** Hume이 그때까지 안 기다린다.
+
+    실측에서 응답 모델의 TTFT가 188초까지 갔고, 사용자는 답변 음성을 아예
+    못 들었다. 기다리느니 다른 조합으로 넘어간다.
+    """
+    import asyncio
+
+    seen: list[str] = []
+
+    async def slow_then_fast(_messages, kwargs, _key, _base=""):
+        seen.append(kwargs["model"])
+        if kwargs["model"] == "느린모델":
+            await asyncio.sleep(5)   # 시한(0.2초)을 한참 넘긴다
+            yield "이건 못 나간다"
+        else:
+            yield "그러셨군요."
+
+    monkeypatch.setattr(respond_call, "_iter", slow_then_fast)
+    flags = respond_call.build_flags(
+        gap_triggered=False, crisis=False, crisis_by=None,
+        soft_wrap=False, advice_requested=False, elapsed_min=1,
+    )
+    out = [
+        p
+        async for p in respond_call.stream(
+            history=[{"role": "user", "content": "오늘 좀 지치네요"}],
+            flags=flags, model="느린모델", effort=None, api_key="k1",
+            base_url="http://x/v1/", fallback_model="빠른모델",
+            ttft_timeout_ms=200,
+        )
+    ]
+    assert seen == ["느린모델", "빠른모델"]
+    assert out == ["그러셨군요."]
+
+
+@pytest.mark.asyncio
+async def test_말을_시작한_뒤에는_자르지_않는다(monkeypatch):
+    """중간에 끊긴 문장이 TTS로 나가면 사용자는 말이 잘리는 것을 듣는다."""
+    import asyncio
+
+    async def slow_tail(_messages, _kwargs, _key, _base=""):
+        yield "그러셨군요. "
+        await asyncio.sleep(0.5)     # 시한(0.2초)보다 길지만 이미 시작했다
+        yield "조금 더 들려주시겠어요?"
+
+    monkeypatch.setattr(respond_call, "_iter", slow_tail)
+    flags = respond_call.build_flags(
+        gap_triggered=False, crisis=False, crisis_by=None,
+        soft_wrap=False, advice_requested=False, elapsed_min=1,
+    )
+    out = [
+        p
+        async for p in respond_call.stream(
+            history=[{"role": "user", "content": "..."}],
+            flags=flags, model="m", effort=None, api_key="k",
+            base_url="http://x/v1/", ttft_timeout_ms=200,
+        )
+    ]
+    assert out == ["그러셨군요. ", "조금 더 들려주시겠어요?"]
+
+
+@pytest.mark.asyncio
+async def test_503도_갈아탄다(monkeypatch):
+    """모델 과부하(5xx)는 다음 칸에서 살아날 수 있다 — 429만 갈아타면 안 된다."""
+    from openai import InternalServerError
+
+    seen: list[str] = []
+
+    async def boom_then_ok(_messages, kwargs, _key, _base=""):
+        seen.append(kwargs["model"])
+        if kwargs["model"] == "죽은모델":
+            exc = InternalServerError.__new__(InternalServerError)
+            Exception.__init__(exc, "overloaded")
+            exc.status_code = 503
+            raise exc
+        yield "네, 듣고 있어요."
+
+    monkeypatch.setattr(respond_call, "_iter", boom_then_ok)
+    flags = respond_call.build_flags(
+        gap_triggered=False, crisis=False, crisis_by=None,
+        soft_wrap=False, advice_requested=False, elapsed_min=1,
+    )
+    out = [
+        p
+        async for p in respond_call.stream(
+            history=[{"role": "user", "content": "..."}],
+            flags=flags, model="죽은모델", effort=None, api_key="k",
+            base_url="http://x/v1/", fallback_model="산모델",
+        )
+    ]
+    assert seen == ["죽은모델", "산모델"]
+    assert out == ["네, 듣고 있어요."]
