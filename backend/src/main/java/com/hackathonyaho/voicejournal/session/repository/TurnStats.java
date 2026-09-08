@@ -83,4 +83,24 @@ public class TurnStats {
                 Timestamp.class, sessionId);
         return last == null ? startedAt : last.toInstant();
     }
+
+    /**
+     * <b>실제로 말이 오간 시간 — 첫 턴부터 마지막 턴까지다.</b> 계약 §2-5.
+     *
+     * <p>{@code started_at}에서 재지 않는 이유가 이 값의 존재 이유다. 사용자가 화면을
+     * 열어 두고 한참 뒤에 말을 시작하면 그 공백이 전부 들어간다 — 실측으로 <b>31초짜리
+     * 대화가 951초</b>로 기록됐다(2026-09-08). 하드컷으로 자르면 숫자는 작아지지만
+     * <b>서로 다른 대화가 전부 정확히 420초로 찍혀</b> 틀린 줄조차 모르게 된다.
+     *
+     * <p>턴이 0·1건이면 0이다. 첫 발화 이전과 마지막 발화의 꼬리는 빠지므로 <b>약간
+     * 과소</b>하다 — 정확히 하려면 발화 길이가 필요하고 그건 계약 §3-2와 스키마를
+     * 같이 바꿔야 한다.
+     */
+    public int activeSec(UUID sessionId) {
+        Integer sec = jdbc.queryForObject(
+                "select coalesce(extract(epoch from (max(occurred_at) - min(occurred_at)))::int, 0) "
+                        + "from turn_log where session_id = ?",
+                Integer.class, sessionId);
+        return sec == null ? 0 : sec;
+    }
 }

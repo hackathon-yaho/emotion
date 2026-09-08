@@ -150,8 +150,7 @@ public class SessionService {
         VoiceSession session = mine(profileId, sessionId);
 
         if (session.isOpen()) {
-            Instant now = Instant.now();
-            session.end(endReason, now, (int) Duration.between(session.getStartedAt(), now).toSeconds());
+            session.end(endReason, Instant.now(), durationSec(sessionId));
             // F3-05(P1)가 아니라 종료의 기본 동작이다 — 잘려도 F3-04와 TC-07이 살아 있어야 한다.
             baselineRepository.findById(profileId).ifPresent(UserBaseline::countSession);
             recalculateBaseline(profileId);
@@ -278,8 +277,9 @@ public class SessionService {
 
     /** 요약을 만들지 않는다 — 아무도 보고 있지 않은 세션이고, 건당 3초가 스케줄러를 막는다. */
     private void closeAsTimeout(VoiceSession session, Instant lastActivityAt) {
-        int used = usedSec(session, lastActivityAt);
-        session.end(TIMEOUT, session.getStartedAt().plusSeconds(used), used);
+        // 끝난 시각은 마지막으로 말한 시각이다. 종전에는 started_at + usedSec을 썼는데,
+        // usedSec이 하드컷으로 잘리는 값이라 마지막 턴보다 앞선 ended_at이 나올 수 있었다.
+        session.end(TIMEOUT, lastActivityAt, durationSec(session.getId()));
         baselineRepository.findById(session.getProfileId()).ifPresent(UserBaseline::countSession);
         recalculateBaseline(session.getProfileId());
     }
@@ -299,6 +299,19 @@ public class SessionService {
     }
 
     // ── 공통 ────────────────────────────────────────────────────────
+
+    /**
+     * 계약 §2-5의 {@code durationSec} — <b>말이 오간 시간</b>이다. {@code usedSec}과
+     * 헷갈리기 쉬운데 둘은 다르다: {@code usedSec}은 <b>시작부터</b> 재서 잔여 시간을
+     * 계산하는 값(§2-2)이고, 이것은 <b>첫 턴부터</b> 재서 화면에 보여줄 값이다.
+     *
+     * <p>종전에는 종료 경로마다 정의가 달랐다 — 사용자 종료는 벽시계, 스케줄러 정리는
+     * {@code usedSec}. 같은 컬럼에 두 정의가 섞여 들어갔고, 벽시계 쪽은 하드컷을
+     * 넘는 값(951초)까지 기록했다.
+     */
+    private int durationSec(UUID sessionId) {
+        return Math.min(turnStats.activeSec(sessionId), policy.getHardCutSec());
+    }
 
     /**
      * <b>실제로 말한 시간이다 — 시작 후 흐른 시간이 아니다.</b> 앱이 죽으면 종료 신호가

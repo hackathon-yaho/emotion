@@ -92,7 +92,7 @@ create index idx_session_batch_pending   on voice_session (ended_at) where ended
 | `id` | **UUIDv4.** CLM 인증에 `custom_session_id`로 쓰이므로 **로그에 남기지 않는다**(백엔드 절대 원칙 6번) |
 | `threshold_mode` | `session_count >= 5` **AND** `avg_gap IS NOT NULL`이면 `personal`, 아니면 `fixed`(F3-04, 2026-09-04 가드 추가). **가드가 없으면 5세션 내내 분석이 실패한 사용자가 평균 없이 `personal`로 넘어간다** |
 | `gap_threshold` | **세션 시작 시 실제로 적용한 임계값 수치를 그대로 박는다.** F9-02 음영(계약 §2-8 `highlights`)이 이 값으로 판정한다. `NOT NULL` — 세션이 시작됐다면 임계값은 반드시 정해져 있다 |
-| `ended_at` `duration_sec` | 종료 전에는 NULL. `duration_sec`는 종료 시 계산해 넣는다 |
+| `ended_at` `duration_sec` | 종료 전에는 NULL. **`duration_sec`은 「말이 오간 시간」이다 — 첫 턴부터 마지막 턴까지, `hardCutSec` 상한, 턴 0·1건이면 0** (계약 §2-5, v1.11). 벽시계(`ended_at − started_at`)가 아니다 |
 | `end_reason` | 앱은 `timeout`·`resumed`를 보내지 않는다(계약 §2-5). 서버 내부에서만 기록 |
 | `summary` | **NULL 가능** — 생성 실패·`endReason: timeout`(§2-5) |
 | `pattern_processed_at` | **NULL이면 배치 미처리.** 스케줄러가 이 조건으로 훑는다(F7-01) |

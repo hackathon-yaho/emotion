@@ -64,6 +64,7 @@ class SessionApiTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired EntityManager em;
 
+    @Autowired com.hackathonyaho.voicejournal.common.crypto.TranscriptConverter transcriptConverter;
     @MockitoBean HumeTokenService humeTokenService;
     /** 대역이 없으면 세션 시작마다 실제 api.hume.ai로 나간다. */
     @MockitoBean HumeChatClient humeChatClient;
@@ -160,10 +161,57 @@ class SessionApiTest {
                         .content("{\"endReason\":\"user_end\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.turnCount").value(0))
+                .andExpect(jsonPath("$.durationSec").value(0))
                 .andExpect(jsonPath("$.summary").doesNotExist())
                 .andExpect(jsonPath("$.gapAvg").doesNotExist());
 
         assertThat(baselineRepository.findById(profileId).orElseThrow().getSessionCount()).isEqualTo(1);
+    }
+
+    /**
+     * 계약 §2-5 (v1.11) — <b>{@code durationSec}은 화면을 열어 둔 시간이 아니라 말이
+     * 오간 시간이다.</b>
+     *
+     * <p>실측으로 이 값이 틀린 것을 앱이 먼저 봤다(2026-09-08): 시작 후 15분간 아무 턴도
+     * 없다가 <b>31초를 대화한 세션이 951초</b>로 기록됐다. 벽시계로 쟀기 때문이다.
+     * 하드컷으로 자르는 방법도 있었지만 그러면 <b>서로 다른 대화가 전부 정확히 420초로
+     * 찍혀</b> 틀린 줄조차 모르게 된다.
+     */
+    @Test
+    @DisplayName("durationSec은 첫 턴부터 마지막 턴까지다 — 시작 후 방치한 시간은 빠진다")
+    void endMeasuresTalkingTimeNotWallClock() throws Exception {
+        UUID sessionId = startSession();
+        backdateStart(sessionId, 16);
+
+        Instant firstTurn = Instant.now().minus(31, ChronoUnit.SECONDS);
+        insertTurn(sessionId, 1, firstTurn);
+        insertTurn(sessionId, 2, firstTurn.plusSeconds(31));
+
+        mvc.perform(post("/api/session/{id}/end", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"endReason\":\"user_end\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.durationSec").value(31));
+    }
+
+    /** 이어하기로 턴 사이가 벌어져도 하드컷을 넘을 수는 없다 (§2-4). */
+    @Test
+    @DisplayName("durationSec은 hardCutSec을 넘지 않는다")
+    void endClampsDurationToHardCut() throws Exception {
+        UUID sessionId = startSession();
+        backdateStart(sessionId, 40);
+
+        Instant firstTurn = Instant.now().minus(35, ChronoUnit.MINUTES);
+        insertTurn(sessionId, 1, firstTurn);
+        insertTurn(sessionId, 2, Instant.now());
+
+        mvc.perform(post("/api/session/{id}/end", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"endReason\":\"user_end\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.durationSec").value(420));
     }
 
     /** 앱이 종료를 재시도하는 것은 정상이다 — 그때 404를 주면 방금 한 대화가 사라진 것으로 보인다. */
@@ -472,12 +520,17 @@ class SessionApiTest {
         em.clear();
     }
 
-    /** 본문은 Phase 3에서 암호화된다. 여기서는 집계만 보므로 자리표시를 넣는다. */
+    /**
+     * <b>본문은 실제 변환기로 암호화해 넣는다.</b> 종전에는 평문 자리표시를 넣었는데,
+     * 집계만 보는 테스트에서는 드러나지 않다가 <b>턴을 읽는 경로(요약 생성)를 타는
+     * 순간 복호화가 터졌다</b> — 500이 되고, 원인은 테스트 픽스처에 있었다.
+     */
     private void insertTurn(UUID sessionId, int turnIndex, Instant occurredAt) {
         runSql("""
                         insert into turn_log (session_id, turn_index, role, occurred_at, transcript_enc)
-                        values (?, ?, 'user', ?, 'enc-placeholder')
+                        values (?, ?, 'user', ?, ?)
                         """,
-                sessionId, turnIndex, java.sql.Timestamp.from(occurredAt));
+                sessionId, turnIndex, java.sql.Timestamp.from(occurredAt),
+                transcriptConverter.convertToDatabaseColumn("테스트 발화"));
     }
 }
