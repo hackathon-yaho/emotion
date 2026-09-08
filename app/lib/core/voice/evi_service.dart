@@ -100,6 +100,13 @@ class EviService {
 
   Timer? _holdTimer;
 
+  /// 인사가 **시작될** 때까지 기다리는 시간. 이 안에 아무 말도 없으면 마이크를
+  /// 연다 — 오지 않는 인사를 기다리며 사용자 말을 버리지 않는다.
+  static const _greetingGrace = Duration(milliseconds: 2500);
+
+  /// 인사가 시작된 뒤 끝나기를 기다리는 상한.
+  static const _holdCap = Duration(seconds: 15);
+
   /// 마지막 소켓 오류 문구 — 진단용(`SHOW_ERROR_DETAIL`).
   String? _lastSocketError;
   String? get lastSocketError => _lastSocketError;
@@ -134,9 +141,13 @@ class EviService {
     _holdTimer?.cancel();
     _micHeld = holdMicForGreeting;
     if (_micHeld) {
-      // **인사가 오지 않는 Config도 있을 수 있다.** 그때 보류가 안 풀리면
-      // 대화가 통째로 죽으므로, 기다림에는 반드시 끝이 있어야 한다.
-      _holdTimer = Timer(const Duration(seconds: 12), () => _releaseMic(gen));
+      // **인사가 시작될 때까지만 짧게 기다린다.**
+      //
+      // 종전에는 12초를 기다렸다. 인사가 오지 않는 경우(Config·계정 문제,
+      // 이어하기한 채팅)에 **사용자가 12초 동안 말해도 한 마디도 전달되지
+      // 않았다** — "AI가 한 번도 말을 안 했다"의 모양이 이것이다. 인사가
+      // 실제로 시작되면(`assistant_message`) 그때부터 끝까지 기다린다.
+      _holdTimer = Timer(_greetingGrace, () => _releaseMic(gen));
     }
     try {
       final channel = connect(_endpoint({
@@ -274,7 +285,7 @@ class EviService {
         return;
       }
       waited += step;
-      if (speaker.idle || waited > const Duration(seconds: 12)) {
+      if (speaker.idle || waited > _holdCap) {
         timer.cancel();
         _releaseMic(gen);
       }
@@ -287,6 +298,28 @@ class EviService {
     _holdTimer = null;
     _micHeld = false;
     _emit(const EviMicLive());
+  }
+
+  /// 사용자가 「말 다 했어요」를 눌렀다 — **소리 전송을 즉시 끊는다.**
+  ///
+  /// EVI에는 턴을 강제로 끝내는 클라이언트 메시지가 없다(공식 문서의 클라이언트
+  /// 메시지는 `audio_input`·`user_input`·`session_settings`·`assistant_input`
+  /// 넷뿐이고, `turn_detection`은 Config 전용이라 세션 설정으로 못 바꾼다).
+  /// 그래서 할 수 있는 것은 **침묵을 만들어 주는 것**이다 — 소리를 끊으면
+  /// Hume이 `end_of_turn_silence_ms`(1800ms) 뒤에 턴을 확정한다.
+  ///
+  /// 얻는 것이 두 가지다. 화면이 **곧바로** 「생각 중」으로 갈 수 있고, 숨소리·
+  /// 주변 소음·"음…" 같은 것이 **턴을 계속 열어 두는 일이 사라진다** — 그게
+  /// 실제로 오래 기다리게 만드는 원인이다.
+  ///
+  /// 다시 여는 것은 AI의 답이 끝나고 재생이 빈 뒤다(`assistant_end`).
+  void finishTurn() {
+    if (_micHeld || _channel == null) return;
+    _micHeld = true;
+    final gen = _generation;
+    // 답이 아예 오지 않는 경우에도 마이크가 영영 닫혀 있지 않게 한다.
+    _holdTimer?.cancel();
+    _holdTimer = Timer(_holdCap, () => _releaseMic(gen));
   }
 
   void _send(Map<String, Object?> message) {
@@ -325,6 +358,13 @@ class EviService {
 
       case 'assistant_message':
         assistantTurns++;
+        // 인사가 **시작됐다.** 짧은 유예를 끝까지 기다리는 쪽으로 바꾼다 —
+        // 여기서 유예가 끝나 버리면 인사 도중에 마이크가 열린다.
+        if (_micHeld) {
+          _holdTimer?.cancel();
+          final gen = _generation;
+          _holdTimer = Timer(_holdCap, () => _releaseMic(gen));
+        }
         final text = _content(json);
         if (text != null) _emit(EviAssistantSpoke(text));
 

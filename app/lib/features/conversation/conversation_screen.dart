@@ -472,6 +472,27 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     }
   }
 
+  /// 「말 다 했어요」 — 소리 전송을 끊고 **곧바로** 「생각 중」으로 간다.
+  ///
+  /// Hume이 턴을 확정하는 데는 여전히 1.8초가 걸리지만(`end_of_turn_silence_ms`),
+  /// 그 1.8초를 **기다리는 화면**과 「듣고 있습니다」로 남아 있는 화면은 다르다.
+  void _finishTurn() {
+    ref.read(eviServiceProvider).finishTurn();
+    _heardTimer?.cancel();
+    _slowTimer?.cancel();
+    setState(() {
+      _slowThinking = false;
+      _state = TalkState.thinking;
+    });
+    _breath.repeat(reverse: true);
+    // 여기서부터 재는 것이 사용자가 실제로 기다리는 시간이다.
+    _slowTimer = Timer(_slowAfter + const Duration(milliseconds: 1800), () {
+      if (mounted && _state == TalkState.thinking) {
+        setState(() => _slowThinking = true);
+      }
+    });
+  }
+
   /// 방금 들은 말을 잠깐 띄우고 **「생각 중」으로 넘어간다** (§6-1 절충안).
   ///
   /// EVI가 `user_message`를 주는 시점이 전사가 확정된 순간이고, 그 뒤로
@@ -690,11 +711,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             offset: 8,
             cool: 0.85,
             warm: 0.60,
+            canFinishTurn: true,
           ),
         TalkState.speaking =>
           const _Ring('말하고 있습니다', size: 168, offset: 3, cool: 0.50, warm: 0.35),
-        TalkState.quiet =>
-          const _Ring('듣고 있습니다', size: 184, offset: 5, cool: 0.50, warm: 0.32),
+        TalkState.quiet => const _Ring('듣고 있습니다',
+            size: 184, offset: 5, cool: 0.50, warm: 0.32, canFinishTurn: true),
         // 듣는 중보다 링이 **조금 작고 가깝다** — 밖으로 열려 있던 것이
         // 안으로 모이는 모양이다. 색은 그대로다 (FR-030).
         TalkState.thinking => _Ring(
@@ -712,6 +734,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             cool: 0.80,
             warm: 0.55,
             nearEnd: true,
+            canFinishTurn: true,
           ),
         // 아직 대화가 아니라 **기다림**이다 — 링을 작고 흐리게 둔다.
         TalkState.queued => _Ring(
@@ -917,7 +940,33 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
           onPick: (s) => setState(() => _state = s),
         ),
 
-        if (r.cta == null)
+        // **사용자가 자기 턴을 끝낸다** (2026-09-08 요청).
+        //
+        // Hume은 침묵 1.8초를 봐야 턴을 확정한다. 그 사이 숨소리·주변 소음이
+        // 들어가면 계속 열려 있어 **한참을 기다리게 된다.** 눌러서 끊는다.
+        if (r.canFinishTurn) ...[
+          FilledAction(label: '말 다 했어요', height: 56, onPressed: _finishTurn),
+          const SizedBox(height: Space.xs),
+          // 대화를 끝내는 길은 늘 열어 둔다 — 다만 지금 할 일은 위쪽이라
+          // 조용한 글자로 둔다.
+          GestureDetector(
+            onTap: _end,
+            behavior: HitTestBehavior.opaque,
+            child: SizedBox(
+              height: Space.tapMin,
+              child: Center(
+                child: Text(
+                  '대화 마치기',
+                  style: AppType.sans(
+                    size: AppType.captionSizeLg,
+                    color: t.muted,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ] else if (r.cta == null)
           OutlineAction(label: '대화 마치기', height: 56, onPressed: _end)
         else if (_state == TalkState.queued)
           // 줄에서 빠지는 것은 파괴적 동작이 아니다 — 테두리 버튼으로 둔다.
@@ -966,6 +1015,7 @@ class _Ring {
     this.error,
     this.cta,
     this.nearEnd = false,
+    this.canFinishTurn = false,
   });
 
   final String label;
@@ -977,6 +1027,10 @@ class _Ring {
   final String? error;
   final String? cta;
   final bool nearEnd;
+
+  /// 「말 다 했어요」를 보여줄 상태인지 — 마이크가 살아 있고 AI가 말하고 있지
+  /// 않을 때만이다.
+  final bool canFinishTurn;
 }
 
 /// 진단 한 줄 — **`SHOW_ERROR_DETAIL`에서만 나온다.**

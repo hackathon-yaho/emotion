@@ -243,6 +243,33 @@ void main() {
       expect(audioFrames(), hasLength(1));
     });
 
+    test('인사가 오지 않으면 짧게 기다리고 만다 — 말을 버리지 않는다', () async {
+      // 종전에는 12초를 기다렸다. 인사가 없는 경우(Config·계정 문제)에
+      // **사용자가 12초 동안 말해도 한 마디도 전달되지 않았다.**
+      await startHeld();
+      await Future<void>.delayed(const Duration(milliseconds: 2700));
+      expect(evi.micHeld, isFalse);
+      mic.speak([1, 2]);
+      await settle();
+      expect(audioFrames(), hasLength(1));
+    });
+
+    test('인사가 시작되면 짧은 유예를 넘겨 끝까지 기다린다', () async {
+      await startHeld();
+      speaker.quiet = false;
+      channel.push({
+        'type': 'assistant_message',
+        'message': {'role': 'assistant', 'content': '안녕하세요'}
+      });
+      await settle();
+      // 유예(2.5초)를 지나도 보류가 유지된다 — 인사가 아직 안 끝났다.
+      await Future<void>.delayed(const Duration(milliseconds: 2700));
+      expect(evi.micHeld, isTrue);
+      mic.speak([1, 2]);
+      await settle();
+      expect(audioFrames(), isEmpty);
+    });
+
     test('보류는 첫 턴 한 번뿐이다 — 그 뒤 끼어들기는 기능이다', () async {
       await startHeld();
       channel.push({'type': 'assistant_end'});
@@ -267,6 +294,43 @@ void main() {
       await startHeld();
       expect(evi.micHeld, isTrue);
       await start(); // 보류 없이 다시
+      expect(evi.micHeld, isFalse);
+    });
+  });
+
+  // EVI에는 턴을 강제로 끝내는 클라이언트 메시지가 없다. 할 수 있는 것은
+  // **침묵을 만들어 주는 것**이고, 그러면 Hume이 1.8초 뒤에 턴을 확정한다.
+  group('발언 종료 (2026-09-08 요청)', () {
+    test('누르면 소리 전송이 즉시 멈춘다', () async {
+      await start();
+      mic.speak([1, 2]);
+      await settle();
+      evi.finishTurn();
+      mic.speak([3, 4]);
+      mic.speak([5, 6]);
+      await settle();
+      final audio = channel.sent
+          .map((s) => jsonDecode(s) as Map<String, dynamic>)
+          .where((m) => m['type'] == 'audio_input')
+          .toList();
+      expect(audio, hasLength(1), reason: '누른 뒤의 소리는 나가지 않는다');
+      expect(evi.micHeld, isTrue);
+    });
+
+    test('AI 답이 끝나고 재생이 비면 다시 열린다', () async {
+      await start();
+      evi.finishTurn();
+      speaker.quiet = false;
+      channel.push({'type': 'assistant_end'});
+      await settle();
+      expect(evi.micHeld, isTrue, reason: '재생 중에는 열지 않는다');
+      speaker.quiet = true;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(evi.micHeld, isFalse);
+    });
+
+    test('소켓이 없으면 아무 일도 하지 않는다', () async {
+      evi.finishTurn();
       expect(evi.micHeld, isFalse);
     });
   });
