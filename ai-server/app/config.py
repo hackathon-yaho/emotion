@@ -41,12 +41,16 @@ class Settings(BaseSettings):
     google_api_key_3: str = ""
     ai_llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     ai_model_analyze: str = "gemini-3.5-flash-lite"
-    # 2026-09-08 실측 TTFT — **3.8-flash 188초**, 3.5-flash 8.3초, **flash-lite 1.0초**.
-    # 3.8-flash 로는 Hume이 기다려 주지 않아 **답변 음성이 아예 안 나갔다.**
-    # 분석이 매 턴 flash-lite 로 1초 안에 돌아오고 있었다 — 그 실적을 따른다.
-    ai_model_respond: str = "gemini-3.5-flash-lite"
-    # 한도·장애로 못 쓸 때 내려갈 자리. 느리지만(8.3초) 정형 문장보다는 낫다.
-    ai_model_respond_fallback: str = "gemini-3.5-flash"
+    # **무료 티어에서는 신형일수록 밀려 있다** (2026-09-09 실측, 실제 프롬프트·3회 중앙값).
+    #   3.8-flash 188초 · 3.7-flash 503 · 3.6-flash 15초 초과 · 3.5-flash 14.6초
+    #   **2.5-flash 1.30초** · 3.5-flash-lite 1.06초 · 2.5-flash-lite 전부 실패
+    # 안정 GA 라인(2.5)이 프리뷰 라인보다 빠르다 — 할당된 용량이 있기 때문으로 보인다.
+    # **2.5-flash 는 lite 가 아닌 정식 flash 인데 1.3초다.** 품질을 한 칸 올리면서
+    # 속도를 잃지 않는 자리라 여기를 기본으로 둔다.
+    ai_model_respond: str = "gemini-2.5-flash"
+    # 내려갈 자리. 1.06초로 더 빠르고, **분석과 같은 모델이라 실적이 증명돼 있다.**
+    # 기본과 모델이 달라 **한도(429)를 따로 센다** — 그것만으로도 갈아탈 값어치가 있다.
+    ai_model_respond_fallback: str = "gemini-3.5-flash-lite"
     # thinking을 끄지 않으면 사고 토큰이 출력 예산을 먹어 문장이 잘린다(실측).
     # flash-lite 는 이 파라미터 자체를 거부하는데, `learn_unsupported`가 400을 한 번
     # 맞고 빼 버린 뒤 기억한다 — 값은 그대로 두는 편이 안전하다.
