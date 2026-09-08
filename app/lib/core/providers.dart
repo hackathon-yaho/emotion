@@ -262,3 +262,14 @@ final eviServiceProvider = Provider<EviService>((ref) {
 /// 3안(연결 직후 전송)으로 회신했고, 엔드포인트가 생기면 여기서 보낸다.
 /// 지금은 같은 세션 안에서 재연결할 때만 쓰인다.
 final chatGroupIdProvider = StateProvider<String?>((_) => null);
+
+/// 홈의 이어하기 카드에서 **「새로 시작」**을 골랐다 (F2-07).
+///
+/// **둘을 구별하지 않으면 「새로 시작」이 이어하기가 된다.** 두 버튼이 같은
+/// 경로로 대화 화면을 열고, 화면은 열린 세션이 있으면 무조건 `resume`을 부르기
+/// 때문이다 — 2026-09-08 실사용에서 "새로 시작을 골랐는데 대화 시간이 10분"으로
+/// 드러났다(이어한 세션의 경과 시간이었다).
+///
+/// 계약 §2-5-1: *"사용자가 아니오를 고르면 앱은 이 대신 `POST /api/session/{id}/end`
+/// (`endReason: user_end`)를 호출해 그 세션을 닫는다."*
+final startFreshProvider = StateProvider<bool>((_) => false);

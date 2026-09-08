@@ -13,6 +13,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/providers.dart';
 import '../../core/session/app_session.dart';
 import '../../core/session/session_clock.dart';
+import '../../core/session/session_entry.dart';
 import '../../core/voice/evi_service.dart';
 import '../../core/voice/speaker.dart';
 import '../../core/voice/evi_event.dart';
@@ -151,13 +152,19 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     setState(() => _state = TalkState.connecting);
     try {
       final open = await repo.me().then((m) => m.openSession);
+
+      // 홈에서 「새로 시작」을 골랐으면 **이어하기를 타지 않는다.** 열려 있던
+      // 세션은 닫는다 (계약 §2-5-1). 표시는 한 번 쓰고 버린다.
+      final fresh = ref.read(startFreshProvider);
+      if (fresh) ref.read(startFreshProvider.notifier).state = false;
+
       final SessionStart session;
       String? resumedChatGroupId;
       // **이어할 수 있는지 먼저 본다.** 30분 창이 지난 세션에 `resume`을 부르면
       // 409 `SESSION_NOT_RESUMABLE`이 오고, 그걸 "시작할 수 없습니다"로
       // 보여주면 사용자는 앱이 고장 난 줄 안다 — 실제로는 새로 시작하면 되는
       // 상황이다 (design-system §7 결정 14).
-      if (open != null && open.isResumable) {
+      if (!fresh && open != null && open.isResumable) {
         final SessionResume r;
         try {
           r = await repo.resumeSession(open.sessionId);
@@ -172,7 +179,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         session = _asStart(r);
         resumedChatGroupId = r.resumedChatGroupId;
       } else {
-        final started = await repo.startSession();
+        final started = await startFreshSession(
+          repo,
+          // 「새로 시작」이면 열려 있던 세션을 닫고 간다.
+          closing: fresh ? open : null,
+        );
         if (!mounted) return;
         switch (started) {
           case SessionOpened(:final session):
@@ -215,7 +226,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   ///
   /// 대기열이 켜져 있으면 줄을 서고, 이 함수는 돌아오지 않는다.
   Future<SessionStart> _startFresh(JournalRepository repo) async {
-    final started = await repo.startSession();
+    final started = await startFreshSession(repo);
     switch (started) {
       case SessionOpened(:final session):
         return session;

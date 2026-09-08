@@ -253,7 +253,7 @@ class _PastRow extends StatelessWidget {
 ///
 /// **남은 시간을 화면이 직접 말한다** — 이어하기로 새 7분을 주면 세션당 원가
 /// 상한 $0.49가 뚫린다(NFR-06).
-class _ResumeBlock extends StatelessWidget {
+class _ResumeBlock extends ConsumerWidget {
   const _ResumeBlock({required this.open, required this.expired});
 
   /// **서버가 준 값만 쓴다.** 여기 있던 "5분 전"·"남은 시간 4분 42초"·"원래
@@ -264,7 +264,7 @@ class _ResumeBlock extends StatelessWidget {
   final bool expired;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = context.tokens;
     return Padding(
       padding: const EdgeInsets.only(bottom: Space.xl - Space.xs),
@@ -314,7 +314,13 @@ class _ResumeBlock extends StatelessWidget {
                   child: OutlineAction(
                     label: '새로 시작',
                     height: 56,
-                    onPressed: () => context.push(Routes.conversation),
+                    // **의도를 남기지 않으면 이어하기가 된다.** 대화 화면은
+                    // 열린 세션이 있으면 `resume`을 부르므로, 두 버튼이 같은
+                    // 경로로 열리면 구별할 방법이 없다 (2026-09-08 실사용).
+                    onPressed: () {
+                      ref.read(startFreshProvider.notifier).state = true;
+                      context.push(Routes.conversation);
+                    },
                   ),
                 ),
               ],
