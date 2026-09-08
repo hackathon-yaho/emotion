@@ -97,6 +97,12 @@ class _FakeSpeaker implements Speaker {
   final played = <Uint8List>[];
   int stops = 0;
 
+  /// 재생이 끝났는지 — 시험이 직접 정한다.
+  bool quiet = true;
+
+  @override
+  bool get idle => quiet;
+
   @override
   void enqueue(Uint8List wav) => played.add(wav);
 
@@ -189,6 +195,79 @@ void main() {
       mic.speak([1, 2, 3]);
       await settle();
       expect(channel.sent.join(), isNot(contains('language_model_api_key')));
+    });
+  });
+
+  // 연결 직후 화면이 「듣고 있습니다」가 되면 사용자가 그때 말을 시작하고,
+  // Hume은 그것을 끼어들기로 읽어 **AI의 첫 인사를 도중에 끊는다** —
+  // 2026-09-08 실사용에서 나왔다. 인사가 끝날 때까지 소리를 보내지 않는다.
+  group('첫 인사 동안 마이크 보류 (2026-09-08 실사용)', () {
+    Future<void> startHeld() => evi.start(
+          accessToken: 't',
+          configId: 'c',
+          sessionId: 's',
+          holdMicForGreeting: true,
+        );
+
+    List<Map<String, dynamic>> audioFrames() => channel.sent
+        .map((s) => jsonDecode(s) as Map<String, dynamic>)
+        .where((m) => m['type'] == 'audio_input')
+        .toList();
+
+    test('보류 중에는 소리를 보내지 않는다 — 계측은 계속한다', () async {
+      await startHeld();
+      final loud = Int16List(200)..fillRange(0, 200, 9000);
+      mic.speak(Uint8List.sublistView(loud));
+      await settle();
+      expect(audioFrames(), isEmpty, reason: '인사를 끊지 않는다');
+      expect(evi.micPeak, greaterThan(0), reason: '마이크가 살아 있는지는 별개다');
+      expect(evi.micHeld, isTrue);
+      expect(events.whereType<EviMicLive>(), isEmpty);
+    });
+
+    test('인사가 끝나고 재생까지 비면 열린다', () async {
+      await startHeld();
+      speaker.quiet = false; // 아직 스피커에서 나오는 중
+      channel.push({'type': 'assistant_end'});
+      await settle();
+      mic.speak([1, 2]);
+      await settle();
+      expect(audioFrames(), isEmpty, reason: '재생 중에 열면 자기 말을 끊는다');
+
+      speaker.quiet = true;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(evi.micHeld, isFalse);
+      expect(events.whereType<EviMicLive>(), hasLength(1));
+      mic.speak([3, 4]);
+      await settle();
+      expect(audioFrames(), hasLength(1));
+    });
+
+    test('보류는 첫 턴 한 번뿐이다 — 그 뒤 끼어들기는 기능이다', () async {
+      await startHeld();
+      channel.push({'type': 'assistant_end'});
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(evi.micHeld, isFalse);
+      // 두 번째 AI 발화가 끝나도 다시 보류로 돌아가지 않는다.
+      channel.push({'type': 'assistant_end'});
+      await settle();
+      expect(evi.micHeld, isFalse);
+      expect(events.whereType<EviMicLive>(), hasLength(1));
+    });
+
+    test('보류하지 않고 시작하면 곧바로 보낸다', () async {
+      await start();
+      expect(evi.micHeld, isFalse);
+      mic.speak([1, 2]);
+      await settle();
+      expect(audioFrames(), hasLength(1));
+    });
+
+    test('새 대화를 시작하면 보류가 남지 않는다', () async {
+      await startHeld();
+      expect(evi.micHeld, isTrue);
+      await start(); // 보류 없이 다시
+      expect(evi.micHeld, isFalse);
     });
   });
 

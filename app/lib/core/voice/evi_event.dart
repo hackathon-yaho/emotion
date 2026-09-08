@@ -43,6 +43,14 @@ class EviAssistantDone extends EviEvent {
 }
 
 /// 사용자가 AI 말을 끊었다 (`user_interruption`). 재생을 즉시 멈춘다.
+/// **이제부터 사용자 말을 받는다.**
+///
+/// 첫 인사가 끝날 때까지 마이크를 보류하므로(F2-02), 화면이 「듣고 있습니다」로
+/// 넘어갈 시점은 이 사건이다. 보류 없이 시작했으면 연결 직후에 온다.
+class EviMicLive extends EviEvent {
+  const EviMicLive();
+}
+
 class EviUserInterruption extends EviEvent {
   const EviUserInterruption();
 }

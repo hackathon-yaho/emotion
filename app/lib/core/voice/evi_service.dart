@@ -87,6 +87,19 @@ class EviService {
   int micLevel = 0;
   int micPeak = 0;
 
+  /// **첫 인사가 끝날 때까지 마이크 소리를 보내지 않는다.**
+  ///
+  /// EVI Config에 첫 인사말이 있어 연결 직후 AI가 먼저 말한다. 그런데 화면이
+  /// 곧바로 「듣고 있습니다」가 되면 사용자는 그때 말을 시작하고, Hume은 그것을
+  /// 끼어들기로 읽어 **인사를 자기 말 도중에 끊는다** — 2026-09-08 실사용에서
+  /// 나왔다. 스피커 소리가 마이크로 되돌아가도 같은 일이 벌어진다.
+  ///
+  /// 보류는 **첫 턴 한 번뿐이다.** 그 뒤의 끼어들기는 기능이라 막지 않는다.
+  bool _micHeld = false;
+  bool get micHeld => _micHeld;
+
+  Timer? _holdTimer;
+
   /// 마지막 소켓 오류 문구 — 진단용(`SHOW_ERROR_DETAIL`).
   String? _lastSocketError;
   String? get lastSocketError => _lastSocketError;
@@ -98,6 +111,7 @@ class EviService {
     required String configId,
     required String sessionId,
     String? resumedChatGroupId,
+    bool holdMicForGreeting = false,
   }) async {
     // **이전 연결을 먼저 끝낸다.** 안 그러면 옛 소켓이 살아남아, 그 소켓이
     // 나중에 닫힐 때 `onDone`이 **새 대화 화면을** "연결이 끊어졌습니다"로
@@ -117,6 +131,13 @@ class EviService {
     micLevel = 0;
     micPeak = 0;
     _lastSocketError = null;
+    _holdTimer?.cancel();
+    _micHeld = holdMicForGreeting;
+    if (_micHeld) {
+      // **인사가 오지 않는 Config도 있을 수 있다.** 그때 보류가 안 풀리면
+      // 대화가 통째로 죽으므로, 기다림에는 반드시 끝이 있어야 한다.
+      _holdTimer = Timer(const Duration(seconds: 12), () => _releaseMic(gen));
+    }
     try {
       final channel = connect(_endpoint({
         'access_token': accessToken,
@@ -195,6 +216,9 @@ class EviService {
   Future<void> stop() async {
     _closing = true;
     _generation++;
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _micHeld = false;
     await _micSub?.cancel();
     _micSub = null;
     await mic.close().catchError((_) {});
@@ -214,7 +238,9 @@ class EviService {
   // -------------------------------------------------------------------------
 
   void _sendAudio(Uint8List pcm) {
+    // **계측은 보류 중에도 한다** — 마이크가 살아 있는지는 보류와 별개다.
     _measure(pcm);
+    if (_micHeld) return;
     _send({'type': 'audio_input', 'data': base64Encode(pcm)});
   }
 
@@ -235,6 +261,32 @@ class EviService {
     // 값이 튀지 않게 지수 평활 — 눈으로 읽을 수 있어야 한다.
     micLevel = ((micLevel * 3 + level) / 4).round();
     if (level > micPeak) micPeak = level;
+  }
+
+  /// 재생이 다 끝나면 마이크를 연다. 200ms마다 보고, 오래 끌지 않는다.
+  void _releaseWhenQuiet(int gen) {
+    _holdTimer?.cancel();
+    var waited = Duration.zero;
+    const step = Duration(milliseconds: 200);
+    _holdTimer = Timer.periodic(step, (timer) {
+      if (gen != _generation) {
+        timer.cancel();
+        return;
+      }
+      waited += step;
+      if (speaker.idle || waited > const Duration(seconds: 12)) {
+        timer.cancel();
+        _releaseMic(gen);
+      }
+    });
+  }
+
+  void _releaseMic(int gen) {
+    if (gen != _generation || !_micHeld) return;
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _micHeld = false;
+    _emit(const EviMicLive());
   }
 
   void _send(Map<String, Object?> message) {
@@ -287,6 +339,10 @@ class EviService {
 
       case 'assistant_end':
         _emit(const EviAssistantDone());
+        // `assistant_end`는 **조각을 다 보냈다**는 뜻이다. 아직 스피커에서
+        // 나오는 중이라, 여기서 마이크를 열면 남은 인사가 마이크로 되돌아가
+        // 자기 말을 끊는다. 재생이 비는 것을 보고 연다.
+        if (_micHeld) _releaseWhenQuiet(_generation);
 
       case 'user_interruption':
         interruptions++;

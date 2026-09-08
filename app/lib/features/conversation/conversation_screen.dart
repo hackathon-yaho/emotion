@@ -269,15 +269,25 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     // 새 대화면 이전 그룹을 지운다 — 남겨두면 다음 소켓에 실린다.
     ref.read(chatGroupIdProvider.notifier).state = chatGroupId;
     ref.read(activeSessionProvider.notifier).state = session;
-    setState(() =>
-        _state = resumed ? TalkState.resumed : TalkState.listening);
-    _startClock(session.hardCutSec);
 
     // 샘플 모드는 소켓을 열지 않는다 — 단, 검증용 주소가 주어졌으면 그쪽으로
     // 붙는다. 그 주소는 Hume이 아니다 (`Env.eviWsUrl`).
-    if (ref.read(dataModeProvider) == DataMode.sample && !Env.hasEviOverride) {
-      return;
-    }
+    final connects =
+        ref.read(dataModeProvider) != DataMode.sample || Env.hasEviOverride;
+
+    // **새 대화를 「듣고 있습니다」로 시작하지 않는다.** AI가 먼저 인사하므로
+    // 그 사이에 사용자가 말을 시작하면 인사가 끊긴다 (2026-09-08 실사용).
+    // 인사가 끝나 마이크가 열릴 때 `EviMicLive`가 와서 넘어간다.
+    //
+    // 소켓을 열지 않는 샘플 모드는 그 사건이 오지 않으므로 그대로 듣는다.
+    setState(() => _state = switch (true) {
+          _ when resumed => TalkState.resumed,
+          _ when connects => TalkState.connecting,
+          _ => TalkState.listening,
+        });
+    _startClock(session.hardCutSec);
+
+    if (!connects) return;
     _connectVoice(session, chatGroupId);
   }
 
@@ -384,6 +394,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
       configId: session.humeConfigId,
       sessionId: session.sessionId,
       resumedChatGroupId: chatGroupId,
+      // 새 대화는 AI가 먼저 인사한다. 이어하기는 인사가 없으므로 보류하지
+      // 않는다 — 보류하면 12초를 기다린 뒤에야 말이 들어간다.
+      holdMicForGreeting: !_resumed,
     );
   }
 
@@ -401,6 +414,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
           ref.read(chatGroupIdProvider.notifier).state = chatGroupId;
           _saveChatGroup(chatGroupId);
         }
+        // **연결됐다고 「듣고 있습니다」로 가지 않는다.** AI가 먼저 인사하므로
+        // 그 사이에 사용자가 말을 시작하면 인사가 끊긴다 — `EviMicLive`가
+        // 올 때 넘어간다 (2026-09-08 실사용).
+        if (!ref.read(eviServiceProvider).micHeld) {
+          setState(() => _state = TalkState.listening);
+        }
+
+      case EviMicLive():
         setState(() => _state = TalkState.listening);
 
       case EviUserSpoke(:final text):
@@ -413,7 +434,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
 
       case EviAssistantDone():
         _stopThinking();
-        setState(() => _state = TalkState.listening);
+        // 인사 보류 중이면 아직 마이크가 닫혀 있다 — 「듣고 있습니다」로
+        // 먼저 넘어가면 사용자가 말해도 안 들어간다.
+        if (!ref.read(eviServiceProvider).micHeld) {
+          setState(() => _state = TalkState.listening);
+        }
 
       case EviUserInterruption():
         _stopThinking();

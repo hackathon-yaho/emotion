@@ -12,6 +12,13 @@ abstract interface class Speaker {
   /// 조각 하나를 큐에 넣는다. 재생 중이면 끝난 뒤에 이어 재생한다.
   void enqueue(Uint8List wav);
 
+  /// 지금 소리를 내고 있지 않고 큐도 비었는지.
+  ///
+  /// 첫 인사가 **스피커에서 다 나온 뒤에** 마이크를 여는 판단에 쓴다. Hume의
+  /// `assistant_end`는 조각을 다 보냈다는 뜻일 뿐이라, 그 시점에 열면 남은
+  /// 재생이 마이크로 되돌아가 **자기 말을 끊는다.**
+  bool get idle;
+
   /// 지금 재생과 **큐에 남은 것 전부** 버린다.
   ///
   /// 사용자가 말을 끊었을 때(`user_interruption`) 부른다 — 큐를 비우지 않으면
@@ -42,6 +49,9 @@ class AudioPlayersSpeaker implements Speaker {
 
   /// 진단용 — 받은 조각 수. `SHOW_ERROR_DETAIL`에서만 화면에 쓴다.
   int received = 0;
+
+  @override
+  bool get idle => !_playing && _queue.isEmpty;
 
   @override
   void enqueue(Uint8List wav) {
