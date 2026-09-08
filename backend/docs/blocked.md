@@ -142,8 +142,9 @@
 | --- | --- |
 | ~~cron 10분 킵얼라이브~~ | **AI가 걸었다** (2026-09-07, GCP Cloud Scheduler). 백엔드 `/api/health`·AI서버 `/health` 둘 다 10분. 별도 가입이 필요 없어 팀장 작업에서 빠졌다 |
 | `TRANSCRIPT_ENC_KEY`(배포용) 오프라인 사본 | 생성은 했다. **보관은 사람이 해야 한다** — 잃으면 도그푸딩 발화 전체가 복호화 불가 |
-| AI에 새 `INTERNAL_SHARED_SECRET` 전달 | 배포용은 로컬과 다른 값이다. 저장소에 넣지 않으므로 별도 경로 |
-| ~~`AI_SERVER_BASE_URL`~~ | **넣었다** (2026-09-06) — `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app` (Cloud Run, asia-northeast3). **다만 AI서버 쪽 공유 시크릿이 아직 배포용이 아니라** 양방향이 401이다. 그게 맞춰져야 요약·관찰이 실제로 돈다 |
+| ~~AI에 새 `INTERNAL_SHARED_SECRET` 전달~~ | **줬다** (2026-09-07, 별도 경로). AI서버가 교체 후 없는 세션에 `session_not_found`(=404)를 받아 인증 통과를 확인했다. `response/ai/deploy-secret-handoff.md` |
+| ~~Hume 키 3개~~ | **바꿨다** (2026-09-08, 계정 이관). 새 Config `be822367-66e8-453b-add2-0324f334bd9c` — 검증 후 Render 교체·재기동까지 끝. `response/ai/hume-account-migration.md` |
+| ~~`AI_SERVER_BASE_URL`~~ | **넣었다** (2026-09-06) — `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app` (Cloud Run, asia-northeast3). 시크릿도 그다음 날 맞췄다(위 행) |
 | ~~앱 웹 재빌드~~ → **앱이 백엔드를 안 부른다** | 재빌드는 **됐다**(2026-09-06, run 34003227111). 번들에 `emotion-6yeh.onrender.com`이 있고 `localhost:8080`은 0건인 것을 우리도 확인했다. **다만 앱이 `SAMPLE_DATA=true`를 일부러 켜 뒀다** — 배포 링크가 팀 밖에서도 열려서, 라이브면 누르는 즉시 EVI 통화가 열리고 과금된다. 그래서 **`GET /api/health`를 포함해 백엔드 호출이 한 건도 안 나간다. 서버 로그가 조용한 것이 정상이다.** 라이브 전환은 앱이 로컬로 실제 왕복을 확인한 뒤에 한다 |
 
 > **배포가 곧 도그푸딩 시작은 아니게 됐다.** 앱이 새 `API_BASE_URL`로 다시 빌드해야 하고 Hume Config에 CLM이 없어서(①), 지금 링크를 공유해도 대화가 성립하지 않는다.
@@ -152,7 +153,7 @@
 
 ## 백엔드가 지금 당장 만들 것
 
-**없다.** Phase 1~7의 코드와 검증이 끝났고 **배포도 됐다(⑦)**. 남은 것은 **cron 등록 하나와 위 ①~⑥의 값·회신**이다.
+**없다.** Phase 1~7의 코드와 검증이 끝났고 **배포도 됐다(⑦)**. cron·시크릿·AI서버 주소·Hume 키까지 전부 닫혔다. 남은 것은 **`TRANSCRIPT_ENC_KEY` 오프라인 사본 보관(사람 손)과 위 ①~⑥의 값·회신**이다.
 
 코드는 값이 오는 순간 그대로 돈다 — 기다리는 동안 백엔드가 더 만들 것은 없다.
 

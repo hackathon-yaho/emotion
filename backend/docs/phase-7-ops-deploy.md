@@ -8,7 +8,7 @@
 
 > **상태 (2026-09-05): 배포됐다 — `https://emotion-6yeh.onrender.com`**
 > **배포본에서 실제 확인한 것** — 부팅 성공(98.7초) · Supabase 연결(Postgres 17.6, 11테이블) · `GET /api/health` = `{"status":"ok","db":"ok"}` · 내부 API 인증 3경로(시크릿 없음 401 / 틀림 401 / 맞음+없는 세션 404) · CORS(GitHub Pages 오리진) 통과.
-> **7-4 체크박스에서 남은 것은 cron 킵얼라이브 하나**이고, 그 밖에 사람 손이 필요한 것이 셋 있다 — `TRANSCRIPT_ENC_KEY` 오프라인 사본 보관 · AI에 새 `INTERNAL_SHARED_SECRET` 전달 · AI서버가 배포되면 `AI_SERVER_BASE_URL` 갱신. 목록은 `blocked.md` ⑦.
+> **7-4 체크박스는 전부 닫혔다 (2026-09-08).** cron 킵얼라이브는 AI가 Cloud Scheduler로 걸었고, 새 `INTERNAL_SHARED_SECRET` 전달·`AI_SERVER_BASE_URL` 갱신·**Hume 키 3개 교체(계정 이관, 2026-09-08)**도 끝났다. **사람 손이 남은 것은 `TRANSCRIPT_ENC_KEY` 오프라인 사본 보관 하나다** — 잃으면 도그푸딩 발화 전체가 복호화 불가다. 목록은 `blocked.md` ⑦.
 
 > **배포는 세 파트(앱·백엔드·AI)의 기능 확인이 끝난 뒤에 한다**(2026-09-04 팀 결정, PRD §12). 도그푸딩이 웹 링크 공유로 진행되므로 **배포 시점이 곧 도그푸딩 시작 시점**이다. 그 전의 역할 간 통합 검증은 배포가 아니라 **임시 터널**로 한다 — `../../docs/request/ai/integration-test-path.md`.
 >
@@ -123,7 +123,7 @@
 
 ## 배포 당일 순서
 
-> **2026-09-05에 1~7·9(앱)를 실행했다.** 남은 것은 **8(cron)** 과 **9의 AI 절반**(새 시크릿 전달) · **10**(AI서버 주소)이다.
+> **1~10을 전부 실행했다.** 8(cron)은 2026-09-07에 AI가 Cloud Scheduler로, 9의 AI 절반(새 시크릿)과 10(AI서버 주소)도 같은 날 끝났다. **환경변수는 그 뒤 한 번 더 바뀌었다** — Hume 계정 이관으로 `HUME_API_KEY`·`HUME_SECRET_KEY`·`HUME_CONFIG_ID`를 2026-09-08에 교체했다(`../../docs/response/ai/hume-account-migration.md`).
 
 1. **Supabase 프로젝트 생성** → Connection string에서 **Session pooler(5432)** 문자열을 복사
 2. Supabase SQL Editor에 **`src/main/resources/db/migration.sql`을 그대로 붙여넣기** — 로컬과 같은 파일이다
@@ -137,10 +137,11 @@
 5. **환경변수 등록** — 위 표의 **필수 10개**. `PORT`는 넣지 않는다(Render가 준다)
 6. 첫 배포 → **로그 첫 화면에서 부팅 성공 확인.** 필수 변수가 빠졌으면 여기서 죽는다
 7. `GET /api/health`가 `{"status":"ok","db":"ok"}`인지 확인
-8. **cron에 10분 간격 킵얼라이브 등록 — 백엔드 `/api/health`와 AI서버 `/healthz` 두 곳.** 서비스 이름을 AI에 알려준다
+8. **cron에 10분 간격 킵얼라이브 등록 — 백엔드 `/api/health`와 AI서버 `/health` 두 곳.** 서비스 이름을 AI에 알려준다
+   - ⚠️ **AI서버는 `/healthz`가 아니다.** Cloud Run이 그 경로만 앞단에서 가로채 구글 HTML 404를 낸다 — 7-4 참조
 9. **앱·AI에 배포 도메인 전달** — 앱은 `API_BASE_URL`, AI는 `BACKEND_BASE_URL`
    - 앱 것은 **팀장이 직접 등록한다**: `gh variable set API_BASE_URL --repo hackathon-yaho/emotion --body https://…` (`.github/workflows/app-web.yml`이 `vars.API_BASE_URL`을 읽고, **비어 있으면 폴백이 `http://localhost:8080`이라 배포본이 조용히 로컬을 부른다**). `KAKAO_REST_KEY`는 2026-09-05에 등록해 뒀다
-10. ~~AI서버가 배포되면 **`AI_SERVER_BASE_URL`을 그 주소로** 갱신~~ → **완료 (2026-09-06)** — `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app`. **다만 AI서버 쪽 공유 시크릿이 배포용으로 안 바뀌어 아직 양방향 401이다**
+10. ~~AI서버가 배포되면 **`AI_SERVER_BASE_URL`을 그 주소로** 갱신~~ → **완료 (2026-09-06)** — `https://emotion-ai-server-gq7yhdrrlq-du.a.run.app`. 공유 시크릿도 **2026-09-07에 배포용으로 맞췄다**(`../../docs/response/ai/deploy-secret-handoff.md`)
 
 > **10번을 빠뜨리면 조용히 실패한다.** 요약은 `null`, 관찰은 0건이 되는데 **둘 다 정상 동작과 구분이 안 된다**(설계상 실패해도 대화·기록은 멀쩡하다). 배포 후 첫 대화에서 `summary`가 `null`이면 이걸 먼저 본다.
 

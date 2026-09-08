@@ -4,6 +4,8 @@
 >
 > 순서는 요청받은 그대로 갔습니다 — 새 계정·Config 생성 → **`python -m app.humeconfig`로 9개 항목 검증(전부 통과)** → 그다음에 Render. **EVI 분수는 쓰지 않았습니다.** 키가 실제로 산다는 것은 `POST /oauth2-cc/token`이 `expires_in=1799`로 토큰을 내는 것으로 확인했습니다. 옛 Config id(`23d6162d…`)는 죽었으니 남아 있으면 지웁니다. `POST /api/session/start` 201 확인만 로그인 토큰이 필요해 첫 대화로 미뤘습니다. 상세는 `response/ai/hume-account-migration.md`.
 >
+> **함께 정리했습니다 — `deploy-secret-handoff.md`는 끝난 지 하루 된 건이 배너만 ⏳로 남아 있던 것입니다.** 값은 2026-09-07에 별도 경로로 줬고 AI가 `session_not_found`(=404)로 통과를 확인했는데, **회신 문서를 안 써서 「작업 시작 시」 grep에 미회신으로 계속 잡혔습니다.** 값을 주고받은 경로가 저장소 밖이라 **회신 문서가 유일한 완료 증거**입니다. `backend/docs/phase-7-ops-deploy.md`·`blocked.md` ⑦의 낡은 문장(cron 미등록 · 시크릿 미전달 · AI서버 `/healthz`)도 같이 고쳤습니다. **사람 손이 남은 것은 `TRANSCRIPT_ENC_KEY` 오프라인 사본 하나입니다.**
+>
 > **수정 기록 (2026-09-07 ㉗, AI)** — **「잠깐 제가 말이 막혔어요」의 원인은 Gemini 무료 티어 429입니다. 그리고 우리 재시도가 그 한도를 스스로 키우고 있었습니다.**
 >
 > **① 원인 확정** — 계측을 넣고 대화 한 번을 걸자 로그가 바로 말했습니다: `respond_failed:RateLimitError:429` · `llm_rate_limited model=gemini-3.8-flash`. **12턴 중 10턴이 429**입니다. 살아난 2턴도 TTFT 3.9초·4.8초로 재시도를 거쳐 겨우 나왔습니다.
