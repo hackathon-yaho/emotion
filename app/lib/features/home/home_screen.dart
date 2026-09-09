@@ -37,7 +37,13 @@ class HomeScreen extends ConsumerWidget {
 
     final isLoading = observations.isLoading || sessions.isLoading;
     final observation = observations.valueOrNull?.items.firstOrNull;
-    final recent = sessions.valueOrNull?.items.take(2).toList() ?? const [];
+    // **빈 세션은 걸러내고 두 개를 고른다** — 순서를 뒤집으면 빈 것이 자리를
+    // 차지해 실제 대화가 밀린다.
+    final recent = sessions.valueOrNull?.items
+            .where((s) => !s.isEmpty)
+            .take(2)
+            .toList() ??
+        const [];
 
     // **실패를 빈 상태로 바꿔 말하지 않는다.** "아직 발견한 것이 없습니다"는
     // 사실 주장이라, 못 불러온 것을 그렇게 적으면 거짓이 된다.

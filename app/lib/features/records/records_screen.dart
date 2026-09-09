@@ -82,12 +82,15 @@ class RecordsScreen extends ConsumerWidget {
           Hairline(),
         ],
       ),
-      isEmpty: (d) => d.isEmpty,
+      // **말이 오가지 않은 세션은 세지도 않는다.** 그것만 있는 상태는 빈
+      // 상태가 맞다 — 걸러낸 뒤에 판정해야 목록이 통째로 사라지지 않는다.
+      isEmpty: (d) => d.items.every((s) => s.isEmpty),
       empty: const EmptyState(message: '아직 대화가 없습니다.'),
       onRetry: () => ref.invalidate(sessionsProvider),
       data: (d) => Column(
         children: [
-          for (final s in d.items) _RecordRow(session: s),
+          for (final s in d.items.where((s) => !s.isEmpty))
+            _RecordRow(session: s),
           const Hairline(),
         ],
       ),

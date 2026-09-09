@@ -22,6 +22,18 @@ class SessionSummary {
   /// 그 세션에서 가장 많이 등장한 상위 3개까지.
   final List<String> tags;
 
+  /// **말이 한 번도 오가지 않은 세션.** 기록에 보여줄 것이 없다.
+  ///
+  /// 대화를 열었지만 한 마디도 성립하지 않은 경우다 — 마이크가 막혔거나,
+  /// 응답이 실패했거나, 열자마자 나간 경우. 서버는 이런 세션도 그대로
+  /// 내려주고(`turnCount: 0` · `summary: null` · `durationSec: 0`),
+  /// **보일지 말지는 앱이 정한다**(백엔드 회신 `response/app/duration-definition.md`).
+  ///
+  /// 감추기로 했다. 기록은 **돌아볼 것이 있는 대화**의 목록이고, 빈 줄은
+  /// 「요약이 없습니다 · 0초」로만 보여 실패의 잔해처럼 남는다. 지우지는
+  /// 않는다 — 서버에는 그대로 있고, 통계(`sessionCount`)도 서버 값을 쓴다.
+  bool get isEmpty => turnCount == 0;
+
   factory SessionSummary.fromJson(Map<String, dynamic> j) => SessionSummary(
         sessionId: j['sessionId'] as String,
         startedAt: DateTime.parse(j['startedAt'] as String),
