@@ -235,7 +235,7 @@ void main() {
       expect(audioFrames(), isEmpty, reason: '재생 중에 열면 자기 말을 끊는다');
 
       speaker.quiet = true;
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
       expect(evi.micHeld, isFalse);
       expect(events.whereType<EviMicLive>(), hasLength(1));
       mic.speak([3, 4]);
@@ -243,11 +243,34 @@ void main() {
       expect(audioFrames(), hasLength(1));
     });
 
+    // `assistant_end`는 "조각을 다 보냈다"가 아니다 — 그 뒤로도 오디오가
+    // 온다. 큐가 잠깐 빈 순간을 재생 끝으로 읽으면 **인사 도중에 마이크가
+    // 열린다** ("될 때도 있고 안 될 때도 있다", 2026-09-14 테스트).
+    test('조각과 조각 사이의 빈 큐를 재생 끝으로 읽지 않는다', () async {
+      await startHeld();
+      channel.push({
+        'type': 'assistant_message',
+        'message': {'role': 'assistant', 'content': '안녕하세요'}
+      });
+      channel.push({'type': 'assistant_end'});
+      await settle();
+
+      // 큐는 비었지만 조각이 방금 왔다 — 아직 끝이 아니다.
+      channel.push({'type': 'audio_output', 'data': base64Encode([1, 2, 3, 4])});
+      speaker.quiet = true;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(evi.micHeld, isTrue, reason: '조각이 방금 왔으면 끝이 아니다');
+
+      // 700ms 넘게 조용하면 그때 연다.
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(evi.micHeld, isFalse);
+    });
+
     test('인사가 오지 않으면 짧게 기다리고 만다 — 말을 버리지 않는다', () async {
       // 종전에는 12초를 기다렸다. 인사가 없는 경우(Config·계정 문제)에
       // **사용자가 12초 동안 말해도 한 마디도 전달되지 않았다.**
       await startHeld();
-      await Future<void>.delayed(const Duration(milliseconds: 2700));
+      await Future<void>.delayed(const Duration(milliseconds: 3700));
       expect(evi.micHeld, isFalse);
       mic.speak([1, 2]);
       await settle();
@@ -262,8 +285,8 @@ void main() {
         'message': {'role': 'assistant', 'content': '안녕하세요'}
       });
       await settle();
-      // 유예(2.5초)를 지나도 보류가 유지된다 — 인사가 아직 안 끝났다.
-      await Future<void>.delayed(const Duration(milliseconds: 2700));
+      // 유예(3.5초)를 지나도 보류가 유지된다 — 인사가 아직 안 끝났다.
+      await Future<void>.delayed(const Duration(milliseconds: 3700));
       expect(evi.micHeld, isTrue);
       mic.speak([1, 2]);
       await settle();
@@ -273,7 +296,7 @@ void main() {
     test('보류는 첫 턴 한 번뿐이다 — 그 뒤 끼어들기는 기능이다', () async {
       await startHeld();
       channel.push({'type': 'assistant_end'});
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
       expect(evi.micHeld, isFalse);
       // 두 번째 AI 발화가 끝나도 다시 보류로 돌아가지 않는다.
       channel.push({'type': 'assistant_end'});
@@ -325,7 +348,7 @@ void main() {
       await settle();
       expect(evi.micHeld, isTrue, reason: '재생 중에는 열지 않는다');
       speaker.quiet = true;
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
       expect(evi.micHeld, isFalse);
     });
 

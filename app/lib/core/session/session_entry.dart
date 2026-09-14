@@ -3,6 +3,15 @@ import '../models/queue_models.dart';
 import '../models/session_models.dart';
 import 'session_clock.dart';
 
+/// 홈이 「중단된 대화」로 보여줄 세션 — **방금 우리가 닫은 것은 뺀다.**
+///
+/// 종료 응답을 받은 뒤에 `/me`를 다시 불러도 서버가 그 세션을 아직 열려
+/// 있다고 답하는 순간이 있다 (2026-09-14 테스트 — 새로고침하면 사라졌다).
+/// 몇 초 뒤의 같은 질문에는 정답이 오므로, **우리가 방금 닫은 id 하나만**
+/// 무시한다. 다른 열린 세션은 그대로 보여준다.
+OpenSession? visibleOpenSession(OpenSession? fromServer, String? endedId) =>
+    fromServer?.sessionId == endedId ? null : fromServer;
+
 /// 「새로 시작」 — **열려 있던 세션을 닫고** 새 세션을 만든다 (계약 §2-5-1).
 ///
 /// 닫지 않으면 그 세션이 이어하기 후보로 남아, 다음 진입에서 화면이 다시

@@ -100,9 +100,20 @@ class EviService {
 
   Timer? _holdTimer;
 
+  /// 마지막 `audio_output`을 받은 시각. 조각이 계속 오는 중인지 가른다.
+  DateTime? _lastChunkAt;
+
   /// 인사가 **시작될** 때까지 기다리는 시간. 이 안에 아무 말도 없으면 마이크를
   /// 연다 — 오지 않는 인사를 기다리며 사용자 말을 버리지 않는다.
-  static const _greetingGrace = Duration(milliseconds: 2500);
+  static const _greetingGrace = Duration(milliseconds: 3500);
+
+  /// 재생이 **끝났다고 인정하기까지** 조용해야 하는 시간.
+  ///
+  /// `assistant_end`는 "조각을 다 보냈다"가 아니라 **메시지가 끝났다**는 뜻이라
+  /// 그 뒤로도 `audio_output`이 온다. 큐가 잠깐 빈 순간을 재생 끝으로 읽으면
+  /// **인사 도중에 마이크가 열려** 사용자가 말하는 순간 인사가 끊긴다 —
+  /// 2026-09-14 테스트에서 "될 때도 있고 안 될 때도 있다"로 나온 것이 이것이다.
+  static const _quietFor = Duration(milliseconds: 700);
 
   /// 인사가 시작된 뒤 끝나기를 기다리는 상한.
   static const _holdCap = Duration(seconds: 15);
@@ -275,9 +286,14 @@ class EviService {
   }
 
   /// 재생이 다 끝나면 마이크를 연다. 200ms마다 보고, 오래 끌지 않는다.
+  ///
+  /// **큐가 빈 것만으로는 끝이 아니다.** 조각과 조각 사이에도 큐는 빈다.
+  /// 그래서 **[_quietFor]만큼 연속으로 조용하고, 그동안 새 조각도 오지
+  /// 않아야** 끝으로 인정한다.
   void _releaseWhenQuiet(int gen) {
     _holdTimer?.cancel();
     var waited = Duration.zero;
+    var quiet = Duration.zero;
     const step = Duration(milliseconds: 200);
     _holdTimer = Timer.periodic(step, (timer) {
       if (gen != _generation) {
@@ -285,7 +301,12 @@ class EviService {
         return;
       }
       waited += step;
-      if (speaker.idle || waited > _holdCap) {
+      final chunkAt = _lastChunkAt;
+      final chunkFresh = chunkAt != null &&
+          DateTime.now().difference(chunkAt) < _quietFor;
+      quiet = (speaker.idle && !chunkFresh) ? quiet + step : Duration.zero;
+
+      if (quiet >= _quietFor || waited > _holdCap) {
         timer.cancel();
         _releaseMic(gen);
       }
@@ -371,6 +392,7 @@ class EviService {
       case 'audio_output':
         final data = json['data'] as String?;
         if (data == null) break;
+        _lastChunkAt = DateTime.now();
         try {
           speaker.enqueue(base64Decode(data));
         } on Object {

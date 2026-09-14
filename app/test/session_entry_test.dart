@@ -20,6 +20,24 @@ void main() {
     resumableUntil: DateTime.utc(2026, 9, 8, 10, 32),
   );
 
+  group('방금 닫은 세션은 홈에 「중단된 대화」로 보이지 않는다 (2026-09-14)', () {
+    test('같은 id면 감춘다', () {
+      expect(visibleOpenSession(open, 'old-session'), isNull);
+    });
+
+    test('다른 세션이면 그대로 보여준다 — 남의 것까지 감추지 않는다', () {
+      expect(visibleOpenSession(open, 'another'), same(open));
+    });
+
+    test('닫은 것이 없으면 그대로다', () {
+      expect(visibleOpenSession(open, null), same(open));
+    });
+
+    test('서버가 없다고 하면 없는 것이다', () {
+      expect(visibleOpenSession(null, 'old-session'), isNull);
+    });
+  });
+
   test('열린 세션을 닫고 나서 새로 시작한다 — 순서가 중요하다', () async {
     final repo = _FakeRepo();
     final result = await startFreshSession(repo, closing: open);

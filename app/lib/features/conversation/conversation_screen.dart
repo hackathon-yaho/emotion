@@ -441,7 +441,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
 
       case EviAssistantSpoke():
         _stopThinking();
-        setState(() => _state = TalkState.speaking);
+        // 내 말이 화면에 남아 있는 채로 AI가 말하기 시작하면 지운다 — 이제
+        // 차례가 넘어갔다 (§6-1: 자막을 쌓지 않는다).
+        _heardTimer?.cancel();
+        setState(() {
+          _heard = null;
+          _state = TalkState.speaking;
+        });
 
       case EviAssistantDone():
         _stopThinking();
@@ -517,7 +523,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
       _state = TalkState.thinking;
     });
     _breath.repeat(reverse: true);
-    _heardTimer = Timer(const Duration(seconds: 3), () {
+    // **AI가 말하기 시작할 때까지 둔다.** 3초 시계로 지우고 있었는데, 한
+    // 마디가 여러 턴으로 쪼개지면 자막이 0.5초 만에 떴다 사라지는 것처럼
+    // 보였다 (2026-09-14 테스트). 위쪽 상한은 답이 아예 오지 않는 경우를
+    // 위한 것이다.
+    _heardTimer = Timer(const Duration(seconds: 12), () {
       if (mounted) setState(() => _heard = null);
     });
     _slowTimer = Timer(_slowAfter, () {
@@ -622,6 +632,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
           .read(journalRepositoryProvider)
           .endSession(session.sessionId, endReason: reason);
       ref.read(lastSessionEndProvider.notifier).state = end;
+      // 홈이 이 세션을 다시 「중단된 대화」로 보여주지 않게 한다.
+      ref.read(endedSessionIdProvider.notifier).state = session.sessionId;
     } catch (_) {
       // 종료 호출이 실패해도 화면은 넘긴다 — 대화는 이미 끝났고, 서버는
       // 타임아웃으로 정리한다 (§2-6 `endReason: timeout`).

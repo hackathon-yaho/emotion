@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/observation_models.dart';
 import '../../core/models/session_models.dart';
 import '../../core/session/session_clock.dart';
+import '../../core/session/session_entry.dart';
 import '../../core/providers.dart';
 import '../../core/router/routes.dart';
 import '../../core/theme/app_theme.dart';
@@ -51,7 +52,13 @@ class HomeScreen extends ConsumerWidget {
     final isEmpty = !isLoading && failure == null && observation == null;
 
     // F2-07 — 비정상 중단으로 열려 있는 세션 (§2-2 `openSession`).
-    final open = me.valueOrNull?.openSession;
+    //
+    // **방금 우리가 닫은 세션은 뺀다.** 종료 응답을 받은 뒤에 다시 물어도
+    // 서버가 열려 있다고 답하는 순간이 있다 (2026-09-14 테스트).
+    final open = visibleOpenSession(
+      me.valueOrNull?.openSession,
+      ref.watch(endedSessionIdProvider),
+    );
     final resumable = open != null && open.isResumable;
     final resumeExpired = open != null && !open.isResumable;
 

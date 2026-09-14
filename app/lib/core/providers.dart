@@ -273,3 +273,15 @@ final chatGroupIdProvider = StateProvider<String?>((_) => null);
 /// 계약 §2-5-1: *"사용자가 아니오를 고르면 앱은 이 대신 `POST /api/session/{id}/end`
 /// (`endReason: user_end`)를 호출해 그 세션을 닫는다."*
 final startFreshProvider = StateProvider<bool>((_) => false);
+
+/// **방금 끝낸 세션의 id.** 홈은 이 세션을 「중단된 대화」로 취급하지 않는다.
+///
+/// 종료 응답을 받은 **뒤에** `/me`를 다시 부르는데도, 서버가 그 세션을 아직
+/// 열려 있는 것으로 돌려주는 경우가 있다 — 2026-09-14 테스트에서 대화를
+/// 마치고 홈에 갔더니 「이어서 이야기할까요?」가 떠 있었고, **새로고침하면
+/// 사라졌다.** 몇 초 뒤의 같은 질문에는 정답이 오므로 우리가 읽는 시점이
+/// 이르다는 뜻이다(`request/backend/open-session-used-time.md`).
+///
+/// **우리가 방금 닫은 세션이 무엇인지는 우리가 안다.** 그 하나만 무시한다 —
+/// 다른 열린 세션은 그대로 보여준다.
+final endedSessionIdProvider = StateProvider<String?>((_) => null);
