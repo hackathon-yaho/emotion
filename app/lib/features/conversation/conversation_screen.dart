@@ -35,9 +35,12 @@ class _Queued implements Exception {
 }
 
 /// 대화 상태 — 실제로는 EVI 이벤트가 바꾼다.
-// **링에 목업 발화를 넣지 않는다.** 디자인 프로토타입 때 넣은 "오늘 완전
-// 괜찮았어요"가 실제 대화에서 계속 떠 있었다 (2026-09-06). 이 자리에는
-// **실제로 들은 말만** 온다 (`_heard`).
+// **사용자 발화를 글로 띄우지 않는다** (2026-09-14 테스트 피드백).
+//
+// 전사 품질이 고르지 않아 자기가 한 말이 어설프게 적힌 것을 보게 된다 —
+// 감정을 털어놓는 화면에서 그건 대화를 방해한다. 링과 상태 문구만 남긴다.
+// 목업 발화를 넣지 않는다는 규칙(2026-09-06)은 이제 **아무 발화도 넣지
+// 않는다**로 대체됐다. 남은 `_detail`은 개발용 진단 문구 전용이다.
 enum TalkState {
   connecting,
   resumed,
@@ -100,8 +103,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   late TalkState _state = widget.initial;
 
   /// 방금 들은 사용자 발화 — 잠깐만 띄운다 (design-system §6-1).
-  String? _heard;
-  Timer? _heardTimer;
+  /// 실패 원인 한 줄 — **`SHOW_ERROR_DETAIL` 빌드에서만 채워진다.**
+  String? _detail;
   StreamSubscription<EviEvent>? _eviSub;
 
   /// F2-03 — 하드컷 60초 전 표시 · 하드컷 자동 종료.
@@ -214,7 +217,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
       if (!mounted) return;
       // 원인별 문구는 F2-04 — 여기서는 "시작할 수 없다"로 모은다.
       setState(() {
-        _heard = Env.showErrorDetail
+        _detail = Env.showErrorDetail
             ? (e is ApiException ? '${e.statusCode} ${e.code} ${e.message}' : '$e')
             : null;
         _state = TalkState.cannotStart;
@@ -435,19 +438,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
       case EviMicLive():
         setState(() => _state = TalkState.listening);
 
-      case EviUserSpoke(:final text):
-        // 잠깐만 보여준다 — 다음 발화가 오거나 3초가 지나면 사라진다.
-        _showHeard(text);
+      case EviUserSpoke():
+        // **내용은 쓰지 않는다** — 말이 끝났다는 사실만 화면에 반영한다.
+        _heardUser();
 
       case EviAssistantSpoke():
         _stopThinking();
-        // 내 말이 화면에 남아 있는 채로 AI가 말하기 시작하면 지운다 — 이제
-        // 차례가 넘어갔다 (§6-1: 자막을 쌓지 않는다).
-        _heardTimer?.cancel();
-        setState(() {
-          _heard = null;
-          _state = TalkState.speaking;
-        });
+        setState(() => _state = TalkState.speaking);
 
       case EviAssistantDone():
         _stopThinking();
@@ -465,7 +462,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         // 대화 중 끊긴 것이면 알린다. 우리가 끊은 경우는 이미 화면을 떠났다.
         setState(() {
           if (Env.showErrorDetail) {
-            _heard = 'closed ${code ?? '-'} ${reason ?? ''}'.trim();
+            _detail = 'closed ${code ?? '-'} ${reason ?? ''}'.trim();
           }
           _state = TalkState.networkLost;
         });
@@ -477,7 +474,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         }
         _stopThinking();
         if (Env.showErrorDetail) {
-          _heard = '$reason ${ref.read(eviServiceProvider).lastSocketError ?? ''}'
+          _detail = '$reason ${ref.read(eviServiceProvider).lastSocketError ?? ''}'
               .trim();
         }
         setState(() => _state = switch (reason) {
@@ -495,7 +492,6 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   /// 그 1.8초를 **기다리는 화면**과 「듣고 있습니다」로 남아 있는 화면은 다르다.
   void _finishTurn() {
     ref.read(eviServiceProvider).finishTurn();
-    _heardTimer?.cancel();
     _slowTimer?.cancel();
     setState(() {
       _slowThinking = false;
@@ -510,26 +506,21 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     });
   }
 
-  /// 방금 들은 말을 잠깐 띄우고 **「생각 중」으로 넘어간다** (§6-1 절충안).
+  /// 전사가 확정됐다 — **「생각 중」으로 넘어간다.**
+  ///
+  /// **내용은 쓰지 않는다.** 자기가 한 말이 어설프게 적힌 것을 보는 쪽이
+  /// 대화에 방해가 된다는 판단이다 (2026-09-14 테스트 피드백). 우리가 쓰는
+  /// 것은 **말이 끝났다는 사실**뿐이다.
   ///
   /// EVI가 `user_message`를 주는 시점이 전사가 확정된 순간이고, 그 뒤로
   /// 분석·응답 호출이 순차로 돈다 — 여기서부터가 사용자가 기다리는 구간이다.
-  void _showHeard(String text) {
-    _heardTimer?.cancel();
+  void _heardUser() {
     _slowTimer?.cancel();
     setState(() {
-      _heard = text;
       _slowThinking = false;
       _state = TalkState.thinking;
     });
     _breath.repeat(reverse: true);
-    // **AI가 말하기 시작할 때까지 둔다.** 3초 시계로 지우고 있었는데, 한
-    // 마디가 여러 턴으로 쪼개지면 자막이 0.5초 만에 떴다 사라지는 것처럼
-    // 보였다 (2026-09-14 테스트). 위쪽 상한은 답이 아예 오지 않는 경우를
-    // 위한 것이다.
-    _heardTimer = Timer(const Duration(seconds: 12), () {
-      if (mounted) setState(() => _heard = null);
-    });
     _slowTimer = Timer(_slowAfter, () {
       if (mounted && _state == TalkState.thinking) {
         setState(() => _slowThinking = true);
@@ -659,7 +650,6 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   void dispose() {
     _queueTimer?.cancel();
     _breath.dispose();
-    _heardTimer?.cancel();
     _slowTimer?.cancel();
     _nearEndTimer?.cancel();
     _hardCutTimer?.cancel();
@@ -893,17 +883,17 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
                     // (2026-09-06). 만든 계측은 반드시 보이는 곳에 둔다.
                     if (Env.showErrorDetail)
                       _DiagnosticLine(evi: ref.read(eviServiceProvider)),
-                    // 실제 발화가 들어오면 대본 문구 대신 그것을 띄운다.
-                    // **AI 발화는 여기 오지 않는다** — 소리로만 듣는다 (§6-1).
-                    if (_heard != null) ...[
+                    // 실패 원인 한 줄 — 개발용이다. **사용자 발화도 AI
+                    // 발화도 이 화면에 글로 적지 않는다** (§6-1).
+                    if (_detail != null) ...[
                       const SizedBox(height: Space.lg + 2),
                       Text(
-                        _heard!,
+                        _detail!,
                         textAlign: TextAlign.center,
-                        style: AppType.serif(
-                          size: 22,
-                          color: t.paper,
-                          height: 1.65,
+                        style: AppType.sans(
+                          size: AppType.captionSize,
+                          color: t.faint,
+                          height: 1.5,
                         ),
                       ),
                     ],
