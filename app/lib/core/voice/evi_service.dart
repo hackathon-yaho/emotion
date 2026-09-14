@@ -414,6 +414,12 @@ class EviService {
   /// 실제로 오래 기다리게 만드는 원인이다.
   ///
   /// 다시 여는 것은 AI의 답이 끝나고 재생이 빈 뒤다(`assistant_end`).
+  /// 보류를 밖에서 푼다 — **모아 둔 소리는 버린다.**
+  ///
+  /// 「말 다 했어요」를 눌렀는데 Hume이 전사를 만들지 않은 경우에 쓴다.
+  /// 보낼 말이 없었다는 뜻이므로 기다릴 이유가 없다.
+  void releaseHold() => _releaseMic(_generation, flush: false);
+
   void finishTurn() {
     if (_micHeld || _channel == null) return;
     // 「말 다 했어요」도 **말을 이어가면 풀린다** — 누르고 나서 한 마디 더

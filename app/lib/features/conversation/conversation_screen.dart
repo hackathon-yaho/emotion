@@ -243,6 +243,21 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   /// 「생각 중」이 시작된 시각 — 진단 줄이 쓴다.
   DateTime? _thinkingSince;
 
+  /// 「말 다 했어요」 뒤 전사를 기다리는 시계.
+  Timer? _transcriptTimer;
+
+  /// 듣는 화면에 잠깐 붙는 한 줄. 지금은 「들은 말이 없습니다」 하나뿐이다.
+  String? _notice;
+  Timer? _noticeTimer;
+
+  void _showNotice(String text) {
+    _noticeTimer?.cancel();
+    setState(() => _notice = text);
+    _noticeTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _notice = null);
+    });
+  }
+
   /// 지금 화면이 쥐고 있는 세션. 종료할 때 이것을 본다.
   SessionStart? _session;
 
@@ -508,6 +523,17 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   void _finishTurn() {
     ref.read(eviServiceProvider).finishTurn();
     _thinkingSince = DateTime.now();
+    // **전사가 오지 않으면 기다릴 것이 없다.** Hume은 소리를 못 알아들으면
+    // 전사를 만들지 않고, 그러면 CLM 호출도 답도 없다. 그대로 두면 화면만
+    // 「생각 중」으로 남아 보류 상한까지 거짓말을 한다 (2026-09-15).
+    _transcriptTimer?.cancel();
+    _transcriptTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted || _state != TalkState.thinking) return;
+      ref.read(eviServiceProvider).releaseHold();
+      _stopThinking();
+      setState(() => _state = TalkState.listening);
+      _showNotice('들은 말이 없습니다. 다시 말씀해 주세요.');
+    });
     _slowTimer?.cancel();
     setState(() {
       _slowThinking = false;
@@ -531,6 +557,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   /// EVI가 `user_message`를 주는 시점이 전사가 확정된 순간이고, 그 뒤로
   /// 분석·응답 호출이 순차로 돈다 — 여기서부터가 사용자가 기다리는 구간이다.
   void _heardUser() {
+    _transcriptTimer?.cancel();
+    _noticeTimer?.cancel();
+    _notice = null;
     _slowTimer?.cancel();
     _thinkingSince = DateTime.now();
     // **「생각 중」이면 마이크도 생각 중이다.** 열어 두면 답답해서 덧붙인
@@ -706,6 +735,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     _queueTimer?.cancel();
     _breath.dispose();
     _slowTimer?.cancel();
+    _transcriptTimer?.cancel();
+    _noticeTimer?.cancel();
     _nearEndTimer?.cancel();
     _hardCutTimer?.cancel();
     _eviSub?.cancel();
@@ -773,13 +804,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
                 : '중단된 대화를 이어갑니다'
                     ' · 남은 시간 ${SessionClock.spell(_remainingSec!)}',
           ),
-        TalkState.listening => const _Ring(
+        TalkState.listening => _Ring(
             '듣고 있습니다',
             size: 200,
             offset: 8,
             cool: 0.85,
             warm: 0.60,
             canFinishTurn: true,
+            sub: _notice,
           ),
         TalkState.speaking =>
           const _Ring('말하고 있습니다', size: 168, offset: 3, cool: 0.50, warm: 0.35),
