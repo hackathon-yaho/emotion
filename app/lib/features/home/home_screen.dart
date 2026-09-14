@@ -139,7 +139,11 @@ class HomeScreen extends ConsumerWidget {
           ),
 
           if (resumable || resumeExpired)
-            _ResumeBlock(open: open, expired: resumeExpired),
+            _ResumeBlock(
+              open: open,
+              expired: resumeExpired,
+              endedId: ref.watch(endedSessionIdProvider),
+            ),
 
           if (!resumable) ...[
             OutlineAction(
@@ -268,7 +272,15 @@ class _PastRow extends StatelessWidget {
 /// **남은 시간을 화면이 직접 말한다** — 이어하기로 새 7분을 주면 세션당 원가
 /// 상한 $0.49가 뚫린다(NFR-06).
 class _ResumeBlock extends ConsumerWidget {
-  const _ResumeBlock({required this.open, required this.expired});
+  const _ResumeBlock({
+    required this.open,
+    required this.expired,
+    this.endedId,
+  });
+
+  /// 진단용 — 마지막으로 끝낸 세션. 카드의 세션과 같으면 종료가 반영되지
+  /// 않은 것이고, 다르면 **이전에 남은 다른 세션**이다.
+  final String? endedId;
 
   /// **서버가 준 값만 쓴다.** 여기 있던 "5분 전"·"남은 시간 4분 42초"·"원래
   /// 7분"은 시안에서 옮겨온 상수였고, 언제 중단했든 늘 같은 숫자가 보였다
@@ -306,7 +318,8 @@ class _ResumeBlock extends ConsumerWidget {
               '남은 시간 ${SessionClock.spell(open.remainingSec)}'
               ' · 원래 ${SessionClock.spell(open.totalSec)} 중'
               ' 이미 쓴 시간을 뺀 값입니다'
-              '${Env.showErrorDetail ? ' · 세션 ${open.sessionId.substring(0, 8)}' : ''}',
+              '${Env.showErrorDetail ? ' · 카드 ${open.sessionId.substring(0, 8)}'
+                  ' · 끝낸 것 ${endedId == null ? '없음' : endedId!.substring(0, 8)}' : ''}',
               style: AppType.sans(
                 size: AppType.captionSize,
                 color: t.faint,

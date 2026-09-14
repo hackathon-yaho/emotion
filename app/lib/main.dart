@@ -34,7 +34,18 @@ class _VoiceJournalAppState extends ConsumerState<VoiceJournalApp> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _finishUnlink());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _finishUnlink();
+      _loadEndedSession();
+    });
+  }
+
+  /// 새로고침해도 **방금 끝낸 세션**은 홈에서 가려져 있어야 한다.
+  Future<void> _loadEndedSession() async {
+    final id = await ref.read(tokenStorageProvider).readEndedSession();
+    if (id != null && mounted) {
+      ref.read(endedSessionIdProvider.notifier).state = id;
+    }
   }
 
   Future<void> _finishUnlink() async {

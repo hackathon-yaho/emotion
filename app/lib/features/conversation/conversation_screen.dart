@@ -610,6 +610,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         _ => false,
       };
 
+  /// 끝낸 세션을 기억한다 — 메모리와 기기 둘 다. 새로고침해도 가려진다.
+  void _rememberEnded(String sessionId) {
+    ref.read(endedSessionIdProvider.notifier).state = sessionId;
+    ref.read(tokenStorageProvider).writeEndedSession(sessionId);
+  }
+
   /// 이어하기 응답을 세션 값으로 맞춘다 — 폴링 간격은 §2-5-1에 없어 기본 2초.
   SessionStart _asStart(SessionResume r) => SessionStart(
         sessionId: r.sessionId,
@@ -652,7 +658,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             await repo.endSession(session.sessionId, endReason: reason);
         ref.read(lastSessionEndProvider.notifier).state = end;
         // 홈이 이 세션을 다시 「중단된 대화」로 보여주지 않게 한다.
-        ref.read(endedSessionIdProvider.notifier).state = session.sessionId;
+        _rememberEnded(session.sessionId);
         failure = null;
         break;
       } on ApiException catch (e) {
@@ -663,7 +669,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         if (e.code == ApiErrorCode.sessionNotFound) {
           // 이미 닫힌 것이므로 실패가 아니다.
           failure = null;
-          ref.read(endedSessionIdProvider.notifier).state = session.sessionId;
+          _rememberEnded(session.sessionId);
           break;
         }
         // 네트워크·5xx만 한 번 더. 나머지는 다시 불러도 같은 답이다.

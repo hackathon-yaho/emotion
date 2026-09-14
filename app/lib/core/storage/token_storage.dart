@@ -15,6 +15,7 @@ class TokenStorage {
   static const _themeKey = 'theme';
   static const _demoKey = 'demo';
   static const _unlinkKey = 'pending_unlink';
+  static const _endedKey = 'ended_session';
 
   Future<String?> readJwt() => _storage.read(key: _jwtKey);
   Future<void> writeJwt(String jwt) => _storage.write(key: _jwtKey, value: jwt);
@@ -58,6 +59,15 @@ class TokenStorage {
       _storage.write(key: _unlinkKey, value: 'true');
   Future<void> clearPendingUnlink() => _storage.delete(key: _unlinkKey);
 
+  /// **마지막으로 끝낸 세션 id.** 홈이 그 세션을 「중단된 대화」로 보여주지
+  /// 않게 한다.
+  ///
+  /// 메모리에만 두면 **새로고침 한 번에 사라진다** — 서버가 그 세션을 아직
+  /// 열려 있다고 답하는 동안 카드가 다시 뜬다 (2026-09-15).
+  Future<String?> readEndedSession() => _storage.read(key: _endedKey);
+  Future<void> writeEndedSession(String id) =>
+      _storage.write(key: _endedKey, value: id);
+
   /// 로그아웃 — 기기의 토큰만 지운다. 서버 데이터는 남는다 (F1-03).
   ///
   /// **탈퇴 표시도 함께 지운다.** 남겨 두면 다음 로그인 복귀에서 그 코드를
@@ -65,5 +75,6 @@ class TokenStorage {
   Future<void> clearAll() async {
     await clearJwt();
     await clearPendingUnlink();
+    await _storage.delete(key: _endedKey);
   }
 }
