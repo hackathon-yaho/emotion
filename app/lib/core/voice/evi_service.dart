@@ -291,7 +291,9 @@ class EviService {
         _heldBytes -= _heldFrames.removeAt(0).length;
       }
       _loudRun = _lastLevel >= _speechLevel ? _loudRun + 1 : 0;
-      if (_loudRun >= 3) _releaseMic(_generation);
+      // **말이 시작됐을 때만** 모아 둔 것을 내보낸다 — 말머리를 잃지 않기
+      // 위한 것이고, 그 외에 내보내면 없던 발화를 만든다.
+      if (_loudRun >= 3) _releaseMic(_generation, flush: true);
       return;
     }
     _send({'type': 'audio_input', 'data': base64Encode(pcm)});
@@ -307,8 +309,15 @@ class EviService {
   /// 것**이었다. 상태 표시와 실제 동작이 달랐다.
   ///
   /// 다만 **버리지는 않는다** — 말을 이어가면 모아 둔 것부터 내보내고 보류를
-  /// 푼다. 답이 아예 오지 않아도 [cap] 뒤에는 연다.
-  void holdForThinking({Duration cap = const Duration(seconds: 10)}) {
+  /// 푼다.
+  ///
+  /// **시간으로 풀지 않는다.** 처음에 10초 상한을 뒀더니, 답이 늦어 그 상한이
+  /// 지날 때 **모아 둔 소리를 내보내 없던 발화 턴이 생겼다** — 사용자가 본
+  /// 순서가 「내 말 → 생각 중 → 길어짐 → 또 내 말 → 답」이었다 (2026-09-15).
+  ///
+  /// 막다른 길은 없다 — **말을 시작하면 그 자리에서 풀린다.** [cap]은 그마저
+  /// 없을 때의 마지막 안전장치이고, 그때는 **모아 둔 것을 버린다.**
+  void holdForThinking({Duration cap = const Duration(minutes: 1)}) {
     if (_micHeld || _channel == null) return;
     _startHold(buffering: true, cap: cap);
   }
@@ -321,7 +330,9 @@ class EviService {
     _loudRun = 0;
     final gen = _generation;
     _holdTimer?.cancel();
-    _holdTimer = Timer(cap, () => _releaseMic(gen));
+    // 시간으로 푸는 경우에는 **모아 둔 것을 버린다** — 말한 적 없는 소리를
+    // 뒤늦게 보내면 그것이 새 발화 턴이 된다.
+    _holdTimer = Timer(cap, () => _releaseMic(gen, flush: false));
   }
 
   /// PCM16의 실효값을 0~100으로 옮긴다. 진단용이므로 정확도보다 싸게.
@@ -372,14 +383,17 @@ class EviService {
     });
   }
 
-  void _releaseMic(int gen) {
+  void _releaseMic(int gen, {bool flush = false}) {
     if (gen != _generation || !_micHeld) return;
     _holdTimer?.cancel();
     _holdTimer = null;
     _micHeld = false;
-    // 모아 둔 것부터 내보낸다 — 말머리를 잃지 않는다.
-    for (final frame in _heldFrames) {
-      _send({'type': 'audio_input', 'data': base64Encode(frame)});
+    // 모아 둔 것은 **말이 시작됐을 때만** 내보낸다(말머리 보존). 그 외에는
+    // 버린다 — 보내면 없던 발화가 생긴다.
+    if (flush) {
+      for (final frame in _heldFrames) {
+        _send({'type': 'audio_input', 'data': base64Encode(frame)});
+      }
     }
     _heldFrames.clear();
     _heldBytes = 0;

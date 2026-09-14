@@ -482,6 +482,31 @@ void main() {
           reason: '첫 조각부터 순서대로');
     });
 
+    // 상한이 지나 풀릴 때 모아 둔 것을 내보냈더니, **말한 적 없는 소리가
+    // 새 발화 턴이 됐다** — 「내 말 → 생각 중 → 길어짐 → 또 내 말 → 답」
+    // (2026-09-15). 시간으로 풀 때는 버린다.
+    test('시간으로 풀릴 때는 모아 둔 것을 버린다 — 없던 발화를 만들지 않는다',
+        () async {
+      await start();
+      evi.holdForThinking(cap: const Duration(milliseconds: 300));
+      mic.speak(quiet());
+      mic.speak(quiet());
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(evi.micHeld, isFalse, reason: '상한이 지나면 열린다');
+      expect(audioSent(), isEmpty, reason: '모아 둔 것은 나가지 않는다');
+    });
+
+    test('답이 와서 풀릴 때도 버린다', () async {
+      await start();
+      evi.holdForThinking();
+      mic.speak(quiet());
+      speaker.quiet = true;
+      channel.push({'type': 'assistant_end'});
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      expect(evi.micHeld, isFalse);
+      expect(audioSent(), isEmpty);
+    });
+
     test('답이 오면 보류가 풀린다', () async {
       await start();
       evi.holdForThinking();
