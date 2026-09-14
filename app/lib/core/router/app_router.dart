@@ -87,12 +87,13 @@ GoRouter createRouter(AppSession session) {
           demoMode: state.uri.queryParameters['demo'] == '1',
           openCrisis: state.uri.queryParameters['crisis'] == '1',
         ),
-        routes: [
-          GoRoute(
-            path: 'summary',
-            builder: (context, state) => const SummaryScreen(),
-          ),
-        ],
+      ),
+
+      // **대화의 자식이 아니다** — 자식으로 두면 부모(대화 화면)가 함께
+      // 만들어져 세션이 하나 더 열린다 (`Routes.summary` 주석).
+      GoRoute(
+        path: Routes.summary,
+        builder: (context, state) => const SummaryScreen(),
       ),
       GoRoute(
         path: Routes.evidence,

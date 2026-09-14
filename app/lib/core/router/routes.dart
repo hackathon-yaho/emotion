@@ -13,7 +13,13 @@ abstract final class Routes {
   static const conversation = '/conversation';
 
   /// S02-1 대화 종료 요약
-  static const summary = '/conversation/summary';
+  /// S02-1 종료 요약.
+  ///
+  /// **대화의 자식 라우트로 두면 안 된다.** go_router는 자식으로 갈 때 부모를
+  /// 함께 만들고, 그러면 대화 화면의 `initState`가 다시 돌아 **세션이 하나 더
+  /// 열린다.** 실제로 그렇게 돼 있었고, 대화를 마칠 때마다 유령 세션이
+  /// 생겨 홈에 「중단된 대화」로 남았다 (2026-09-15, 사용자가 찾았다).
+  static const summary = '/summary';
 
   /// S03 발견
   static const discover = '/discover';
