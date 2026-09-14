@@ -618,16 +618,32 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
       if (mounted) context.go(Routes.summary);
       return;
     }
-    try {
-      final end = await ref
-          .read(journalRepositoryProvider)
-          .endSession(session.sessionId, endReason: reason);
-      ref.read(lastSessionEndProvider.notifier).state = end;
-      // 홈이 이 세션을 다시 「중단된 대화」로 보여주지 않게 한다.
-      ref.read(endedSessionIdProvider.notifier).state = session.sessionId;
-    } catch (_) {
-      // 종료 호출이 실패해도 화면은 넘긴다 — 대화는 이미 끝났고, 서버는
-      // 타임아웃으로 정리한다 (§2-6 `endReason: timeout`).
+    // **종료는 한 번 더 시도한다.** 이 호출이 실패하면 서버에서는 대화가
+    // 끝나지 않은 것이고, 사용자는 홈에서 「이어서 이야기할까요?」를 보게
+    // 된다 — 방금 마쳤는데도. 30분 뒤 스케줄러가 정리할 때까지 그대로다.
+    final repo = ref.read(journalRepositoryProvider);
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final end =
+            await repo.endSession(session.sessionId, endReason: reason);
+        ref.read(lastSessionEndProvider.notifier).state = end;
+        // 홈이 이 세션을 다시 「중단된 대화」로 보여주지 않게 한다.
+        ref.read(endedSessionIdProvider.notifier).state = session.sessionId;
+        break;
+      } on ApiException catch (e) {
+        // 서버에 그 세션이 없다 = 이미 닫혔다. 다시 부를 이유가 없고,
+        // 홈에서 가리는 것은 그대로 해야 한다.
+        if (e.code == ApiErrorCode.sessionNotFound) {
+          ref.read(endedSessionIdProvider.notifier).state = session.sessionId;
+          break;
+        }
+        // 네트워크·5xx만 한 번 더. 나머지는 다시 불러도 같은 답이다.
+        final retryable = e.isNetwork || (e.statusCode ?? 0) >= 500;
+        if (!retryable || attempt == 1) break;
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+      } on Object {
+        break;
+      }
     }
     ref.read(activeSessionProvider.notifier).state = null;
 
