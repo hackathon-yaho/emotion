@@ -60,7 +60,14 @@ public class SessionService {
     public record StartResult(SessionStartResponse session, SessionQueueResponse queued) {
     }
 
-    /** 큐가 꺼져 있으면 정원을 보지 않는다 — 코드 경로가 큐 도입 전과 같다. */
+    /**
+     * 큐가 꺼져 있으면 정원을 보지 않는다 — 코드 경로가 큐 도입 전과 같다.
+     *
+     * <p><b>트랜잭션은 여기서 연다.</b> 안에서 부르는 {@link #start}는 자기 호출이라 그쪽
+     * {@code @Transactional}이 걸리지 않고, {@code open-in-view: false}라 이전 세션을 닫은 변경이
+     * 저장되지 않았다 — 운영에서 새 세션을 시작해도 이전 세션이 열린 채 남았다(2026-09-15).
+     */
+    @Transactional
     public StartResult startOrEnqueue(UUID profileId) {
         // 줄이 서 있으면 자리가 나도 새로 온 사람을 바로 들이지 않는다 — 그러면 기다리던
         // 사람 앞에서 새치기가 되고, 맨 앞이 계속 밀려 순번이 뜻을 잃는다.
@@ -76,7 +83,10 @@ public class SessionService {
     /**
      * 계약 §2-14 폴링. <b>이 응답 자체가 입장권이다</b> — 자리를 예약해 두지 않으므로
      * 만료 타이머가 필요 없고, 줄 맨 앞 한 명만 받아 갈 수 있다.
+     *
+     * <p>입장시킬 때 {@link #start}를 부르므로 {@link #startOrEnqueue}와 같은 이유로 트랜잭션을 여기서 연다.
      */
+    @Transactional
     public SessionQueueResponse pollQueue(UUID profileId, UUID ticketId) {
         Optional<Integer> position = queue.poll(ticketId, profileId);
         if (position.isEmpty()) {

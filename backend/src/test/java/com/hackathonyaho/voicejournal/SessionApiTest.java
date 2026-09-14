@@ -114,6 +114,31 @@ class SessionApiTest {
     }
 
     /**
+     * <b>테스트 트랜잭션 없이 돈다 — 운영 경로 그대로다.</b> 위 테스트는 클래스의 {@code @Transactional}이
+     * 컨트롤러 호출까지 감싸서, {@code startOrEnqueue → start} 자기 호출로 {@code start}의 트랜잭션이
+     * 빠진 결함을 가렸다. {@code open-in-view: false}라 이전 세션을 닫은 변경이 저장되지 않았고,
+     * 운영에서 새 세션을 시작해도 이전 빈 세션이 열린 채 남았다(2026-09-15 실측).
+     */
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    @DisplayName("트랜잭션 밖에서도 다시 시작하면 이전 세션이 닫히고 세션 수가 오른다")
+    void startClosesPreviousOpenSessionWithoutTestTransaction() throws Exception {
+        try {
+            UUID first = startSession();
+            startSession();
+
+            assertThat(sessionRepository.findByProfileIdAndEndedAtIsNull(profileId)).hasSize(1);
+            assertThat(sessionRepository.findById(first).orElseThrow().getEndReason()).isEqualTo("timeout");
+            assertThat(baselineRepository.findById(profileId).orElseThrow().getSessionCount()).isEqualTo(1);
+        } finally {
+            // 트랜잭션이 없으니 롤백도 없다 — 이 테스트가 만든 행은 직접 지운다.
+            jdbc.update("delete from voice_session where profile_id = ?", profileId);
+            jdbc.update("delete from user_baseline where profile_id = ?", profileId);
+            jdbc.update("delete from profile where id = ?", profileId);
+        }
+    }
+
+    /**
      * <b>F3-04의 가드.</b> 5세션 내내 분석이 실패하면(TC-06 반복) 갭이 한 건도 없어
      * {@code avg_gap}이 NULL인데, 세션 수만 보면 그대로 personal로 넘어간다.
      */
