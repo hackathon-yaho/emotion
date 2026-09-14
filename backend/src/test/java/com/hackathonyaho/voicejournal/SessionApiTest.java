@@ -317,15 +317,37 @@ class SessionApiTest {
 
     // ── 이어하기 · 정리 (F2-06 · F2-07) ───────────────────────────────
 
+    /**
+     * <b>{@code usedSec}은 시작부터 마지막 턴까지다.</b> 앱 요청(2026-09-14)의 회귀 — 말이 오간
+     * 세션의 남은 시간은 하드컷보다 작아야 한다. 벽시계가 아닌 이유는 아래 TC-22다.
+     */
     @Test
-    @DisplayName("GET /api/me가 열린 세션을 알려준다")
+    @DisplayName("GET /api/me가 열린 세션과 이미 쓴 시간을 알려준다")
     void meExposesOpenSession() throws Exception {
         UUID sessionId = startSession();
+        Instant startedAt = Instant.now().minus(3, ChronoUnit.MINUTES);
+        runSql("update voice_session set started_at = ? where id = ?", java.sql.Timestamp.from(startedAt), sessionId);
+        insertTurn(sessionId, 1, startedAt.plusSeconds(100));
 
         mvc.perform(get("/api/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt))
                 .andExpect(jsonPath("$.openSession.sessionId").value(sessionId.toString()))
-                .andExpect(jsonPath("$.openSession.remainingSec").value(420))
+                .andExpect(jsonPath("$.openSession.usedSec").value(100))
+                .andExpect(jsonPath("$.openSession.remainingSec").value(320))
                 .andExpect(jsonPath("$.openSession.resumableUntil").exists());
+    }
+
+    /**
+     * <b>계약 v1.12.</b> 턴 0건은 이어갈 대화가 없다. 종료 직후 앱이 세션을 하나 더 열던
+     * 버그(2026-09-14)에서 그 빈 세션이 「중단된 대화 · 남은 7분」으로 보였다.
+     */
+    @Test
+    @DisplayName("턴이 0건인 열린 세션은 이어하기 대상으로 내주지 않는다")
+    void meHidesOpenSessionWithoutTurns() throws Exception {
+        startSession();
+
+        mvc.perform(get("/api/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.openSession").doesNotExist());
     }
 
     /**

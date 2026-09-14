@@ -242,6 +242,9 @@ public class SessionService {
     @Transactional(readOnly = true)
     public MeResponse.OpenSession openSession(UUID profileId) {
         return sessionRepository.findFirstByProfileIdAndEndedAtIsNullOrderByStartedAtDesc(profileId)
+                // 턴 0건은 이어갈 대화가 없다 — 내주면 앱이 빈 세션을 「중단된 대화 · 남은 7분」으로
+                // 권한다(계약 v1.12, 2026-09-14 실측). 새로 시작하면 start()가 닫으므로 남지 않는다.
+                .filter(session -> turnStats.turnCount(session.getId()) > 0)
                 .map(session -> {
                     Instant last = lastActivityAt(session);
                     int used = usedSec(session, last);
