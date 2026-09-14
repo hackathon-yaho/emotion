@@ -240,6 +240,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     }
   }
 
+  /// 지금 화면이 쥐고 있는 세션. 종료할 때 이것을 본다.
+  SessionStart? _session;
+
   /// 이어하기로 들어온 세션인지 — `E0700` 처리가 갈린다.
   bool _resumed = false;
 
@@ -283,6 +286,15 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     // 새 대화면 이전 그룹을 지운다 — 남겨두면 다음 소켓에 실린다.
     ref.read(chatGroupIdProvider.notifier).state = chatGroupId;
     ref.read(activeSessionProvider.notifier).state = session;
+    // **이 화면이 쥐고 있는 세션.** 종료할 때 프로바이더 대신 이것을 본다 —
+    // 프로바이더는 화면을 벗어나는 순간 비워지므로, 그 타이밍에 걸리면
+    // 「대화 마치기」가 아무것도 닫지 못한 채 요약으로 넘어간다.
+    _session = session;
+    // **지난 요약을 비운다.** 안 비우면 이번 종료가 실패했을 때 S02-1이
+    // **이전 대화의 요약을 그대로 그린다** — 사용자는 정상 종료된 줄 알지만
+    // 서버에는 세션이 열린 채 남아 홈에 「이어서 이야기할까요?」가 뜬다
+    // (2026-09-15 실사용).
+    ref.read(lastSessionEndProvider.notifier).state = null;
 
     // 샘플 모드는 소켓을 열지 않는다 — 단, 검증용 주소가 주어졌으면 그쪽으로
     // 붙는다. 그 주소는 Hume이 아니다 (`Env.eviWsUrl`).
@@ -604,7 +616,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
 
   /// 대화 마치기 (§2-6) — 요약을 들고 S02-1로 간다.
   Future<void> _end({String reason = SessionClock.reasonUserEnd}) async {
-    final session = ref.read(activeSessionProvider);
+    final session = _session ?? ref.read(activeSessionProvider);
     _nearEndTimer?.cancel();
     _hardCutTimer?.cancel();
     ref.read(inConversationProvider.notifier).state = false;
