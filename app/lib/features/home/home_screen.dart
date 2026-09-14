@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config/env.dart';
 import '../../core/models/observation_models.dart';
 import '../../core/models/session_models.dart';
 import '../../core/session/session_clock.dart';
@@ -304,7 +305,8 @@ class _ResumeBlock extends ConsumerWidget {
             Text(
               '남은 시간 ${SessionClock.spell(open.remainingSec)}'
               ' · 원래 ${SessionClock.spell(open.totalSec)} 중'
-              ' 이미 쓴 시간을 뺀 값입니다',
+              ' 이미 쓴 시간을 뺀 값입니다'
+              '${Env.showErrorDetail ? ' · 세션 ${open.sessionId.substring(0, 8)}' : ''}',
               style: AppType.sans(
                 size: AppType.captionSize,
                 color: t.faint,

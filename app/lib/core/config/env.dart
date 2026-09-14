@@ -64,6 +64,14 @@ abstract final class Env {
   /// 쓰지 않는다(§7-1). 그런데 통합 중에는 그 규칙이 **원인을 통째로 숨겨서**
   /// 2026-09-06에 한참을 헤맸다(모델 파싱 실패가 "지금은 대화를 시작할 수
   /// 없습니다" 한 줄로만 보였다). 그때만 켠다.
-  static const showErrorDetail = bool.fromEnvironment('SHOW_ERROR_DETAIL');
+  static const _showErrorDetail = bool.fromEnvironment('SHOW_ERROR_DETAIL');
+
+  /// **주소에 `?debug=1`을 붙여도 켜진다** (2026-09-15).
+  ///
+  /// 배포본은 이 플래그 없이 빌드되므로, 테스트하는 사람이 증상을 만났을 때
+  /// 원인을 볼 방법이 없었다. 다시 빌드해 배포하고 재현을 부탁하는 왕복이
+  /// 반복됐다. 주소 한 글자로 켜지면 그 왕복이 사라진다.
+  static final bool showErrorDetail =
+      _showErrorDetail || Uri.base.queryParameters['debug'] == '1';
   static bool get hasEviOverride => eviWsUrl != null;
 }

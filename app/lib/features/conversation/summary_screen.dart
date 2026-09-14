@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config/env.dart';
 import '../../core/providers.dart';
 import '../../core/session/session_clock.dart';
 import '../../core/router/routes.dart';
@@ -31,7 +32,13 @@ class SummaryScreen extends ConsumerWidget {
     // 종료 응답(§2-6)은 한 번만 온다. 목록을 다시 불러 첫 항목을 쓰지 않는다 —
     // 그것이 "방금 끝낸 대화"라는 보장이 없다.
     final s = ref.watch(lastSessionEndProvider);
-    if (s == null) return const _NoSummary();
+    if (s == null) {
+      // **왜 없는지**를 진단 빌드에서 보여준다. 이 화면이 비어 있다는 것은
+      // 종료 호출이 실패했다는 뜻이고, 그러면 홈에 이어하기가 남는다.
+      return _NoSummary(
+        detail: Env.showErrorDetail ? ref.watch(endFailureProvider) : null,
+      );
+    }
 
     return ScreenScaffold(
       topPadding: 0,
@@ -73,18 +80,39 @@ class SummaryScreen extends ConsumerWidget {
 ///
 /// **가짜 요약을 보여주지 않는다.** 방금 끝낸 대화가 없으면 없다고 말한다.
 class _NoSummary extends StatelessWidget {
-  const _NoSummary();
+  const _NoSummary({this.detail});
+
+  /// 종료가 왜 실패했는지 — 진단 빌드에서만 채워진다.
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return ScreenScaffold(
       topPadding: 0,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Expanded(
+          Expanded(
             child: Center(
-              child: EmptyState(message: '방금 끝낸 대화가 없습니다.'),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const EmptyState(message: '방금 끝낸 대화가 없습니다.'),
+                  if (detail != null) ...[
+                    const SizedBox(height: Space.lg),
+                    Text(
+                      '종료 실패: $detail',
+                      textAlign: TextAlign.center,
+                      style: AppType.sans(
+                        size: AppType.captionSize,
+                        color: t.faint,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
           FilledAction(label: '홈으로', onPressed: () => _go(context)),

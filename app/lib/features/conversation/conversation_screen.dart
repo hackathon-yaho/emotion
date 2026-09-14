@@ -240,6 +240,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     }
   }
 
+  /// 「생각 중」이 시작된 시각 — 진단 줄이 쓴다.
+  DateTime? _thinkingSince;
+
   /// 지금 화면이 쥐고 있는 세션. 종료할 때 이것을 본다.
   SessionStart? _session;
 
@@ -504,6 +507,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   /// 그 1.8초를 **기다리는 화면**과 「듣고 있습니다」로 남아 있는 화면은 다르다.
   void _finishTurn() {
     ref.read(eviServiceProvider).finishTurn();
+    _thinkingSince = DateTime.now();
     _slowTimer?.cancel();
     setState(() {
       _slowThinking = false;
@@ -528,6 +532,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   /// 분석·응답 호출이 순차로 돈다 — 여기서부터가 사용자가 기다리는 구간이다.
   void _heardUser() {
     _slowTimer?.cancel();
+    _thinkingSince = DateTime.now();
     setState(() {
       _slowThinking = false;
       _state = TalkState.thinking;
@@ -556,6 +561,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
 
   /// 기다림이 끝났다 — 응답이 오기 시작했거나 상태가 바뀌었다.
   void _stopThinking() {
+    _thinkingSince = null;
     _slowTimer?.cancel();
     _slowThinking = false;
     if (_breath.isAnimating) _breath.stop();
@@ -634,6 +640,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     // 끝나지 않은 것이고, 사용자는 홈에서 「이어서 이야기할까요?」를 보게
     // 된다 — 방금 마쳤는데도. 30분 뒤 스케줄러가 정리할 때까지 그대로다.
     final repo = ref.read(journalRepositoryProvider);
+    ref.read(endFailureProvider.notifier).state = null;
+    String? failure;
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
         final end =
@@ -641,11 +649,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         ref.read(lastSessionEndProvider.notifier).state = end;
         // 홈이 이 세션을 다시 「중단된 대화」로 보여주지 않게 한다.
         ref.read(endedSessionIdProvider.notifier).state = session.sessionId;
+        failure = null;
         break;
       } on ApiException catch (e) {
+        failure = '${e.statusCode ?? '-'} ${e.code} ${e.message}'
+            ' · 세션 ${session.sessionId.substring(0, 8)}';
         // 서버에 그 세션이 없다 = 이미 닫혔다. 다시 부를 이유가 없고,
         // 홈에서 가리는 것은 그대로 해야 한다.
         if (e.code == ApiErrorCode.sessionNotFound) {
+          // 이미 닫힌 것이므로 실패가 아니다.
+          failure = null;
           ref.read(endedSessionIdProvider.notifier).state = session.sessionId;
           break;
         }
@@ -653,9 +666,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         final retryable = e.isNetwork || (e.statusCode ?? 0) >= 500;
         if (!retryable || attempt == 1) break;
         await Future<void>.delayed(const Duration(milliseconds: 600));
-      } on Object {
+      } on Object catch (e) {
+        failure = '$e · 세션 ${session.sessionId.substring(0, 8)}';
         break;
       }
+    }
+    if (failure != null) {
+      ref.read(endFailureProvider.notifier).state = failure;
     }
     ref.read(activeSessionProvider.notifier).state = null;
 
@@ -910,7 +927,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
                     // 「숫자를 보라」고 말하면서 화면에는 없던 일이 있었다**
                     // (2026-09-06). 만든 계측은 반드시 보이는 곳에 둔다.
                     if (Env.showErrorDetail)
-                      _DiagnosticLine(evi: ref.read(eviServiceProvider)),
+                      _DiagnosticLine(
+                        evi: ref.read(eviServiceProvider),
+                        waitingFor: _thinkingSince == null
+                            ? null
+                            : DateTime.now()
+                                .difference(_thinkingSince!)
+                                .inSeconds,
+                      ),
                     // 실패 원인 한 줄 — 개발용이다. **사용자 발화도 AI
                     // 발화도 이 화면에 글로 적지 않는다** (§6-1).
                     if (_detail != null) ...[
@@ -1079,9 +1103,13 @@ class _Ring {
 /// 끊김의 책임을 가르기 위한 것이다. `끼어들기`가 늘면 Hume이 사용자가
 /// 말한다고 판단한 것이고(에코·VAD), `조각`만 늘고 소리가 멈추면 우리 재생이다.
 class _DiagnosticLine extends StatefulWidget {
-  const _DiagnosticLine({required this.evi});
+  const _DiagnosticLine({required this.evi, this.waitingFor});
 
   final EviService evi;
+
+  /// 「생각 중」이 된 뒤 흐른 초. 응답이 느린 것이 누구 쪽인지 가른다 —
+  /// **앱은 기다리기만 한다**(타임아웃 없음). 이 숫자가 크면 AI 쪽이다.
+  final int? waitingFor;
 
   @override
   State<_DiagnosticLine> createState() => _DiagnosticLineState();
@@ -1114,7 +1142,8 @@ class _DiagnosticLineState extends State<_DiagnosticLine> {
       child: Text(
         '마이크 ${widget.evi.micLevel} (최대 ${widget.evi.micPeak}) · '
         'AI 발화 ${widget.evi.assistantTurns} · 조각 $chunks · '
-        '끼어들기 ${widget.evi.interruptions}',
+        '끼어들기 ${widget.evi.interruptions}'
+        '${widget.waitingFor == null ? '' : ' · 기다린 시간 ${widget.waitingFor}초'}',
         textAlign: TextAlign.center,
         style: AppType.sans(
           size: AppType.labelSize,

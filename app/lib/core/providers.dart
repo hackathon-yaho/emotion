@@ -285,3 +285,9 @@ final startFreshProvider = StateProvider<bool>((_) => false);
 /// **우리가 방금 닫은 세션이 무엇인지는 우리가 안다.** 그 하나만 무시한다 —
 /// 다른 열린 세션은 그대로 보여준다.
 final endedSessionIdProvider = StateProvider<String?>((_) => null);
+
+/// 종료 호출이 실패한 이유 — **진단용**(`SHOW_ERROR_DETAIL` · `?debug=1`).
+///
+/// 「대화 마치기」를 눌렀는데 홈에 이어하기가 남는 증상의 원인은 이 호출의
+/// 실패뿐인데, 화면에는 그 사실이 전혀 드러나지 않았다 (2026-09-15).
+final endFailureProvider = StateProvider<String?>((_) => null);
