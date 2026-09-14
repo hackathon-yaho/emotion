@@ -441,6 +441,76 @@ void main() {
     });
   });
 
+  // 화면은 「생각 중」인데 마이크는 열려 있었다. 답답해서 한 마디 더 하면
+  // 새 턴이 되고, 돌아오는 답은 첫 말에 대한 것이었다 (2026-09-15 실사용).
+  group('「생각 중」에는 마이크도 보류한다', () {
+    List<Uint8List> audioSent() => channel.sent
+        .map((s) => jsonDecode(s) as Map<String, dynamic>)
+        .where((m) => m['type'] == 'audio_input')
+        .map((m) => base64Decode(m['data'] as String))
+        .toList();
+
+    Uint8List quiet() => Uint8List(320);
+    Uint8List loud(int mark) {
+      final pcm = Int16List(160)..fillRange(0, 160, 12000);
+      pcm[0] = mark; // 어느 조각인지 표시
+      return Uint8List.sublistView(pcm);
+    }
+
+    test('조용하면 보내지 않는다', () async {
+      await start();
+      evi.holdForThinking();
+      mic.speak(quiet());
+      mic.speak(quiet());
+      await settle();
+      expect(audioSent(), isEmpty);
+      expect(evi.micHeld, isTrue);
+    });
+
+    test('말을 이어가면 풀리고 **모아 둔 것부터** 나간다 — 말머리를 잃지 않는다',
+        () async {
+      await start();
+      evi.holdForThinking();
+      mic.speak(loud(1));
+      mic.speak(loud(2));
+      mic.speak(loud(3)); // 세 조각 연속이면 말로 본다
+      await settle();
+      expect(evi.micHeld, isFalse);
+      final sent = audioSent();
+      expect(sent, hasLength(3), reason: '보류 중 모아 둔 것이 먼저 나간다');
+      expect(Int16List.sublistView(sent.first)[0], 1,
+          reason: '첫 조각부터 순서대로');
+    });
+
+    test('답이 오면 보류가 풀린다', () async {
+      await start();
+      evi.holdForThinking();
+      speaker.quiet = false;
+      channel.push({'type': 'assistant_end'});
+      await settle();
+      expect(evi.micHeld, isTrue);
+      speaker.quiet = true;
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      expect(evi.micHeld, isFalse);
+    });
+
+    test('첫 인사 보류는 모아 두지 않는다 — 인사를 끊지 않는 것이 목적이다',
+        () async {
+      await evi.start(
+        accessToken: 't',
+        configId: 'c',
+        sessionId: 's',
+        holdMicForGreeting: true,
+      );
+      mic.speak(loud(1));
+      mic.speak(loud(2));
+      mic.speak(loud(3));
+      await settle();
+      expect(evi.micHeld, isTrue);
+      expect(audioSent(), isEmpty);
+    });
+  });
+
   group('마이크', () {
     test('PCM을 base64 audio_input으로 보낸다', () async {
       await start();

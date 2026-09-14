@@ -533,6 +533,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   void _heardUser() {
     _slowTimer?.cancel();
     _thinkingSince = DateTime.now();
+    // **「생각 중」이면 마이크도 생각 중이다.** 열어 두면 답답해서 덧붙인
+    // 말이 새 턴이 되고, 돌아오는 답은 첫 말에 대한 것이 된다 (2026-09-15).
+    // 말을 이어가면 그 자리에서 풀리고 **모아 둔 소리부터** 나간다.
+    ref.read(eviServiceProvider).holdForThinking();
     setState(() {
       _slowThinking = false;
       _state = TalkState.thinking;

@@ -103,6 +103,22 @@ class EviService {
   /// 마지막 `audio_output`을 받은 시각. 조각이 계속 오는 중인지 가른다.
   DateTime? _lastChunkAt;
 
+  /// 보류 중 소리를 **버리지 않고 모아 둘지**.
+  ///
+  /// 첫 인사 보류는 버린다 — 그때 들어오는 소리는 인사를 끊을 뿐이다.
+  /// **「생각 중」 보류는 모아 둔다** — 사용자가 답을 기다리다 말을 이어가면
+  /// 그건 버릴 말이 아니다.
+  bool _holdBuffering = false;
+  final _heldFrames = <Uint8List>[];
+  int _heldBytes = 0;
+
+  /// 모아 두는 상한 — 16kHz 모노 PCM16 기준 약 1.5초.
+  static const _bufferCap = 48000;
+
+  /// 직전 조각의 소리 크기(평활 전). 말이 시작됐는지 보는 값이다.
+  int _lastLevel = 0;
+  int _loudRun = 0;
+
   /// 인사가 **시작될** 때까지 기다리는 시간. 이 안에 아무 말도 없으면 마이크를
   /// 연다 — 오지 않는 인사를 기다리며 사용자 말을 버리지 않는다.
   static const _greetingGrace = Duration(milliseconds: 3500);
@@ -150,6 +166,9 @@ class EviService {
     micPeak = 0;
     _lastSocketError = null;
     _holdTimer?.cancel();
+    _heldFrames.clear();
+    _heldBytes = 0;
+    _holdBuffering = false;
     _micHeld = holdMicForGreeting;
     if (_micHeld) {
       // **인사가 시작될 때까지만 짧게 기다린다.**
@@ -262,8 +281,47 @@ class EviService {
   void _sendAudio(Uint8List pcm) {
     // **계측은 보류 중에도 한다** — 마이크가 살아 있는지는 보류와 별개다.
     _measure(pcm);
-    if (_micHeld) return;
+    if (_micHeld) {
+      if (!_holdBuffering) return;
+      // 모아 두고, **말이 시작되면 그 자리에서 보류를 푼다.** 모아 둔 것부터
+      // 내보내므로 **말머리가 잘리지 않는다.**
+      _heldFrames.add(pcm);
+      _heldBytes += pcm.length;
+      while (_heldBytes > _bufferCap && _heldFrames.isNotEmpty) {
+        _heldBytes -= _heldFrames.removeAt(0).length;
+      }
+      _loudRun = _lastLevel >= _speechLevel ? _loudRun + 1 : 0;
+      if (_loudRun >= 3) _releaseMic(_generation);
+      return;
+    }
     _send({'type': 'audio_input', 'data': base64Encode(pcm)});
+  }
+
+  /// 말이 시작됐다고 볼 크기. 조용한 방의 바닥 소음은 한 자릿수다.
+  static const _speechLevel = 8;
+
+  /// **답을 기다리는 동안 마이크를 보류한다** (2026-09-15 실사용).
+  ///
+  /// 화면은 「생각 중」인데 마이크는 열려 있어서, 답답해서 한 마디 더 하면
+  /// 그것이 새 턴으로 들어가고 정작 돌아오는 답은 **첫 번째 말에 대한
+  /// 것**이었다. 상태 표시와 실제 동작이 달랐다.
+  ///
+  /// 다만 **버리지는 않는다** — 말을 이어가면 모아 둔 것부터 내보내고 보류를
+  /// 푼다. 답이 아예 오지 않아도 [cap] 뒤에는 연다.
+  void holdForThinking({Duration cap = const Duration(seconds: 10)}) {
+    if (_micHeld || _channel == null) return;
+    _startHold(buffering: true, cap: cap);
+  }
+
+  void _startHold({required bool buffering, required Duration cap}) {
+    _micHeld = true;
+    _holdBuffering = buffering;
+    _heldFrames.clear();
+    _heldBytes = 0;
+    _loudRun = 0;
+    final gen = _generation;
+    _holdTimer?.cancel();
+    _holdTimer = Timer(cap, () => _releaseMic(gen));
   }
 
   /// PCM16의 실효값을 0~100으로 옮긴다. 진단용이므로 정확도보다 싸게.
@@ -281,6 +339,7 @@ class EviService {
     final rms = math.sqrt(sum / samples.length);
     final level = (rms / 32768 * 300).clamp(0, 100).round();
     // 값이 튀지 않게 지수 평활 — 눈으로 읽을 수 있어야 한다.
+    _lastLevel = level;
     micLevel = ((micLevel * 3 + level) / 4).round();
     if (level > micPeak) micPeak = level;
   }
@@ -315,7 +374,16 @@ class EviService {
 
   void _releaseMic(int gen) {
     if (gen != _generation || !_micHeld) return;
+    _holdTimer?.cancel();
+    _holdTimer = null;
     _micHeld = false;
+    // 모아 둔 것부터 내보낸다 — 말머리를 잃지 않는다.
+    for (final frame in _heldFrames) {
+      _send({'type': 'audio_input', 'data': base64Encode(frame)});
+    }
+    _heldFrames.clear();
+    _heldBytes = 0;
+    _loudRun = 0;
     _emit(const EviMicLive());
   }
 
@@ -334,11 +402,9 @@ class EviService {
   /// 다시 여는 것은 AI의 답이 끝나고 재생이 빈 뒤다(`assistant_end`).
   void finishTurn() {
     if (_micHeld || _channel == null) return;
-    _micHeld = true;
-    final gen = _generation;
-    // 답이 아예 오지 않는 경우에도 마이크가 영영 닫혀 있지 않게 한다.
-    _holdTimer?.cancel();
-    _holdTimer = Timer(_holdCap, () => _releaseMic(gen));
+    // 「말 다 했어요」도 **말을 이어가면 풀린다** — 누르고 나서 한 마디 더
+    // 떠오르는 일이 있다.
+    _startHold(buffering: true, cap: _holdCap);
   }
 
   void _send(Map<String, Object?> message) {
