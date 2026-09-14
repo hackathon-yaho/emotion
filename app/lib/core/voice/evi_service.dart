@@ -285,12 +285,12 @@ class EviService {
     if (level > micPeak) micPeak = level;
   }
 
-  /// 재생이 다 끝나면 마이크를 연다. 200ms마다 보고, 오래 끌지 않는다.
+  /// 재생이 정말 끝나면 [done]을 부른다. 200ms마다 보고, 오래 끌지 않는다.
   ///
   /// **큐가 빈 것만으로는 끝이 아니다.** 조각과 조각 사이에도 큐는 빈다.
   /// 그래서 **[_quietFor]만큼 연속으로 조용하고, 그동안 새 조각도 오지
   /// 않아야** 끝으로 인정한다.
-  void _releaseWhenQuiet(int gen) {
+  void _whenQuiet(int gen, void Function() done) {
     _holdTimer?.cancel();
     var waited = Duration.zero;
     var quiet = Duration.zero;
@@ -308,15 +308,13 @@ class EviService {
 
       if (quiet >= _quietFor || waited > _holdCap) {
         timer.cancel();
-        _releaseMic(gen);
+        done();
       }
     });
   }
 
   void _releaseMic(int gen) {
     if (gen != _generation || !_micHeld) return;
-    _holdTimer?.cancel();
-    _holdTimer = null;
     _micHeld = false;
     _emit(const EviMicLive());
   }
@@ -400,14 +398,19 @@ class EviService {
         }
 
       case 'assistant_end':
-        _emit(const EviAssistantDone());
-        // `assistant_end`는 **조각을 다 보냈다**는 뜻이다. 아직 스피커에서
-        // 나오는 중이라, 여기서 마이크를 열면 남은 인사가 마이크로 되돌아가
-        // 자기 말을 끊는다. 재생이 비는 것을 보고 연다.
-        if (_micHeld) _releaseWhenQuiet(_generation);
+        // **여기서 「말을 마쳤다」고 알리지 않는다.** 이 프레임은 메시지가
+        // 끝났다는 뜻이고 소리는 아직 나오는 중이다. 그대로 알리면 화면이
+        // 「말하고 있습니다 → 듣고 있습니다 → 말하고 있습니다」로 깜빡인다
+        // (2026-09-15 테스트). 재생이 비는 것을 보고 알린다.
+        _whenQuiet(_generation, () {
+          _emit(const EviAssistantDone());
+          _releaseMic(_generation);
+        });
 
       case 'user_interruption':
         interruptions++;
+        // 사용자가 끊었으면 재생을 기다릴 이유가 없다 — 큐도 비운다.
+        _holdTimer?.cancel();
         // 큐를 비우지 않으면 사용자가 끊었는데도 AI가 계속 말한다.
         speaker.stop().catchError((_) {});
         _emit(const EviUserInterruption());

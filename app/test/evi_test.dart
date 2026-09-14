@@ -12,6 +12,8 @@ import 'package:voice_journal/core/voice/evi_service.dart';
 import 'package:record/record.dart';
 
 import 'package:voice_journal/core/voice/mic.dart';
+import 'package:audioplayers/audioplayers.dart';
+
 import 'package:voice_journal/core/voice/speaker.dart';
 
 /// 소켓 대역 — 서버가 보낸 프레임을 우리가 밀어넣고, 앱이 보낸 것을 받는다.
@@ -91,6 +93,35 @@ class _FakeMic implements Mic {
     await _bytes?.close();
     _bytes = null;
   }
+}
+
+/// `play()`가 언제 시작되는지 시험이 정하는 재생기.
+class _FakePlayer implements AudioPlayer {
+  int plays = 0, stops = 0;
+  Completer<void>? _pending;
+  final _complete = StreamController<void>.broadcast();
+
+  void finishPlayCall() => _pending?.complete();
+
+  @override
+  Future<void> play(Source source,
+      {double? volume,
+      double? balance,
+      AudioContext? ctx,
+      Duration? position,
+      PlayerMode? mode}) {
+    plays++;
+    return (_pending = Completer<void>()).future;
+  }
+
+  @override
+  Future<void> stop() async => stops++;
+
+  @override
+  Stream<void> get onPlayerComplete => _complete.stream;
+
+  @override
+  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FakeSpeaker implements Speaker {
@@ -355,6 +386,58 @@ void main() {
     test('소켓이 없으면 아무 일도 하지 않는다', () async {
       evi.finishTurn();
       expect(evi.micHeld, isFalse);
+    });
+  });
+
+  // 「말하고 있습니다 → 듣고 있습니다 → 말하고 있습니다」로 깜빡이던 것
+  // (2026-09-15 테스트). `assistant_end`는 소리가 끝났다는 뜻이 아니다.
+  // 대화를 끝내고 요약 화면으로 넘어갔는데 **AI 목소리가 뒤늦게 흘러나왔다**
+  // (2026-09-15 테스트 — 첫 인사말이 요약 화면에서 들렸다). `play()`가
+  // 비동기라 `stop()` 뒤에 시작되는 경우다.
+  test('멈춘 뒤에 시작된 소리는 그 자리에서 다시 멈춘다', () async {
+    final player = _FakePlayer();
+    final speaker = AudioPlayersSpeaker(player);
+    speaker.enqueue(Uint8List.fromList(List.filled(64, 0)));
+    expect(player.plays, 1);
+
+    await speaker.stop();
+    expect(player.stops, 1, reason: '큐를 비우고 재생도 멈춘다');
+
+    // 이제서야 브라우저가 재생을 시작한다 — 이미 떠난 화면의 소리다.
+    player.finishPlayCall();
+    await Future<void>.delayed(Duration.zero);
+    expect(player.stops, 2, reason: '늦게 시작된 소리를 다시 멈춘다');
+  });
+
+  group('AI 발화 종료는 재생이 끝난 뒤에 알린다', () {
+    test('assistant_end만으로는 알리지 않는다', () async {
+      await start();
+      speaker.quiet = false;
+      channel.push({'type': 'assistant_end'});
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(events.whereType<EviAssistantDone>(), isEmpty);
+    });
+
+    test('재생이 비고 조용해지면 그때 알린다', () async {
+      await start();
+      speaker.quiet = false;
+      channel.push({'type': 'assistant_end'});
+      await settle();
+      speaker.quiet = true;
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      expect(events.whereType<EviAssistantDone>(), hasLength(1));
+    });
+
+    test('사용자가 끊으면 기다리지 않는다 — 그 턴은 없던 것이다', () async {
+      await start();
+      speaker.quiet = false;
+      channel.push({'type': 'assistant_end'});
+      await settle();
+      channel.push({'type': 'user_interruption'});
+      speaker.quiet = true;
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      expect(events.whereType<EviAssistantDone>(), isEmpty);
+      expect(events.whereType<EviUserInterruption>(), hasLength(1));
     });
   });
 

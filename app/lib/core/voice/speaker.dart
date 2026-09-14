@@ -50,6 +50,14 @@ class AudioPlayersSpeaker implements Speaker {
   /// 진단용 — 받은 조각 수. `SHOW_ERROR_DETAIL`에서만 화면에 쓴다.
   int received = 0;
 
+  /// 재생 세대. [stop]마다 오른다.
+  ///
+  /// **`play()`는 비동기라 멈춘 뒤에 시작될 수 있다.** 대화를 끝내고 요약
+  /// 화면으로 넘어갔는데 **AI 목소리가 뒤늦게 흘러나오는 일**이 실제로 있었다
+  /// (2026-09-15 테스트 — 첫 인사말이 요약 화면에서 들렸다). 재생이 시작된
+  /// 시점에 세대가 달라져 있으면 그 자리에서 다시 멈춘다.
+  int _generation = 0;
+
   @override
   bool get idle => !_playing && _queue.isEmpty;
 
@@ -72,7 +80,11 @@ class AudioPlayersSpeaker implements Speaker {
     }
 
     // EVI는 조각마다 완결된 WAV를 보낸다.
-    _player.play(BytesSource(chunk, mimeType: 'audio/wav')).catchError((_) {
+    final gen = _generation;
+    _player.play(BytesSource(chunk, mimeType: 'audio/wav')).then((_) {
+      // 그사이 멈췄다면 지금 시작된 소리를 다시 멈춘다.
+      if (gen != _generation) _player.stop().catchError((_) {});
+    }).catchError((_) {
       // 한 조각을 못 재생해도 대화를 끊지 않는다 — 다음 조각으로 넘어간다.
       _finish();
     });
@@ -122,6 +134,7 @@ class AudioPlayersSpeaker implements Speaker {
 
   @override
   Future<void> stop() async {
+    _generation++;
     _watchdog?.cancel();
     _watchdog = null;
     _queue.clear();
