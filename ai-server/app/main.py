@@ -283,6 +283,8 @@ async def chat_completions(
         tagsDropped=len(dropped),
         dropReasons=sorted(set(dropped)),
         unknownEmotions=sorted(unknown) if unknown else None,
+        # Hume 표정 꼬리를 뗐는가. 내용이 아니라 참/거짓만 — 얼마나 자주 붙어 오는지 본다.
+        expressionSuffix=body.expression_suffix_seen(),
         demoMode=ctx.demo_mode,
     )
 

@@ -52,6 +52,9 @@ ALLOWED_FIELDS = frozenset(
         "refetch",
         "guardReasons",
         "demoMode",
+        # Hume이 발화 끝에 붙인 표정 꼬리를 뗐는지 — **참/거짓만**. 꼬리 문자열 자체는
+        # 프로소디의 텍스트 표현이라 남기지 않는다.
+        "expressionSuffix",
         # 요청 뼈대 — 키 이름과 값의 **타입만** 담긴다(app/capture.py). 발화도 점수 값도
         # 들어가지 않으므로 로그에 실어도 안전하다. 컨테이너의 파일은 인스턴스와 함께
         # 사라지므로, 첫 연결의 모양을 남기려면 로그가 유일한 경로다.
