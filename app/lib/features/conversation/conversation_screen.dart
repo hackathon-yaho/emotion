@@ -14,6 +14,7 @@ import '../../core/providers.dart';
 import '../../core/session/app_session.dart';
 import '../../core/session/session_clock.dart';
 import '../../core/session/session_entry.dart';
+import '../../core/session/spoken_end.dart';
 import '../../core/voice/evi_service.dart';
 import '../../core/voice/speaker.dart';
 import '../../core/voice/evi_event.dart';
@@ -246,6 +247,23 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   /// 「말 다 했어요」 뒤 전사를 기다리는 시계.
   Timer? _transcriptTimer;
 
+  /// 사용자가 **말로** 끝내자고 했다 — AI의 답이 끝나면 닫는다.
+  bool _endRequested = false;
+  Timer? _spokenEndTimer;
+
+  void _requestSpokenEnd() {
+    _endRequested = true;
+    // 답이 아예 오지 않아도 끝낸다 — 끝내자고 말한 사람을 붙잡아 두지
+    // 않는다. 답이 오면 그쪽이 먼저 닫는다.
+    _spokenEndTimer?.cancel();
+    _spokenEndTimer = Timer(const Duration(seconds: 15), () {
+      if (mounted && _endRequested) {
+        _endRequested = false;
+        _end(reason: EndReason.softWrap);
+      }
+    });
+  }
+
   /// 듣는 화면에 잠깐 붙는 한 줄. 지금은 「들은 말이 없습니다」 하나뿐이다.
   String? _notice;
   Timer? _noticeTimer;
@@ -466,10 +484,18 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         }
 
       case EviMicLive():
-        setState(() => _state = TalkState.listening);
+        // **마이크가 열린 것과 「답을 더는 기다리지 않는다」는 다르다.**
+        // 생각 중에 숨소리로 보류가 풀리면 화면이 「듣고 있습니다」로 한 번
+        // 튀었다 — 곧 답이 와서 「말하고 있습니다」로 넘어가니 깜빡임으로
+        // 보인다 (2026-09-16, 백엔드가 호출부를 전부 세어 원인을 확정했다).
+        if (_state != TalkState.thinking) {
+          setState(() => _state = TalkState.listening);
+        }
 
-      case EviUserSpoke():
-        // **내용은 쓰지 않는다** — 말이 끝났다는 사실만 화면에 반영한다.
+      case EviUserSpoke(:final text):
+        // **화면에 적지는 않는다**(결정 29). 다만 **끝내자는 말인지**는 본다 —
+        // 말로 하는 서비스에서 종료만 손으로 하는 것은 앞뒤가 맞지 않는다.
+        if (SpokenEnd.says(text)) _requestSpokenEnd();
         _heardUser();
 
       case EviAssistantSpoke():
@@ -477,6 +503,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         setState(() => _state = TalkState.speaking);
 
       case EviAssistantDone():
+        // 끝내자고 했으면 **AI가 답을 마친 뒤에** 닫는다 — 감지하자마자
+        // 끊으면 "오늘 이야기 잘 들었어요"가 중간에 잘린다.
+        if (_endRequested) {
+          _endRequested = false;
+          _spokenEndTimer?.cancel();
+          _end(reason: EndReason.softWrap);
+          return;
+        }
         _stopThinking();
         // 인사 보류 중이면 아직 마이크가 닫혀 있다 — 「듣고 있습니다」로
         // 먼저 넘어가면 사용자가 말해도 안 들어간다.
@@ -737,6 +771,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     _slowTimer?.cancel();
     _transcriptTimer?.cancel();
     _noticeTimer?.cancel();
+    _spokenEndTimer?.cancel();
     _nearEndTimer?.cancel();
     _hardCutTimer?.cancel();
     _eviSub?.cancel();

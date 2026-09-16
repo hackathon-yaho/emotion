@@ -507,6 +507,25 @@ void main() {
       expect(audioSent(), isEmpty);
     });
 
+    // 고정 임계값 8은 **차분하게 말하는 사람을 놓쳤다** — 조용히 한 말이
+    // 보류에 갇혀 Hume까지 가지 못했다 (2026-09-16). 바닥 소음에서 띄운다.
+    test('조용한 방에서는 작은 말도 잡는다', () async {
+      await start();
+      evi.holdForThinking();
+      // 바닥 소음을 먼저 보여준다 (거의 무음).
+      for (var i = 0; i < 5; i++) {
+        mic.speak(Uint8List.sublistView(Int16List(160)));
+      }
+      // 차분한 말 — 종전 기준(8)에는 못 미치는 크기다.
+      final calm = Int16List(160)..fillRange(0, 160, 700); // level ≈ 6
+      for (var i = 0; i < 3; i++) {
+        mic.speak(Uint8List.sublistView(calm));
+      }
+      await settle();
+      expect(evi.micHeld, isFalse, reason: '바닥이 0이면 기준은 4다');
+      expect(audioSent(), isNotEmpty, reason: '모아 둔 것부터 나간다');
+    });
+
     test('답이 오면 보류가 풀린다', () async {
       await start();
       evi.holdForThinking();

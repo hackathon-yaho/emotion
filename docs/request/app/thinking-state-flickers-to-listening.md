@@ -1,6 +1,7 @@
 # 「생각 중」이 답이 오기 전에 「듣고 있습니다」로 한 번 튑니다
 
-> **상태: ⏳ 회신 대기** (요청 2026-09-16)
+> **상태: ✅ 회신 완료** (요청 2026-09-16 · 회신 2026-09-16) — [`../../response/backend/thinking-state-flickers-to-listening.md`](../../response/backend/thinking-state-flickers-to-listening.md)
+> (원문 요청 2026-09-16)
 > 회신은 [`../../response/backend/thinking-state-flickers-to-listening.md`](../../response/backend/thinking-state-flickers-to-listening.md)에 들어옵니다.
 > **막고 있는 작업**: 없습니다. 화면 표시만의 문제이고 대화·저장은 정상입니다. 다만 **도그푸딩·시연에서 계속 보입니다.**
 

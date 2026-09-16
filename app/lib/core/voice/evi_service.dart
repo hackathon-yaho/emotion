@@ -119,6 +119,9 @@ class EviService {
   int _lastLevel = 0;
   int _loudRun = 0;
 
+  /// 보류 중 본 **가장 조용한 값** — 그 방의 바닥 소음이다.
+  int _floor = 100;
+
   /// 인사가 **시작될** 때까지 기다리는 시간. 이 안에 아무 말도 없으면 마이크를
   /// 연다 — 오지 않는 인사를 기다리며 사용자 말을 버리지 않는다.
   static const _greetingGrace = Duration(milliseconds: 3500);
@@ -290,6 +293,7 @@ class EviService {
       while (_heldBytes > _bufferCap && _heldFrames.isNotEmpty) {
         _heldBytes -= _heldFrames.removeAt(0).length;
       }
+      if (_lastLevel < _floor) _floor = _lastLevel;
       _loudRun = _lastLevel >= _speechLevel ? _loudRun + 1 : 0;
       // **말이 시작됐을 때만** 모아 둔 것을 내보낸다 — 말머리를 잃지 않기
       // 위한 것이고, 그 외에 내보내면 없던 발화를 만든다.
@@ -299,8 +303,18 @@ class EviService {
     _send({'type': 'audio_input', 'data': base64Encode(pcm)});
   }
 
-  /// 말이 시작됐다고 볼 크기. 조용한 방의 바닥 소음은 한 자릿수다.
-  static const _speechLevel = 8;
+  /// 말이 시작됐다고 보는 기준 — **바닥 소음 위로 이만큼**.
+  ///
+  /// 고정값 8로 두었더니 **차분하게 말하는 사람을 놓쳤다.** 대화를 마무리하며
+  /// 조용히 "오늘은 여기까지 하자"라고 한 말이 보류에 갇혀 Hume까지 가지
+  /// 못한 것으로 보인다 (2026-09-16 백엔드 관측: 그 47초 구간에 user 턴 0건).
+  /// 방마다 바닥 소음이 다르므로 **고정값 대신 바닥에서 띄운다.**
+  static const _speechMargin = 4;
+  static const _speechFloorMin = 4;
+  static const _speechFloorMax = 10;
+
+  int get _speechLevel =>
+      (_floor + _speechMargin).clamp(_speechFloorMin, _speechFloorMax);
 
   /// **답을 기다리는 동안 마이크를 보류한다** (2026-09-15 실사용).
   ///
@@ -328,6 +342,7 @@ class EviService {
     _heldFrames.clear();
     _heldBytes = 0;
     _loudRun = 0;
+    _floor = 100;
     final gen = _generation;
     _holdTimer?.cancel();
     // 시간으로 푸는 경우에는 **모아 둔 것을 버린다** — 말한 적 없는 소리를
