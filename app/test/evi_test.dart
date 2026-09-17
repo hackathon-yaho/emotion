@@ -332,6 +332,10 @@ void main() {
         .map((m) => base64Decode(m['data'] as String))
         .toList();
 
+    /// 무음(전부 0) 조각을 뺀 것 — 실제 말소리가 나갔는지 본다.
+    List<Uint8List> speechSent() =>
+        audioSent().where((f) => f.any((b) => b != 0)).toList();
+
     Uint8List quiet() => Uint8List(320);
     Uint8List loud(int mark) {
       final pcm = Int16List(160)..fillRange(0, 160, 12000);
@@ -339,13 +343,18 @@ void main() {
       return Uint8List.sublistView(pcm);
     }
 
-    test('말해도 버튼 전에는 한 프레임도 나가지 않는다', () async {
+    test('말해도 버튼 전에는 말소리가 나가지 않는다 — 무음만 박자대로 나간다',
+        () async {
       await start();
       for (var i = 0; i < 5; i++) {
         mic.speak(loud(i));
       }
       await settle();
-      expect(audioSent(), isEmpty);
+      expect(speechSent(), isEmpty, reason: '말소리는 모아 둔다');
+      // Hume의 턴 판정이 돌아가게 **같은 길이의 무음**을 조각마다 보낸다.
+      final sent = audioSent();
+      expect(sent, hasLength(5));
+      expect(sent.every((f) => f.length == 320 && f.every((b) => b == 0)), isTrue);
       expect(evi.turnHasSpeech, isTrue);
     });
 
@@ -355,8 +364,9 @@ void main() {
         mic.speak(loud(i));
       }
       await settle();
+      final before = audioSent().length; // 박자용 무음 4조각
       expect(evi.sendTurn(), isTrue);
-      final sent = audioSent();
+      final sent = audioSent().sublist(before);
       expect(sent.length, greaterThan(4), reason: '소리 4조각 + 침묵 꼬리');
       expect(Int16List.sublistView(sent[0])[0], 1);
       expect(Int16List.sublistView(sent[3])[0], 4);
@@ -375,7 +385,7 @@ void main() {
       }
       await settle();
       expect(evi.sendTurn(), isFalse);
-      expect(audioSent(), isEmpty);
+      expect(speechSent(), isEmpty);
     });
 
     test('말 중간의 긴 침묵은 잘려 나간다 — Hume이 턴을 쪼개지 못하게', () async {
@@ -389,8 +399,9 @@ void main() {
       }
       mic.speak(loud(4));
       await settle();
+      final before = audioSent().length; // 박자용 무음은 뺀다
       expect(evi.sendTurn(), isTrue);
-      final sent = audioSent();
+      final sent = audioSent().sublist(before);
       final quietBytes = sent
           .where((f) => f.every((b) => b == 0))
           .fold<int>(0, (n, f) => n + f.length);
@@ -509,8 +520,12 @@ void main() {
           .map((s) => jsonDecode(s) as Map<String, dynamic>)
           .where((m) => m['type'] == 'audio_input')
           .toList();
-      expect(audio, isNotEmpty);
-      expect(base64Decode(audio.first['data'] as String), talk);
+      final speech = audio
+          .map((m) => base64Decode(m['data'] as String))
+          .where((f) => f.any((b) => b != 0))
+          .toList();
+      expect(speech, isNotEmpty);
+      expect(speech.first, talk);
     });
 
     test('홀수 길이 조각에도 죽지 않고 소리 크기를 잰다 (진단)', () async {
