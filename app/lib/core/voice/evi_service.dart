@@ -478,12 +478,25 @@ class EviService {
 
       case 'assistant_message':
         assistantTurns++;
-        // 인사가 **시작됐다.** 짧은 유예를 끝까지 기다리는 쪽으로 바꾼다 —
-        // 여기서 유예가 끝나 버리면 인사 도중에 마이크가 열린다.
         if (_micHeld) {
-          _holdTimer?.cancel();
-          final gen = _generation;
-          _holdTimer = Timer(_holdCap, () => _releaseMic(gen));
+          if (_holdBuffering) {
+            // **「생각 중」·「말 다 했어요」 보류는 AI가 말을 시작하면 푼다.**
+            //
+            // 답이 나오는 동안까지 잡아 두었더니, **스피커에서 나오는 AI
+            // 목소리가 마이크로 되돌아와** 우리 소리 감지를 넘겼다 → 보류가
+            // 풀리며 그 소리를 내보냈다 → Hume이 그것을 발화로 읽어 없던
+            // 「생각 중」이 생기고, 화면은 AI가 말하는 중에 「듣고 있습니다」로
+            // 튀었다 (2026-09-17 실사용). 끼어들기 판정은 **Hume의 몫**이다
+            // (Interruptibility 문서 — `user_interruption`). 우리는 마이크를
+            // 열어 주기만 하고, 모아 둔 것은 버린다.
+            _releaseMic(_generation, flush: false);
+          } else {
+            // **첫 인사 보류**는 끝날 때까지 기다린다 (결정 27) — 여기서
+            // 유예가 끝나 버리면 인사 도중에 마이크가 열린다.
+            _holdTimer?.cancel();
+            final gen = _generation;
+            _holdTimer = Timer(_holdCap, () => _releaseMic(gen));
+          }
         }
         final text = _content(json);
         if (text != null) _emit(EviAssistantSpoke(text));

@@ -526,6 +526,42 @@ void main() {
       expect(audioSent(), isNotEmpty, reason: '모아 둔 것부터 나간다');
     });
 
+    // 답이 **나오는 동안까지** 잡아 두었더니 스피커의 AI 목소리가 마이크로
+    // 되돌아와 우리 소리 감지를 넘겼다 → 보류가 풀리며 그 소리를 내보냈다 →
+    // 없던 「생각 중」이 생기고 화면은 AI가 말하는 중에 「듣고 있습니다」로
+    // 튀었다 (2026-09-17). 끼어들기 판정은 Hume의 몫이다.
+    test('AI가 말을 시작하면 보류를 풀고 모아 둔 것은 버린다', () async {
+      await start();
+      evi.holdForThinking();
+      mic.speak(quiet());
+      channel.push({
+        'type': 'assistant_message',
+        'message': {'role': 'assistant', 'content': '그랬군요'}
+      });
+      await settle();
+      expect(evi.micHeld, isFalse, reason: '여기부터 끼어들기는 Hume이 판정한다');
+      expect(audioSent(), isEmpty, reason: '생각 중에 모인 소리는 버린다');
+      // 이제 말하면 그대로 나간다 — 마이크가 열려 있다.
+      mic.speak(loud(1));
+      await settle();
+      expect(audioSent(), hasLength(1));
+    });
+
+    test('첫 인사 보류는 AI가 말을 시작해도 끝까지 기다린다 (결정 27)', () async {
+      await evi.start(
+        accessToken: 't',
+        configId: 'c',
+        sessionId: 's',
+        holdMicForGreeting: true,
+      );
+      channel.push({
+        'type': 'assistant_message',
+        'message': {'role': 'assistant', 'content': '안녕하세요'}
+      });
+      await settle();
+      expect(evi.micHeld, isTrue);
+    });
+
     test('답이 오면 보류가 풀린다', () async {
       await start();
       evi.holdForThinking();

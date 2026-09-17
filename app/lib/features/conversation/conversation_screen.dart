@@ -484,11 +484,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         }
 
       case EviMicLive():
-        // **마이크가 열린 것과 「답을 더는 기다리지 않는다」는 다르다.**
-        // 생각 중에 숨소리로 보류가 풀리면 화면이 「듣고 있습니다」로 한 번
-        // 튀었다 — 곧 답이 와서 「말하고 있습니다」로 넘어가니 깜빡임으로
-        // 보인다 (2026-09-16, 백엔드가 호출부를 전부 세어 원인을 확정했다).
-        if (_state != TalkState.thinking) {
+        // **마이크가 열렸다는 사실만이다.** 화면 상태는 대화 사건이 정한다 —
+        // 「생각 중」 위에서 튀던 것을 09-16에 막았는데, 「말하고 있습니다」
+        // 위에서도 튀었다(AI가 말하는 중에 「듣고 있습니다」, 2026-09-17).
+        // 유일한 예외는 **연결 직후 인사 없이 열리는 경우**다 — 그때는 이
+        // 사건 말고는 듣는 상태로 갈 계기가 없다.
+        if (_state == TalkState.connecting) {
           setState(() => _state = TalkState.listening);
         }
 
@@ -561,7 +562,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
     // 전사를 만들지 않고, 그러면 CLM 호출도 답도 없다. 그대로 두면 화면만
     // 「생각 중」으로 남아 보류 상한까지 거짓말을 한다 (2026-09-15).
     _transcriptTimer?.cancel();
-    _transcriptTimer = Timer(const Duration(seconds: 5), () {
+    // Hume의 전사 확정은 침묵 1.8초 + 처리다. 5초로 두었더니 처리가 느린
+    // 날 「들은 말이 없습니다」가 먼저 뜨고 전사가 뒤따라 왔다 (2026-09-17).
+    _transcriptTimer = Timer(const Duration(seconds: 8), () {
       if (!mounted || _state != TalkState.thinking) return;
       ref.read(eviServiceProvider).releaseHold();
       _stopThinking();
