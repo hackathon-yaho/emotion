@@ -443,6 +443,41 @@ void main() {
 
   // 화면은 「생각 중」인데 마이크는 열려 있었다. 답답해서 한 마디 더 하면
   // 새 턴이 되고, 돌아오는 답은 첫 말에 대한 것이었다 (2026-09-15 실사용).
+  // 「말 다 했어요」 뒤 "들은 말이 없다"를 시간만으로 판정하면 Hume 전사가
+  // 느린 날마다 틀린다 (2026-09-17). 마이크가 실제로 말을 잡았는지는 우리가 안다.
+  group('마이크가 열려 있을 때 말소리를 기억한다', () {
+    test('조용하면 기억하지 않는다', () async {
+      await start();
+      for (var i = 0; i < 5; i++) {
+        mic.speak(Uint8List(320));
+      }
+      await settle();
+      expect(evi.lastSpeechAt, isNull);
+    });
+
+    test('말소리가 세 조각 이어지면 그 시각을 남긴다', () async {
+      await start();
+      final talk = Int16List(160)..fillRange(0, 160, 1500); // level ≈ 13
+      for (var i = 0; i < 3; i++) {
+        mic.speak(Uint8List.sublistView(talk));
+      }
+      await settle();
+      expect(evi.lastSpeechAt, isNotNull);
+    });
+
+    test('보류 중에 들어온 소리는 기억하지 않는다 — 보내지 않았으니까', () async {
+      await start();
+      evi.holdForThinking();
+      // 보류 기준(바닥+4)에는 못 미치고 라이브 기준(6)에는 미치는 크기가 없어,
+      // 아예 조용한 소리로 확인한다 — 보류 중이면 lastSpeechAt이 갱신될 길이 없다.
+      for (var i = 0; i < 5; i++) {
+        mic.speak(Uint8List(320));
+      }
+      await settle();
+      expect(evi.lastSpeechAt, isNull);
+    });
+  });
+
   group('「생각 중」에는 마이크도 보류한다', () {
     List<Uint8List> audioSent() => channel.sent
         .map((s) => jsonDecode(s) as Map<String, dynamic>)

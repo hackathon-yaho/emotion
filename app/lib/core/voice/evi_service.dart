@@ -122,6 +122,15 @@ class EviService {
   /// 보류 중 본 **가장 조용한 값** — 그 방의 바닥 소음이다.
   int _floor = 100;
 
+  /// **마이크가 열려 있을 때** 마지막으로 말소리를 잡은 시각.
+  ///
+  /// 「말 다 했어요」를 눌렀을 때 **정말 아무 말도 안 했는지**를 가르는 근거다.
+  /// 시간만으로 "들은 말이 없다"고 판정하면 Hume 전사가 느린 날마다 틀린다 —
+  /// 안내가 먼저 뜨고 답이 뒤따라 왔다 (2026-09-17). 소리를 실제로 보냈는지는
+  /// 우리가 안다.
+  DateTime? lastSpeechAt;
+  int _liveLoudRun = 0;
+
   /// 인사가 **시작될** 때까지 기다리는 시간. 이 안에 아무 말도 없으면 마이크를
   /// 연다 — 오지 않는 인사를 기다리며 사용자 말을 버리지 않는다.
   static const _greetingGrace = Duration(milliseconds: 3500);
@@ -300,8 +309,15 @@ class EviService {
       if (_loudRun >= 3) _releaseMic(_generation, flush: true);
       return;
     }
+    // 열린 채로 보내는 소리 중 말소리를 기억한다 — 바닥은 모르니 고정 기준.
+    _liveLoudRun = _lastLevel >= _liveSpeechLevel ? _liveLoudRun + 1 : 0;
+    if (_liveLoudRun >= 3) lastSpeechAt = DateTime.now();
     _send({'type': 'audio_input', 'data': base64Encode(pcm)});
   }
+
+  /// 마이크가 열려 있을 때 말소리로 보는 크기. 보류 중 기준(바닥+4)보다는
+  /// 높게 둔다 — 여기서는 놓치는 쪽이 덜 위험하다(안내가 조금 늦게 뜰 뿐).
+  static const _liveSpeechLevel = 6;
 
   /// 말이 시작됐다고 보는 기준 — **바닥 소음 위로 이만큼**.
   ///

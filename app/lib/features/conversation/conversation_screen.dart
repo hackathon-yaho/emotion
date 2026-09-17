@@ -558,13 +558,20 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   void _finishTurn() {
     ref.read(eviServiceProvider).finishTurn();
     _thinkingSince = DateTime.now();
-    // **전사가 오지 않으면 기다릴 것이 없다.** Hume은 소리를 못 알아들으면
-    // 전사를 만들지 않고, 그러면 CLM 호출도 답도 없다. 그대로 두면 화면만
-    // 「생각 중」으로 남아 보류 상한까지 거짓말을 한다 (2026-09-15).
+    // **아무 말도 안 하고 눌렀으면 기다릴 것이 없다.** Hume은 소리를 못
+    // 알아들으면 전사를 만들지 않고, 그러면 CLM 호출도 답도 없다. 그대로
+    // 두면 화면만 「생각 중」으로 남아 보류 상한까지 거짓말을 한다 (09-15).
+    //
+    // 다만 **시간만으로 판정하지 않는다.** 5초 뒤 안내를 띄웠더니, Hume
+    // 전사가 느린 날 「들은 말이 없습니다」가 먼저 뜨고 답이 뒤따라 왔다
+    // (2026-09-17). 마이크가 **실제로 말소리를 잡았는지**는 우리가 안다 —
+    // 잡았으면 전사는 오는 중이니 기다리고, 안 잡았으면 짧게 안내한다.
     _transcriptTimer?.cancel();
-    // Hume의 전사 확정은 침묵 1.8초 + 처리다. 5초로 두었더니 처리가 느린
-    // 날 「들은 말이 없습니다」가 먼저 뜨고 전사가 뒤따라 왔다 (2026-09-17).
-    _transcriptTimer = Timer(const Duration(seconds: 8), () {
+    final spokeAt = ref.read(eviServiceProvider).lastSpeechAt;
+    final spoke = spokeAt != null &&
+        DateTime.now().difference(spokeAt) < const Duration(seconds: 15);
+    if (spoke) return;
+    _transcriptTimer = Timer(const Duration(seconds: 4), () {
       if (!mounted || _state != TalkState.thinking) return;
       ref.read(eviServiceProvider).releaseHold();
       _stopThinking();
