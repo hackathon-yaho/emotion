@@ -21,6 +21,9 @@ abstract interface class JournalRepository {
     required String redirectUri,
   });
 
+  /// 심사용 로그인 — 카카오 없이. 응답은 [authKakao]와 같다.
+  Future<AuthResult> authDev();
+
   Future<Me> me();
 
   /// S03 발견 목록. §1-4 페이징.

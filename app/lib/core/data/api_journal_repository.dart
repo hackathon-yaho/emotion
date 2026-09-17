@@ -30,6 +30,14 @@ class ApiJournalRepository implements JournalRepository {
       );
 
   @override
+  Future<AuthResult> authDev() => _api.post(
+        Endpoints.authDev,
+        authenticated: false,
+        body: const {},
+        parse: AuthResult.fromJson,
+      );
+
+  @override
   Future<Me> me() => _api.get(Endpoints.me, parse: Me.fromJson);
 
   @override

@@ -46,6 +46,9 @@ class SampleJournalRepository implements JournalRepository {
       _wait(Sample.authResult);
 
   @override
+  Future<AuthResult> authDev() => _wait(Sample.authResult);
+
+  @override
   Future<Me> me() => _wait(Sample.me);
 
   @override

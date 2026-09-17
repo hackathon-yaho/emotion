@@ -100,6 +100,40 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
+  /// 심사용 로그인 — 카카오를 거치지 않고 백엔드가 준비한 계정으로 들어간다.
+  ///
+  /// 경로(`POST /api/auth/dev`)는 백엔드가 만든다
+  /// (`request/backend/dev-login.md`). 그 전까지는 404가 오고, 그때 문구는
+  /// 「아직 준비되지 않았습니다」다 — 없는 기능을 고장으로 보이게 하지 않는다.
+  Future<void> _startDev() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final auth = await ref.read(journalRepositoryProvider).authDev();
+      await ref.read(appSessionProvider).completeLogin(auth.jwt);
+      if (mounted) context.go(Routes.home);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = e.isNetwork
+            ? '연결이 되지 않습니다. 네트워크를 확인해 주세요.'
+            : (e.statusCode == 404
+                ? '둘러보기는 아직 준비되지 않았습니다.'
+                : '로그인이 완료되지 않았습니다. 다시 시도해 주세요.');
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = '로그인이 완료되지 않았습니다. 다시 시도해 주세요.';
+      });
+    }
+  }
+
   /// ①② 인가 페이지로 보낸다.
   ///
   /// **샘플 모드에서는 카카오에 가지 않는다** — 백엔드도 없는 상태에서 화면을
@@ -217,8 +251,30 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 ),
               ),
             )
-          else
+          else ...[
             KakaoButton(onPressed: _start),
+            const SizedBox(height: Space.sm),
+            // **심사용 로그인.** 심사위원이 카카오 계정 없이도 써 볼 수 있어야
+            // 한다 (2026-09-18). 채운 버튼이 아니라 조용한 글자다 — 주된 길은
+            // 카카오이고, 이건 그 아래 작은 문이다.
+            GestureDetector(
+              onTap: _startDev,
+              behavior: HitTestBehavior.opaque,
+              child: SizedBox(
+                height: Space.tapMin,
+                child: Center(
+                  child: Text(
+                    '로그인 없이 둘러보기',
+                    style: AppType.sans(
+                      size: AppType.captionSizeLg,
+                      color: t.muted,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: Space.lg),
           Text(
             _returning || _busy

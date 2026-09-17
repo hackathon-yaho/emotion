@@ -556,39 +556,38 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   /// Hume이 턴을 확정하는 데는 여전히 1.8초가 걸리지만(`end_of_turn_silence_ms`),
   /// 그 1.8초를 **기다리는 화면**과 「듣고 있습니다」로 남아 있는 화면은 다르다.
   void _finishTurn() {
-    ref.read(eviServiceProvider).finishTurn();
-    _thinkingSince = DateTime.now();
-    // **아무 말도 안 하고 눌렀으면 기다릴 것이 없다.** Hume은 소리를 못
-    // 알아들으면 전사를 만들지 않고, 그러면 CLM 호출도 답도 없다. 그대로
-    // 두면 화면만 「생각 중」으로 남아 보류 상한까지 거짓말을 한다 (09-15).
-    //
-    // 다만 **시간만으로 판정하지 않는다.** 5초 뒤 안내를 띄웠더니, Hume
-    // 전사가 느린 날 「들은 말이 없습니다」가 먼저 뜨고 답이 뒤따라 왔다
-    // (2026-09-17). 마이크가 **실제로 말소리를 잡았는지**는 우리가 안다 —
-    // 잡았으면 전사는 오는 중이니 기다리고, 안 잡았으면 짧게 안내한다.
-    _transcriptTimer?.cancel();
-    final spokeAt = ref.read(eviServiceProvider).lastSpeechAt;
-    final spoke = spokeAt != null &&
-        DateTime.now().difference(spokeAt) < const Duration(seconds: 15);
-    if (spoke) return;
-    _transcriptTimer = Timer(const Duration(seconds: 4), () {
-      if (!mounted || _state != TalkState.thinking) return;
-      ref.read(eviServiceProvider).releaseHold();
-      _stopThinking();
-      setState(() => _state = TalkState.listening);
+    final evi = ref.read(eviServiceProvider);
+    _noticeTimer?.cancel();
+    // **말소리가 없으면 보내지 않는다** — Hume에 물어볼 필요가 없다. 우리가
+    // 모아 둔 소리에 말이 있었는지는 우리가 안다 (결정 32).
+    if (!evi.sendTurn()) {
+      setState(() => _notice = null);
       _showNotice('들은 말이 없습니다. 다시 말씀해 주세요.');
-    });
+      return;
+    }
+    _thinkingSince = DateTime.now();
     _slowTimer?.cancel();
     setState(() {
+      _notice = null;
       _slowThinking = false;
       _state = TalkState.thinking;
     });
     _breath.repeat(reverse: true);
-    // 여기서부터 재는 것이 사용자가 실제로 기다리는 시간이다.
-    _slowTimer = Timer(_slowAfter + const Duration(milliseconds: 1800), () {
+    // 뭉쳐 보낸 소리를 Hume이 처리하고 침묵 1.8초를 읽는 시간이 있다 — 그
+    // 만큼은 우리 지연이 아니다.
+    _slowTimer = Timer(_slowAfter + const Duration(milliseconds: 2500), () {
       if (mounted && _state == TalkState.thinking) {
         setState(() => _slowThinking = true);
       }
+    });
+    // 보냈는데 전사도 답도 오지 않으면 — Hume이 소리를 못 알아들은 것이다.
+    // 화면을 「생각 중」으로 영영 두지 않는다.
+    _transcriptTimer?.cancel();
+    _transcriptTimer = Timer(const Duration(seconds: 15), () {
+      if (!mounted || _state != TalkState.thinking) return;
+      _stopThinking();
+      setState(() => _state = TalkState.listening);
+      _showNotice('말이 전달되지 않았습니다. 다시 말씀해 주세요.');
     });
   }
 
@@ -601,16 +600,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
   /// EVI가 `user_message`를 주는 시점이 전사가 확정된 순간이고, 그 뒤로
   /// 분석·응답 호출이 순차로 돈다 — 여기서부터가 사용자가 기다리는 구간이다.
   void _heardUser() {
+    // 전사가 확정됐다. 버튼을 눌러 이미 「생각 중」이므로 시계만 정리한다 —
+    // 화면 상태는 버튼이 정한다 (결정 32).
     _transcriptTimer?.cancel();
     _noticeTimer?.cancel();
-    _notice = null;
     _slowTimer?.cancel();
-    _thinkingSince = DateTime.now();
-    // **「생각 중」이면 마이크도 생각 중이다.** 열어 두면 답답해서 덧붙인
-    // 말이 새 턴이 되고, 돌아오는 답은 첫 말에 대한 것이 된다 (2026-09-15).
-    // 말을 이어가면 그 자리에서 풀리고 **모아 둔 소리부터** 나간다.
-    ref.read(eviServiceProvider).holdForThinking();
+    _thinkingSince ??= DateTime.now();
     setState(() {
+      _notice = null;
       _slowThinking = false;
       _state = TalkState.thinking;
     });
@@ -858,8 +855,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             canFinishTurn: true,
             sub: _notice,
           ),
-        TalkState.speaking =>
-          const _Ring('말하고 있습니다', size: 168, offset: 3, cool: 0.50, warm: 0.35),
+        // 말하는 중에도 버튼은 산다 — 끼어들기는 버튼으로만 한다 (결정 32).
+        TalkState.speaking => const _Ring('말하고 있습니다',
+            size: 168, offset: 3, cool: 0.50, warm: 0.35, canFinishTurn: true),
         TalkState.quiet => const _Ring('듣고 있습니다',
             size: 184, offset: 5, cool: 0.50, warm: 0.32, canFinishTurn: true),
         // 듣는 중보다 링이 **조금 작고 가깝다** — 밖으로 열려 있던 것이
@@ -871,6 +869,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             cool: 0.62,
             warm: 0.44,
             sub: _slowThinking ? '조금 오래 걸리고 있습니다' : null,
+            canFinishTurn: true,
           ),
         TalkState.nearEnd => const _Ring(
             '듣고 있습니다',
@@ -1230,6 +1229,7 @@ class _DiagnosticLineState extends State<_DiagnosticLine> {
         '마이크 ${widget.evi.micLevel} (최대 ${widget.evi.micPeak}) · '
         'AI 발화 ${widget.evi.assistantTurns} · 조각 $chunks · '
         '끼어들기 ${widget.evi.interruptions}'
+        ' · 담긴 소리 ${widget.evi.bufferedSeconds.toStringAsFixed(1)}초'
         '${widget.waitingFor == null ? '' : ' · 기다린 시간 ${widget.waitingFor}초'}',
         textAlign: TextAlign.center,
         style: AppType.sans(

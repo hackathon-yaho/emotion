@@ -3,6 +3,13 @@
 /// 경로를 화면 코드에 흩지 않는다. 계약이 바뀌면 여기만 고친다.
 abstract final class Endpoints {
   static const authKakao = '/api/auth/kakao';
+
+  /// **심사용 로그인** — 카카오 없이 들어간다 (2026-09-18 요청).
+  ///
+  /// 심사위원이 카카오 계정 없이도 써 볼 수 있어야 한다. 백엔드가 이 경로를
+  /// 만들고(`request/backend/dev-login.md`), 응답은 §2-1과 같은 모양이다 —
+  /// 앱은 그 뒤를 카카오 로그인과 똑같이 처리한다.
+  static const authDev = '/api/auth/dev';
   static const me = '/api/me';
   static const account = '/api/account';
 

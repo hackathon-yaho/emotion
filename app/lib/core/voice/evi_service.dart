@@ -87,49 +87,55 @@ class EviService {
   int micLevel = 0;
   int micPeak = 0;
 
-  /// **첫 인사가 끝날 때까지 마이크 소리를 보내지 않는다.**
+  /// **마이크 소리는 실시간으로 흘리지 않는다 — 모아 두다가 버튼에 보낸다.**
   ///
-  /// EVI Config에 첫 인사말이 있어 연결 직후 AI가 먼저 말한다. 그런데 화면이
-  /// 곧바로 「듣고 있습니다」가 되면 사용자는 그때 말을 시작하고, Hume은 그것을
-  /// 끼어들기로 읽어 **인사를 자기 말 도중에 끊는다** — 2026-09-08 실사용에서
-  /// 나왔다. 스피커 소리가 마이크로 되돌아가도 같은 일이 벌어진다.
+  /// 2026-09-18 결정(design-system 결정 32). 그 전까지는 소리를 계속 Hume에
+  /// 흘리고 Hume의 침묵 판정(1.8초)에 턴 끝을 맡겼다. 그 틈에서 버그가
+  /// 줄줄이 나왔다 — 숨소리가 턴이 되고, 스피커 에코가 발화로 읽히고, 말
+  /// 중간의 침묵에 턴이 쪼개지고, 전사가 느린 날엔 화면이 거짓말을 했다.
+  /// **버튼을 누를 때만 보내면 그 틈이 없다.** 대가는 손을 안 쓰는 대화가
+  /// 아니게 되는 것과, 턴마다 뭉친 소리를 Hume이 처리하는 1~2초다.
+  final _turnFrames = <Uint8List>[];
+  int _turnBytes = 0;
+  bool _turnHasSpeech = false;
+
+  /// 한 턴에 모아 두는 상한 — 약 4분. 넘으면 오래된 것부터 버린다.
+  static const _turnCap = 32000 * 240;
+
+  /// **첫 인사가 끝날 때까지는 소리를 버린다** (결정 27).
   ///
-  /// 보류는 **첫 턴 한 번뿐이다.** 그 뒤의 끼어들기는 기능이라 막지 않는다.
-  bool _micHeld = false;
-  bool get micHeld => _micHeld;
+  /// 연결 직후 AI가 먼저 인사한다. 그동안 들어온 소리를 모아 두면 인사가 끝난
+  /// 뒤 첫 버튼에 실려 나가는데, 그건 대개 인사를 들으며 낸 소리다.
+  bool _discarding = false;
+
+  /// 화면이 「듣고 있습니다」로 넘어갈 시점을 가른다 — 인사가 끝났는지.
+  bool get micHeld => _discarding;
 
   Timer? _holdTimer;
 
   /// 마지막 `audio_output`을 받은 시각. 조각이 계속 오는 중인지 가른다.
   DateTime? _lastChunkAt;
 
-  /// 보류 중 소리를 **버리지 않고 모아 둘지**.
-  ///
-  /// 첫 인사 보류는 버린다 — 그때 들어오는 소리는 인사를 끊을 뿐이다.
-  /// **「생각 중」 보류는 모아 둔다** — 사용자가 답을 기다리다 말을 이어가면
-  /// 그건 버릴 말이 아니다.
-  bool _holdBuffering = false;
-  final _heldFrames = <Uint8List>[];
-  int _heldBytes = 0;
-
-  /// 모아 두는 상한 — 16kHz 모노 PCM16 기준 약 1.5초.
-  static const _bufferCap = 48000;
-
-  /// 직전 조각의 소리 크기(평활 전). 말이 시작됐는지 보는 값이다.
+  /// 직전 조각의 소리 크기(평활 전).
   int _lastLevel = 0;
   int _loudRun = 0;
 
-  /// 보류 중 본 **가장 조용한 값** — 그 방의 바닥 소음이다.
+  /// 이 턴에서 본 **가장 조용한 값** — 그 방의 바닥 소음이다.
   int _floor = 100;
 
-  /// **마이크가 열려 있을 때** 마지막으로 말소리를 잡은 시각.
+  /// 이어지는 조용한 조각의 바이트 수. 긴 침묵을 잘라내는 데 쓴다.
+  int _quietBytes = 0;
+
+  /// 침묵은 이만큼(약 0.8초)만 남기고 잘라낸다.
   ///
-  /// 「말 다 했어요」를 눌렀을 때 **정말 아무 말도 안 했는지**를 가르는 근거다.
-  /// 시간만으로 "들은 말이 없다"고 판정하면 Hume 전사가 느린 날마다 틀린다 —
-  /// 안내가 먼저 뜨고 답이 뒤따라 왔다 (2026-09-17). 소리를 실제로 보냈는지는
-  /// 우리가 안다.
-  DateTime? lastSpeechAt;
-  int _liveLoudRun = 0;
+  /// Hume은 소리 속 침묵 1.8초를 턴 끝으로 읽는다. 말을 고르느라 쉰 시간을
+  /// 그대로 보내면 **한 마디가 두 턴으로 쪼개진다** — 그 판정을 우리 버튼으로
+  /// 옮긴 이유 자체가 그것이다.
+  static const _quietKeep = 25600;
+
+  /// 뭉쳐 보낸 뒤 붙이는 침묵 — Hume이 턴 끝으로 읽는 데 1.8초가 필요하다.
+  /// 여유를 둔다.
+  static const _silenceTail = Duration(milliseconds: 2200);
 
   /// 인사가 **시작될** 때까지 기다리는 시간. 이 안에 아무 말도 없으면 마이크를
   /// 연다 — 오지 않는 인사를 기다리며 사용자 말을 버리지 않는다.
@@ -178,11 +184,9 @@ class EviService {
     micPeak = 0;
     _lastSocketError = null;
     _holdTimer?.cancel();
-    _heldFrames.clear();
-    _heldBytes = 0;
-    _holdBuffering = false;
-    _micHeld = holdMicForGreeting;
-    if (_micHeld) {
+    _clearTurn();
+    _discarding = holdMicForGreeting;
+    if (_discarding) {
       // **인사가 시작될 때까지만 짧게 기다린다.**
       //
       // 종전에는 12초를 기다렸다. 인사가 오지 않는 경우(Config·계정 문제,
@@ -271,7 +275,8 @@ class EviService {
     _generation++;
     _holdTimer?.cancel();
     _holdTimer = null;
-    _micHeld = false;
+    _discarding = false;
+    _clearTurn();
     await _micSub?.cancel();
     _micSub = null;
     await mic.close().catchError((_) {});
@@ -291,80 +296,81 @@ class EviService {
   // -------------------------------------------------------------------------
 
   void _sendAudio(Uint8List pcm) {
-    // **계측은 보류 중에도 한다** — 마이크가 살아 있는지는 보류와 별개다.
+    // **계측은 언제나 한다** — 마이크가 살아 있는지는 보내는지와 별개다.
     _measure(pcm);
-    if (_micHeld) {
-      if (!_holdBuffering) return;
-      // 모아 두고, **말이 시작되면 그 자리에서 보류를 푼다.** 모아 둔 것부터
-      // 내보내므로 **말머리가 잘리지 않는다.**
-      _heldFrames.add(pcm);
-      _heldBytes += pcm.length;
-      while (_heldBytes > _bufferCap && _heldFrames.isNotEmpty) {
-        _heldBytes -= _heldFrames.removeAt(0).length;
-      }
-      if (_lastLevel < _floor) _floor = _lastLevel;
-      _loudRun = _lastLevel >= _speechLevel ? _loudRun + 1 : 0;
-      // **말이 시작됐을 때만** 모아 둔 것을 내보낸다 — 말머리를 잃지 않기
-      // 위한 것이고, 그 외에 내보내면 없던 발화를 만든다.
-      if (_loudRun >= 3) _releaseMic(_generation, flush: true);
-      return;
+    if (_discarding) return;
+
+    // 바닥 소음을 갱신하고 말소리를 판정한다.
+    if (_lastLevel < _floor) _floor = _lastLevel;
+    _loudRun = _lastLevel >= _speechLevel ? _loudRun + 1 : 0;
+    if (_loudRun >= 3) _turnHasSpeech = true;
+
+    // **긴 침묵은 잘라낸다.** 바닥 근처면 조용한 조각이다.
+    final quiet = _lastLevel <= _floor + 1;
+    if (quiet) {
+      _quietBytes += pcm.length;
+      if (_quietBytes > _quietKeep) return; // 남길 만큼 남겼다
+    } else {
+      _quietBytes = 0;
     }
-    // 열린 채로 보내는 소리 중 말소리를 기억한다 — 바닥은 모르니 고정 기준.
-    _liveLoudRun = _lastLevel >= _liveSpeechLevel ? _liveLoudRun + 1 : 0;
-    if (_liveLoudRun >= 3) lastSpeechAt = DateTime.now();
-    _send({'type': 'audio_input', 'data': base64Encode(pcm)});
+
+    _turnFrames.add(pcm);
+    _turnBytes += pcm.length;
+    while (_turnBytes > _turnCap && _turnFrames.isNotEmpty) {
+      _turnBytes -= _turnFrames.removeAt(0).length;
+    }
   }
 
-  /// 마이크가 열려 있을 때 말소리로 보는 크기. 보류 중 기준(바닥+4)보다는
-  /// 높게 둔다 — 여기서는 놓치는 쪽이 덜 위험하다(안내가 조금 늦게 뜰 뿐).
-  static const _liveSpeechLevel = 6;
+  /// 지금까지 모인 소리 길이 — 진단용.
+  double get bufferedSeconds => _turnBytes / (Mic.sampleRate * 2);
+
+  /// 이 턴에 말소리가 담겼는지 — 아무 말도 없이 버튼을 누른 경우를 가른다.
+  bool get turnHasSpeech => _turnHasSpeech;
+
+  /// **버튼** — 모아 둔 소리를 한 번에 보내고 침묵을 덧붙인다.
+  ///
+  /// 돌아오는 값이 `false`면 **말소리가 없어 보내지 않았다**는 뜻이다. 화면은
+  /// 그때 Hume에 물어볼 필요 없이 바로 「들은 말이 없습니다」를 띄운다 —
+  /// 종전에는 시간으로 짐작하다가 전사가 느린 날 틀렸다 (2026-09-17).
+  bool sendTurn() {
+    if (_channel == null) return false;
+    if (!_turnHasSpeech) {
+      _clearTurn();
+      return false;
+    }
+    for (final frame in _turnFrames) {
+      _send({'type': 'audio_input', 'data': base64Encode(frame)});
+    }
+    // Hume이 턴 끝을 읽으려면 소리 뒤에 침묵이 있어야 한다.
+    final tailBytes = Mic.sampleRate * 2 * _silenceTail.inMilliseconds ~/ 1000;
+    const chunk = 6400; // 0.2초씩
+    for (var sent = 0; sent < tailBytes; sent += chunk) {
+      final n = (tailBytes - sent).clamp(0, chunk);
+      _send({'type': 'audio_input', 'data': base64Encode(Uint8List(n))});
+    }
+    _clearTurn();
+    return true;
+  }
+
+  void _clearTurn() {
+    _turnFrames.clear();
+    _turnBytes = 0;
+    _turnHasSpeech = false;
+    _loudRun = 0;
+    _quietBytes = 0;
+    _floor = 100;
+  }
 
   /// 말이 시작됐다고 보는 기준 — **바닥 소음 위로 이만큼**.
   ///
-  /// 고정값 8로 두었더니 **차분하게 말하는 사람을 놓쳤다.** 대화를 마무리하며
-  /// 조용히 "오늘은 여기까지 하자"라고 한 말이 보류에 갇혀 Hume까지 가지
-  /// 못한 것으로 보인다 (2026-09-16 백엔드 관측: 그 47초 구간에 user 턴 0건).
-  /// 방마다 바닥 소음이 다르므로 **고정값 대신 바닥에서 띄운다.**
+  /// 고정값 8로 두었더니 **차분하게 말하는 사람을 놓쳤다** (2026-09-16).
+  /// 방마다 바닥 소음이 다르므로 고정값 대신 바닥에서 띄운다.
   static const _speechMargin = 4;
   static const _speechFloorMin = 4;
   static const _speechFloorMax = 10;
 
   int get _speechLevel =>
       (_floor + _speechMargin).clamp(_speechFloorMin, _speechFloorMax);
-
-  /// **답을 기다리는 동안 마이크를 보류한다** (2026-09-15 실사용).
-  ///
-  /// 화면은 「생각 중」인데 마이크는 열려 있어서, 답답해서 한 마디 더 하면
-  /// 그것이 새 턴으로 들어가고 정작 돌아오는 답은 **첫 번째 말에 대한
-  /// 것**이었다. 상태 표시와 실제 동작이 달랐다.
-  ///
-  /// 다만 **버리지는 않는다** — 말을 이어가면 모아 둔 것부터 내보내고 보류를
-  /// 푼다.
-  ///
-  /// **시간으로 풀지 않는다.** 처음에 10초 상한을 뒀더니, 답이 늦어 그 상한이
-  /// 지날 때 **모아 둔 소리를 내보내 없던 발화 턴이 생겼다** — 사용자가 본
-  /// 순서가 「내 말 → 생각 중 → 길어짐 → 또 내 말 → 답」이었다 (2026-09-15).
-  ///
-  /// 막다른 길은 없다 — **말을 시작하면 그 자리에서 풀린다.** [cap]은 그마저
-  /// 없을 때의 마지막 안전장치이고, 그때는 **모아 둔 것을 버린다.**
-  void holdForThinking({Duration cap = const Duration(minutes: 1)}) {
-    if (_micHeld || _channel == null) return;
-    _startHold(buffering: true, cap: cap);
-  }
-
-  void _startHold({required bool buffering, required Duration cap}) {
-    _micHeld = true;
-    _holdBuffering = buffering;
-    _heldFrames.clear();
-    _heldBytes = 0;
-    _loudRun = 0;
-    _floor = 100;
-    final gen = _generation;
-    _holdTimer?.cancel();
-    // 시간으로 푸는 경우에는 **모아 둔 것을 버린다** — 말한 적 없는 소리를
-    // 뒤늦게 보내면 그것이 새 발화 턴이 된다.
-    _holdTimer = Timer(cap, () => _releaseMic(gen, flush: false));
-  }
 
   /// PCM16의 실효값을 0~100으로 옮긴다. 진단용이므로 정확도보다 싸게.
   void _measure(Uint8List pcm) {
@@ -380,8 +386,8 @@ class EviService {
     }
     final rms = math.sqrt(sum / samples.length);
     final level = (rms / 32768 * 300).clamp(0, 100).round();
-    // 값이 튀지 않게 지수 평활 — 눈으로 읽을 수 있어야 한다.
     _lastLevel = level;
+    // 값이 튀지 않게 지수 평활 — 눈으로 읽을 수 있어야 한다.
     micLevel = ((micLevel * 3 + level) / 4).round();
     if (level > micPeak) micPeak = level;
   }
@@ -414,48 +420,14 @@ class EviService {
     });
   }
 
-  void _releaseMic(int gen, {bool flush = false}) {
-    if (gen != _generation || !_micHeld) return;
+  /// 인사가 끝났다 — 이제부터 들어오는 소리는 모아 둔다.
+  void _releaseMic(int gen) {
+    if (gen != _generation || !_discarding) return;
     _holdTimer?.cancel();
     _holdTimer = null;
-    _micHeld = false;
-    // 모아 둔 것은 **말이 시작됐을 때만** 내보낸다(말머리 보존). 그 외에는
-    // 버린다 — 보내면 없던 발화가 생긴다.
-    if (flush) {
-      for (final frame in _heldFrames) {
-        _send({'type': 'audio_input', 'data': base64Encode(frame)});
-      }
-    }
-    _heldFrames.clear();
-    _heldBytes = 0;
-    _loudRun = 0;
+    _discarding = false;
+    _clearTurn();
     _emit(const EviMicLive());
-  }
-
-  /// 사용자가 「말 다 했어요」를 눌렀다 — **소리 전송을 즉시 끊는다.**
-  ///
-  /// EVI에는 턴을 강제로 끝내는 클라이언트 메시지가 없다(공식 문서의 클라이언트
-  /// 메시지는 `audio_input`·`user_input`·`session_settings`·`assistant_input`
-  /// 넷뿐이고, `turn_detection`은 Config 전용이라 세션 설정으로 못 바꾼다).
-  /// 그래서 할 수 있는 것은 **침묵을 만들어 주는 것**이다 — 소리를 끊으면
-  /// Hume이 `end_of_turn_silence_ms`(1800ms) 뒤에 턴을 확정한다.
-  ///
-  /// 얻는 것이 두 가지다. 화면이 **곧바로** 「생각 중」으로 갈 수 있고, 숨소리·
-  /// 주변 소음·"음…" 같은 것이 **턴을 계속 열어 두는 일이 사라진다** — 그게
-  /// 실제로 오래 기다리게 만드는 원인이다.
-  ///
-  /// 다시 여는 것은 AI의 답이 끝나고 재생이 빈 뒤다(`assistant_end`).
-  /// 보류를 밖에서 푼다 — **모아 둔 소리는 버린다.**
-  ///
-  /// 「말 다 했어요」를 눌렀는데 Hume이 전사를 만들지 않은 경우에 쓴다.
-  /// 보낼 말이 없었다는 뜻이므로 기다릴 이유가 없다.
-  void releaseHold() => _releaseMic(_generation, flush: false);
-
-  void finishTurn() {
-    if (_micHeld || _channel == null) return;
-    // 「말 다 했어요」도 **말을 이어가면 풀린다** — 누르고 나서 한 마디 더
-    // 떠오르는 일이 있다.
-    _startHold(buffering: true, cap: _holdCap);
   }
 
   void _send(Map<String, Object?> message) {
@@ -494,25 +466,15 @@ class EviService {
 
       case 'assistant_message':
         assistantTurns++;
-        if (_micHeld) {
-          if (_holdBuffering) {
-            // **「생각 중」·「말 다 했어요」 보류는 AI가 말을 시작하면 푼다.**
-            //
-            // 답이 나오는 동안까지 잡아 두었더니, **스피커에서 나오는 AI
-            // 목소리가 마이크로 되돌아와** 우리 소리 감지를 넘겼다 → 보류가
-            // 풀리며 그 소리를 내보냈다 → Hume이 그것을 발화로 읽어 없던
-            // 「생각 중」이 생기고, 화면은 AI가 말하는 중에 「듣고 있습니다」로
-            // 튀었다 (2026-09-17 실사용). 끼어들기 판정은 **Hume의 몫**이다
-            // (Interruptibility 문서 — `user_interruption`). 우리는 마이크를
-            // 열어 주기만 하고, 모아 둔 것은 버린다.
-            _releaseMic(_generation, flush: false);
-          } else {
-            // **첫 인사 보류**는 끝날 때까지 기다린다 (결정 27) — 여기서
-            // 유예가 끝나 버리면 인사 도중에 마이크가 열린다.
-            _holdTimer?.cancel();
-            final gen = _generation;
-            _holdTimer = Timer(_holdCap, () => _releaseMic(gen));
-          }
+        // AI가 말을 시작하면 **그동안 모인 소리는 버린다.** 답을 기다리며
+        // 낸 숨소리·스피커 에코가 다음 버튼에 실려 나가지 않게 한다.
+        if (!_discarding) _clearTurn();
+        // 첫 인사가 **시작됐다.** 짧은 유예를 끝까지 기다리는 쪽으로 바꾼다 —
+        // 여기서 유예가 끝나 버리면 인사 도중에 마이크가 열린다 (결정 27).
+        if (_discarding) {
+          _holdTimer?.cancel();
+          final gen = _generation;
+          _holdTimer = Timer(_holdCap, () => _releaseMic(gen));
         }
         final text = _content(json);
         if (text != null) _emit(EviAssistantSpoke(text));
@@ -533,13 +495,18 @@ class EviService {
         // 「말하고 있습니다 → 듣고 있습니다 → 말하고 있습니다」로 깜빡인다
         // (2026-09-15 테스트). 재생이 비는 것을 보고 알린다.
         _whenQuiet(_generation, () {
+          // **AI가 말을 마친 순간 그동안 모인 소리는 버린다.** AI가 말하는
+          // 동안 마이크에 들어온 것은 대개 스피커 에코다 — 남겨 두면 다음에
+          // 아무 말 없이 버튼을 눌러도 그 에코가 발화로 나간다. 끼어들고
+          // 싶었다면 말하는 중에 버튼을 눌렀을 것이다.
+          _clearTurn();
           _emit(const EviAssistantDone());
           _releaseMic(_generation);
         });
 
       case 'user_interruption':
         interruptions++;
-        // 사용자가 끊었으면 재생을 기다릴 이유가 없다 — 큐도 비운다.
+        // 사용자가 끊었으면 재생을 기다릴 이유가 없다.
         _holdTimer?.cancel();
         // 큐를 비우지 않으면 사용자가 끊었는데도 AI가 계속 말한다.
         speaker.stop().catchError((_) {});

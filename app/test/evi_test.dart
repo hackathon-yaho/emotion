@@ -223,8 +223,12 @@ void main() {
 
     test('language_model_api_key를 절대 보내지 않는다 (계약 §4 · 웹 번들 노출)', () async {
       await start();
-      mic.speak([1, 2, 3]);
+      final talk = Uint8List.sublistView(Int16List(160)..fillRange(0, 160, 9000));
+      for (var i = 0; i < 3; i++) {
+        mic.speak(talk);
+      }
       await settle();
+      evi.sendTurn();
       expect(channel.sent.join(), isNot(contains('language_model_api_key')));
     });
   });
@@ -232,7 +236,10 @@ void main() {
   // 연결 직후 화면이 「듣고 있습니다」가 되면 사용자가 그때 말을 시작하고,
   // Hume은 그것을 끼어들기로 읽어 **AI의 첫 인사를 도중에 끊는다** —
   // 2026-09-08 실사용에서 나왔다. 인사가 끝날 때까지 소리를 보내지 않는다.
-  group('첫 인사 동안 마이크 보류 (2026-09-08 실사용)', () {
+  // 연결 직후 화면이 「듣고 있습니다」가 되면 사용자가 그때 말을 시작하고,
+  // Hume은 그것을 끼어들기로 읽어 **AI의 첫 인사를 도중에 끊는다** —
+  // 2026-09-08 실사용에서 나왔다. 인사가 끝날 때까지 소리를 버린다.
+  group('첫 인사 동안 소리를 버린다 (2026-09-08 실사용)', () {
     Future<void> startHeld() => evi.start(
           accessToken: 't',
           configId: 'c',
@@ -240,43 +247,36 @@ void main() {
           holdMicForGreeting: true,
         );
 
-    List<Map<String, dynamic>> audioFrames() => channel.sent
-        .map((s) => jsonDecode(s) as Map<String, dynamic>)
-        .where((m) => m['type'] == 'audio_input')
-        .toList();
+    Uint8List loud() => Uint8List.sublistView(Int16List(160)..fillRange(0, 160, 9000));
 
-    test('보류 중에는 소리를 보내지 않는다 — 계측은 계속한다', () async {
+    test('인사 중에 낸 소리는 모이지 않는다 — 다음 버튼에 실리지 않게', () async {
       await startHeld();
-      final loud = Int16List(200)..fillRange(0, 200, 9000);
-      mic.speak(Uint8List.sublistView(loud));
+      for (var i = 0; i < 5; i++) {
+        mic.speak(loud());
+      }
       await settle();
-      expect(audioFrames(), isEmpty, reason: '인사를 끊지 않는다');
-      expect(evi.micPeak, greaterThan(0), reason: '마이크가 살아 있는지는 별개다');
       expect(evi.micHeld, isTrue);
+      expect(evi.turnHasSpeech, isFalse);
+      expect(evi.micPeak, greaterThan(0), reason: '마이크가 살아 있는지는 별개다');
       expect(events.whereType<EviMicLive>(), isEmpty);
     });
 
-    test('인사가 끝나고 재생까지 비면 열린다', () async {
+    test('인사가 끝나고 재생까지 비면 모으기 시작한다', () async {
       await startHeld();
-      speaker.quiet = false; // 아직 스피커에서 나오는 중
+      speaker.quiet = false;
       channel.push({'type': 'assistant_end'});
       await settle();
-      mic.speak([1, 2]);
-      await settle();
-      expect(audioFrames(), isEmpty, reason: '재생 중에 열면 자기 말을 끊는다');
-
       speaker.quiet = true;
       await Future<void>.delayed(const Duration(milliseconds: 1100));
       expect(evi.micHeld, isFalse);
       expect(events.whereType<EviMicLive>(), hasLength(1));
-      mic.speak([3, 4]);
+      for (var i = 0; i < 3; i++) {
+        mic.speak(loud());
+      }
       await settle();
-      expect(audioFrames(), hasLength(1));
+      expect(evi.turnHasSpeech, isTrue);
     });
 
-    // `assistant_end`는 "조각을 다 보냈다"가 아니다 — 그 뒤로도 오디오가
-    // 온다. 큐가 잠깐 빈 순간을 재생 끝으로 읽으면 **인사 도중에 마이크가
-    // 열린다** ("될 때도 있고 안 될 때도 있다", 2026-09-14 테스트).
     test('조각과 조각 사이의 빈 큐를 재생 끝으로 읽지 않는다', () async {
       await startHeld();
       channel.push({
@@ -285,27 +285,18 @@ void main() {
       });
       channel.push({'type': 'assistant_end'});
       await settle();
-
-      // 큐는 비었지만 조각이 방금 왔다 — 아직 끝이 아니다.
       channel.push({'type': 'audio_output', 'data': base64Encode([1, 2, 3, 4])});
       speaker.quiet = true;
       await Future<void>.delayed(const Duration(milliseconds: 500));
       expect(evi.micHeld, isTrue, reason: '조각이 방금 왔으면 끝이 아니다');
-
-      // 700ms 넘게 조용하면 그때 연다.
       await Future<void>.delayed(const Duration(milliseconds: 1200));
       expect(evi.micHeld, isFalse);
     });
 
     test('인사가 오지 않으면 짧게 기다리고 만다 — 말을 버리지 않는다', () async {
-      // 종전에는 12초를 기다렸다. 인사가 없는 경우(Config·계정 문제)에
-      // **사용자가 12초 동안 말해도 한 마디도 전달되지 않았다.**
       await startHeld();
       await Future<void>.delayed(const Duration(milliseconds: 3700));
       expect(evi.micHeld, isFalse);
-      mic.speak([1, 2]);
-      await settle();
-      expect(audioFrames(), hasLength(1));
     });
 
     test('인사가 시작되면 짧은 유예를 넘겨 끝까지 기다린다', () async {
@@ -316,99 +307,163 @@ void main() {
         'message': {'role': 'assistant', 'content': '안녕하세요'}
       });
       await settle();
-      // 유예(3.5초)를 지나도 보류가 유지된다 — 인사가 아직 안 끝났다.
       await Future<void>.delayed(const Duration(milliseconds: 3700));
       expect(evi.micHeld, isTrue);
-      mic.speak([1, 2]);
-      await settle();
-      expect(audioFrames(), isEmpty);
     });
 
-    test('보류는 첫 턴 한 번뿐이다 — 그 뒤 끼어들기는 기능이다', () async {
-      await startHeld();
-      channel.push({'type': 'assistant_end'});
-      await Future<void>.delayed(const Duration(milliseconds: 1100));
-      expect(evi.micHeld, isFalse);
-      // 두 번째 AI 발화가 끝나도 다시 보류로 돌아가지 않는다.
-      channel.push({'type': 'assistant_end'});
-      await settle();
-      expect(evi.micHeld, isFalse);
-      expect(events.whereType<EviMicLive>(), hasLength(1));
-    });
-
-    test('보류하지 않고 시작하면 곧바로 보낸다', () async {
+    test('보류하지 않고 시작하면 곧바로 모은다', () async {
       await start();
       expect(evi.micHeld, isFalse);
-      mic.speak([1, 2]);
+      for (var i = 0; i < 3; i++) {
+        mic.speak(loud());
+      }
       await settle();
-      expect(audioFrames(), hasLength(1));
-    });
-
-    test('새 대화를 시작하면 보류가 남지 않는다', () async {
-      await startHeld();
-      expect(evi.micHeld, isTrue);
-      await start(); // 보류 없이 다시
-      expect(evi.micHeld, isFalse);
+      expect(evi.turnHasSpeech, isTrue);
     });
   });
 
-  // EVI에는 턴을 강제로 끝내는 클라이언트 메시지가 없다. 할 수 있는 것은
-  // **침묵을 만들어 주는 것**이고, 그러면 Hume이 1.8초 뒤에 턴을 확정한다.
-  group('발언 종료 (2026-09-08 요청)', () {
-    test('누르면 소리 전송이 즉시 멈춘다', () async {
+  // **소리는 실시간으로 흘리지 않는다 — 모아 두다가 버튼에 보낸다** (결정 32).
+  // Hume의 침묵 판정에 턴 끝을 맡겼을 때 숨소리·에코·긴 침묵·느린 전사가
+  // 전부 버그로 나왔다. 버튼을 누를 때만 보내면 그 틈이 없다.
+  group('턴 모으기 · 버튼으로 보내기 (결정 32)', () {
+    List<Uint8List> audioSent() => channel.sent
+        .map((s) => jsonDecode(s) as Map<String, dynamic>)
+        .where((m) => m['type'] == 'audio_input')
+        .map((m) => base64Decode(m['data'] as String))
+        .toList();
+
+    Uint8List quiet() => Uint8List(320);
+    Uint8List loud(int mark) {
+      final pcm = Int16List(160)..fillRange(0, 160, 12000);
+      pcm[0] = mark;
+      return Uint8List.sublistView(pcm);
+    }
+
+    test('말해도 버튼 전에는 한 프레임도 나가지 않는다', () async {
       await start();
-      mic.speak([1, 2]);
+      for (var i = 0; i < 5; i++) {
+        mic.speak(loud(i));
+      }
       await settle();
-      evi.finishTurn();
-      mic.speak([3, 4]);
-      mic.speak([5, 6]);
-      await settle();
-      final audio = channel.sent
-          .map((s) => jsonDecode(s) as Map<String, dynamic>)
-          .where((m) => m['type'] == 'audio_input')
-          .toList();
-      expect(audio, hasLength(1), reason: '누른 뒤의 소리는 나가지 않는다');
-      expect(evi.micHeld, isTrue);
+      expect(audioSent(), isEmpty);
+      expect(evi.turnHasSpeech, isTrue);
     });
 
-    test('AI 답이 끝나고 재생이 비면 다시 열린다', () async {
+    test('버튼 — 모아 둔 것을 순서대로 보내고 침묵을 덧붙인다', () async {
       await start();
-      evi.finishTurn();
+      for (var i = 1; i <= 4; i++) {
+        mic.speak(loud(i));
+      }
+      await settle();
+      expect(evi.sendTurn(), isTrue);
+      final sent = audioSent();
+      expect(sent.length, greaterThan(4), reason: '소리 4조각 + 침묵 꼬리');
+      expect(Int16List.sublistView(sent[0])[0], 1);
+      expect(Int16List.sublistView(sent[3])[0], 4);
+      // 꼬리는 전부 0이고, 합쳐서 1.8초를 넘는다 — Hume이 턴 끝으로 읽는 길이
+      final tail = sent.sublist(4);
+      expect(tail.every((f) => f.every((b) => b == 0)), isTrue);
+      final tailBytes = tail.fold<int>(0, (n, f) => n + f.length);
+      expect(tailBytes, greaterThanOrEqualTo(16000 * 2 * 18 ~/ 10));
+      expect(evi.turnHasSpeech, isFalse, reason: '보낸 뒤에는 비어 있다');
+    });
+
+    test('말소리가 없으면 보내지 않고 false — 화면이 바로 안내한다', () async {
+      await start();
+      for (var i = 0; i < 10; i++) {
+        mic.speak(quiet());
+      }
+      await settle();
+      expect(evi.sendTurn(), isFalse);
+      expect(audioSent(), isEmpty);
+    });
+
+    test('말 중간의 긴 침묵은 잘려 나간다 — Hume이 턴을 쪼개지 못하게', () async {
+      await start();
+      mic.speak(loud(1));
+      mic.speak(loud(2));
+      mic.speak(loud(3));
+      // 3초 침묵 (320B = 10ms → 300조각)
+      for (var i = 0; i < 300; i++) {
+        mic.speak(quiet());
+      }
+      mic.speak(loud(4));
+      await settle();
+      expect(evi.sendTurn(), isTrue);
+      final sent = audioSent();
+      final quietBytes = sent
+          .where((f) => f.every((b) => b == 0))
+          .fold<int>(0, (n, f) => n + f.length);
+      // 남긴 침묵(≤0.8초) + 꼬리(2.2초) ≈ 3초. 3초를 그대로 보냈다면 5초가 넘는다.
+      expect(quietBytes, lessThan(16000 * 2 * 4));
+    });
+
+    test('AI가 말을 마치면 그동안 모인 소리(에코)도 버린다', () async {
+      await start();
       speaker.quiet = false;
       channel.push({'type': 'assistant_end'});
       await settle();
-      expect(evi.micHeld, isTrue, reason: '재생 중에는 열지 않는다');
+      // 말하는 동안 마이크에 들어온 것 — 실사용에서는 스피커 에코다.
+      mic.speak(loud(1));
+      mic.speak(loud(2));
+      mic.speak(loud(3));
+      await settle();
+      expect(evi.turnHasSpeech, isTrue);
       speaker.quiet = true;
       await Future<void>.delayed(const Duration(milliseconds: 1100));
-      expect(evi.micHeld, isFalse);
+      expect(events.whereType<EviAssistantDone>(), hasLength(1));
+      expect(evi.turnHasSpeech, isFalse, reason: '버튼 없이 넘어간 소리는 버린다');
+    });
+
+    test('AI가 말을 시작하면 그동안 모인 소리는 버린다', () async {
+      await start();
+      mic.speak(loud(1));
+      mic.speak(loud(2));
+      mic.speak(loud(3));
+      await settle();
+      expect(evi.turnHasSpeech, isTrue);
+      channel.push({
+        'type': 'assistant_message',
+        'message': {'role': 'assistant', 'content': '그랬군요'}
+      });
+      await settle();
+      expect(evi.turnHasSpeech, isFalse);
+    });
+
+    test('조용한 방에서는 작은 말도 잡는다', () async {
+      await start();
+      for (var i = 0; i < 5; i++) {
+        mic.speak(quiet());
+      }
+      final calm = Int16List(160)..fillRange(0, 160, 700); // level ≈ 6
+      for (var i = 0; i < 3; i++) {
+        mic.speak(Uint8List.sublistView(calm));
+      }
+      await settle();
+      expect(evi.turnHasSpeech, isTrue, reason: '바닥이 0이면 기준은 4다');
     });
 
     test('소켓이 없으면 아무 일도 하지 않는다', () async {
-      evi.finishTurn();
-      expect(evi.micHeld, isFalse);
+      expect(evi.sendTurn(), isFalse);
     });
   });
 
-  // 「말하고 있습니다 → 듣고 있습니다 → 말하고 있습니다」로 깜빡이던 것
-  // (2026-09-15 테스트). `assistant_end`는 소리가 끝났다는 뜻이 아니다.
   // 대화를 끝내고 요약 화면으로 넘어갔는데 **AI 목소리가 뒤늦게 흘러나왔다**
-  // (2026-09-15 테스트 — 첫 인사말이 요약 화면에서 들렸다). `play()`가
-  // 비동기라 `stop()` 뒤에 시작되는 경우다.
+  // (2026-09-15 테스트). `play()`가 비동기라 `stop()` 뒤에 시작되는 경우다.
   test('멈춘 뒤에 시작된 소리는 그 자리에서 다시 멈춘다', () async {
     final player = _FakePlayer();
     final speaker = AudioPlayersSpeaker(player);
     speaker.enqueue(Uint8List.fromList(List.filled(64, 0)));
     expect(player.plays, 1);
-
     await speaker.stop();
     expect(player.stops, 1, reason: '큐를 비우고 재생도 멈춘다');
-
-    // 이제서야 브라우저가 재생을 시작한다 — 이미 떠난 화면의 소리다.
     player.finishPlayCall();
     await Future<void>.delayed(Duration.zero);
     expect(player.stops, 2, reason: '늦게 시작된 소리를 다시 멈춘다');
   });
 
+  // 「말하고 있습니다 → 듣고 있습니다 → 말하고 있습니다」로 깜빡이던 것
+  // (2026-09-15 테스트). `assistant_end`는 소리가 끝났다는 뜻이 아니다.
   group('AI 발화 종료는 재생이 끝난 뒤에 알린다', () {
     test('assistant_end만으로는 알리지 않는다', () async {
       await start();
@@ -441,202 +496,21 @@ void main() {
     });
   });
 
-  // 화면은 「생각 중」인데 마이크는 열려 있었다. 답답해서 한 마디 더 하면
-  // 새 턴이 되고, 돌아오는 답은 첫 말에 대한 것이었다 (2026-09-15 실사용).
-  // 「말 다 했어요」 뒤 "들은 말이 없다"를 시간만으로 판정하면 Hume 전사가
-  // 느린 날마다 틀린다 (2026-09-17). 마이크가 실제로 말을 잡았는지는 우리가 안다.
-  group('마이크가 열려 있을 때 말소리를 기억한다', () {
-    test('조용하면 기억하지 않는다', () async {
-      await start();
-      for (var i = 0; i < 5; i++) {
-        mic.speak(Uint8List(320));
-      }
-      await settle();
-      expect(evi.lastSpeechAt, isNull);
-    });
-
-    test('말소리가 세 조각 이어지면 그 시각을 남긴다', () async {
-      await start();
-      final talk = Int16List(160)..fillRange(0, 160, 1500); // level ≈ 13
-      for (var i = 0; i < 3; i++) {
-        mic.speak(Uint8List.sublistView(talk));
-      }
-      await settle();
-      expect(evi.lastSpeechAt, isNotNull);
-    });
-
-    test('보류 중에 들어온 소리는 기억하지 않는다 — 보내지 않았으니까', () async {
-      await start();
-      evi.holdForThinking();
-      // 보류 기준(바닥+4)에는 못 미치고 라이브 기준(6)에는 미치는 크기가 없어,
-      // 아예 조용한 소리로 확인한다 — 보류 중이면 lastSpeechAt이 갱신될 길이 없다.
-      for (var i = 0; i < 5; i++) {
-        mic.speak(Uint8List(320));
-      }
-      await settle();
-      expect(evi.lastSpeechAt, isNull);
-    });
-  });
-
-  group('「생각 중」에는 마이크도 보류한다', () {
-    List<Uint8List> audioSent() => channel.sent
-        .map((s) => jsonDecode(s) as Map<String, dynamic>)
-        .where((m) => m['type'] == 'audio_input')
-        .map((m) => base64Decode(m['data'] as String))
-        .toList();
-
-    Uint8List quiet() => Uint8List(320);
-    Uint8List loud(int mark) {
-      final pcm = Int16List(160)..fillRange(0, 160, 12000);
-      pcm[0] = mark; // 어느 조각인지 표시
-      return Uint8List.sublistView(pcm);
-    }
-
-    test('조용하면 보내지 않는다', () async {
-      await start();
-      evi.holdForThinking();
-      mic.speak(quiet());
-      mic.speak(quiet());
-      await settle();
-      expect(audioSent(), isEmpty);
-      expect(evi.micHeld, isTrue);
-    });
-
-    test('말을 이어가면 풀리고 **모아 둔 것부터** 나간다 — 말머리를 잃지 않는다',
-        () async {
-      await start();
-      evi.holdForThinking();
-      mic.speak(loud(1));
-      mic.speak(loud(2));
-      mic.speak(loud(3)); // 세 조각 연속이면 말로 본다
-      await settle();
-      expect(evi.micHeld, isFalse);
-      final sent = audioSent();
-      expect(sent, hasLength(3), reason: '보류 중 모아 둔 것이 먼저 나간다');
-      expect(Int16List.sublistView(sent.first)[0], 1,
-          reason: '첫 조각부터 순서대로');
-    });
-
-    // 상한이 지나 풀릴 때 모아 둔 것을 내보냈더니, **말한 적 없는 소리가
-    // 새 발화 턴이 됐다** — 「내 말 → 생각 중 → 길어짐 → 또 내 말 → 답」
-    // (2026-09-15). 시간으로 풀 때는 버린다.
-    test('시간으로 풀릴 때는 모아 둔 것을 버린다 — 없던 발화를 만들지 않는다',
-        () async {
-      await start();
-      evi.holdForThinking(cap: const Duration(milliseconds: 300));
-      mic.speak(quiet());
-      mic.speak(quiet());
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-      expect(evi.micHeld, isFalse, reason: '상한이 지나면 열린다');
-      expect(audioSent(), isEmpty, reason: '모아 둔 것은 나가지 않는다');
-    });
-
-    test('답이 와서 풀릴 때도 버린다', () async {
-      await start();
-      evi.holdForThinking();
-      mic.speak(quiet());
-      speaker.quiet = true;
-      channel.push({'type': 'assistant_end'});
-      await Future<void>.delayed(const Duration(milliseconds: 1100));
-      expect(evi.micHeld, isFalse);
-      expect(audioSent(), isEmpty);
-    });
-
-    // 고정 임계값 8은 **차분하게 말하는 사람을 놓쳤다** — 조용히 한 말이
-    // 보류에 갇혀 Hume까지 가지 못했다 (2026-09-16). 바닥 소음에서 띄운다.
-    test('조용한 방에서는 작은 말도 잡는다', () async {
-      await start();
-      evi.holdForThinking();
-      // 바닥 소음을 먼저 보여준다 (거의 무음).
-      for (var i = 0; i < 5; i++) {
-        mic.speak(Uint8List.sublistView(Int16List(160)));
-      }
-      // 차분한 말 — 종전 기준(8)에는 못 미치는 크기다.
-      final calm = Int16List(160)..fillRange(0, 160, 700); // level ≈ 6
-      for (var i = 0; i < 3; i++) {
-        mic.speak(Uint8List.sublistView(calm));
-      }
-      await settle();
-      expect(evi.micHeld, isFalse, reason: '바닥이 0이면 기준은 4다');
-      expect(audioSent(), isNotEmpty, reason: '모아 둔 것부터 나간다');
-    });
-
-    // 답이 **나오는 동안까지** 잡아 두었더니 스피커의 AI 목소리가 마이크로
-    // 되돌아와 우리 소리 감지를 넘겼다 → 보류가 풀리며 그 소리를 내보냈다 →
-    // 없던 「생각 중」이 생기고 화면은 AI가 말하는 중에 「듣고 있습니다」로
-    // 튀었다 (2026-09-17). 끼어들기 판정은 Hume의 몫이다.
-    test('AI가 말을 시작하면 보류를 풀고 모아 둔 것은 버린다', () async {
-      await start();
-      evi.holdForThinking();
-      mic.speak(quiet());
-      channel.push({
-        'type': 'assistant_message',
-        'message': {'role': 'assistant', 'content': '그랬군요'}
-      });
-      await settle();
-      expect(evi.micHeld, isFalse, reason: '여기부터 끼어들기는 Hume이 판정한다');
-      expect(audioSent(), isEmpty, reason: '생각 중에 모인 소리는 버린다');
-      // 이제 말하면 그대로 나간다 — 마이크가 열려 있다.
-      mic.speak(loud(1));
-      await settle();
-      expect(audioSent(), hasLength(1));
-    });
-
-    test('첫 인사 보류는 AI가 말을 시작해도 끝까지 기다린다 (결정 27)', () async {
-      await evi.start(
-        accessToken: 't',
-        configId: 'c',
-        sessionId: 's',
-        holdMicForGreeting: true,
-      );
-      channel.push({
-        'type': 'assistant_message',
-        'message': {'role': 'assistant', 'content': '안녕하세요'}
-      });
-      await settle();
-      expect(evi.micHeld, isTrue);
-    });
-
-    test('답이 오면 보류가 풀린다', () async {
-      await start();
-      evi.holdForThinking();
-      speaker.quiet = false;
-      channel.push({'type': 'assistant_end'});
-      await settle();
-      expect(evi.micHeld, isTrue);
-      speaker.quiet = true;
-      await Future<void>.delayed(const Duration(milliseconds: 1100));
-      expect(evi.micHeld, isFalse);
-    });
-
-    test('첫 인사 보류는 모아 두지 않는다 — 인사를 끊지 않는 것이 목적이다',
-        () async {
-      await evi.start(
-        accessToken: 't',
-        configId: 'c',
-        sessionId: 's',
-        holdMicForGreeting: true,
-      );
-      mic.speak(loud(1));
-      mic.speak(loud(2));
-      mic.speak(loud(3));
-      await settle();
-      expect(evi.micHeld, isTrue);
-      expect(audioSent(), isEmpty);
-    });
-  });
-
   group('마이크', () {
-    test('PCM을 base64 audio_input으로 보낸다', () async {
+    test('PCM을 base64 audio_input으로 보낸다 — 버튼에', () async {
       await start();
-      mic.speak([0, 1, 2, 3]);
+      final talk = Uint8List.sublistView(Int16List(160)..fillRange(0, 160, 9000));
+      for (var i = 0; i < 3; i++) {
+        mic.speak(talk);
+      }
       await settle();
+      expect(evi.sendTurn(), isTrue);
       final audio = channel.sent
           .map((s) => jsonDecode(s) as Map<String, dynamic>)
           .where((m) => m['type'] == 'audio_input')
           .toList();
-      expect(audio, hasLength(1));
-      expect(base64Decode(audio.single['data'] as String), [0, 1, 2, 3]);
+      expect(audio, isNotEmpty);
+      expect(base64Decode(audio.first['data'] as String), talk);
     });
 
     test('홀수 길이 조각에도 죽지 않고 소리 크기를 잰다 (진단)', () async {
@@ -653,12 +527,6 @@ void main() {
       mic.speak(Uint8List.sublistView(loud));
       await settle();
       expect(evi.micPeak, greaterThan(0));
-      expect(
-        channel.sent
-            .map((s) => jsonDecode(s) as Map<String, dynamic>)
-            .where((m) => m['type'] == 'audio_input'),
-        hasLength(2),
-      );
     });
 
     // 이 서비스는 앱 수명 내내 사는 한 개짜리다(`eviServiceProvider`).
