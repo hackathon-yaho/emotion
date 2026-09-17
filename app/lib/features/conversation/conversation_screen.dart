@@ -42,6 +42,18 @@ class _Queued implements Exception {
 // 감정을 털어놓는 화면에서 그건 대화를 방해한다. 링과 상태 문구만 남긴다.
 // 목업 발화를 넣지 않는다는 규칙(2026-09-06)은 이제 **아무 발화도 넣지
 // 않는다**로 대체됐다. 남은 `_detail`은 개발용 진단 문구 전용이다.
+/// 「말 다 했어요」 버튼이 지금 어떤 상태인지.
+enum TurnButton {
+  /// 버튼 자리가 없는 상태 (연결 중·오류·대기열).
+  none,
+
+  /// 내 차례 — 눌린다.
+  enabled,
+
+  /// AI 차례 — 자리는 그대로, 눌리지 않는다.
+  disabled,
+}
+
 enum TalkState {
   connecting,
   resumed,
@@ -852,14 +864,17 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             offset: 8,
             cool: 0.85,
             warm: 0.60,
-            canFinishTurn: true,
+            turnButton: TurnButton.enabled,
             sub: _notice,
           ),
-        // 말하는 중에도 버튼은 산다 — 끼어들기는 버튼으로만 한다 (결정 32).
+        // **AI 차례에는 버튼이 눌리지 않는다.** 끼어들기 경로를 두지 않는다 —
+        // 내 차례가 오면 다시 살아난다 (결정 32, 2026-09-18 개정).
         TalkState.speaking => const _Ring('말하고 있습니다',
-            size: 168, offset: 3, cool: 0.50, warm: 0.35, canFinishTurn: true),
+            size: 168, offset: 3, cool: 0.50, warm: 0.35,
+            turnButton: TurnButton.disabled),
         TalkState.quiet => const _Ring('듣고 있습니다',
-            size: 184, offset: 5, cool: 0.50, warm: 0.32, canFinishTurn: true),
+            size: 184, offset: 5, cool: 0.50, warm: 0.32,
+            turnButton: TurnButton.enabled),
         // 듣는 중보다 링이 **조금 작고 가깝다** — 밖으로 열려 있던 것이
         // 안으로 모이는 모양이다. 색은 그대로다 (FR-030).
         TalkState.thinking => _Ring(
@@ -869,7 +884,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             cool: 0.62,
             warm: 0.44,
             sub: _slowThinking ? '조금 오래 걸리고 있습니다' : null,
-            canFinishTurn: true,
+            turnButton: TurnButton.disabled,
           ),
         TalkState.nearEnd => const _Ring(
             '듣고 있습니다',
@@ -878,7 +893,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
             cool: 0.80,
             warm: 0.55,
             nearEnd: true,
-            canFinishTurn: true,
+            turnButton: TurnButton.enabled,
           ),
         // 아직 대화가 아니라 **기다림**이다 — 링을 작고 흐리게 둔다.
         TalkState.queued => _Ring(
@@ -1095,8 +1110,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen>
         //
         // Hume은 침묵 1.8초를 봐야 턴을 확정한다. 그 사이 숨소리·주변 소음이
         // 들어가면 계속 열려 있어 **한참을 기다리게 된다.** 눌러서 끊는다.
-        if (r.canFinishTurn) ...[
-          FilledAction(label: '말 다 했어요', height: 56, onPressed: _finishTurn),
+        if (r.turnButton != TurnButton.none) ...[
+          FilledAction(
+            label: '말 다 했어요',
+            height: 56,
+            // AI 차례에는 눌리지 않는다. 자리는 그대로다.
+            onPressed:
+                r.turnButton == TurnButton.enabled ? _finishTurn : null,
+            background: r.turnButton == TurnButton.enabled ? null : t.lift,
+            foreground: r.turnButton == TurnButton.enabled ? null : t.faint,
+          ),
           const SizedBox(height: Space.xs),
           // 대화를 끝내는 길은 늘 열어 둔다 — 다만 지금 할 일은 위쪽이라
           // 조용한 글자로 둔다.
@@ -1166,7 +1189,7 @@ class _Ring {
     this.error,
     this.cta,
     this.nearEnd = false,
-    this.canFinishTurn = false,
+    this.turnButton = TurnButton.none,
   });
 
   final String label;
@@ -1179,9 +1202,12 @@ class _Ring {
   final String? cta;
   final bool nearEnd;
 
-  /// 「말 다 했어요」를 보여줄 상태인지 — 마이크가 살아 있고 AI가 말하고 있지
-  /// 않을 때만이다.
-  final bool canFinishTurn;
+  /// 「말 다 했어요」 버튼의 상태.
+  ///
+  /// **내 차례에만 눌린다.** AI가 생각하거나 말하는 동안에는 자리는 그대로 두고
+  /// 눌리지 않게 가라앉힌다 — 숨기면 버튼이 사라지고 나타나며 아래 「대화
+  /// 마치기」가 위아래로 튄다. 그 움직임 자체가 잡음이다 (2026-09-18).
+  final TurnButton turnButton;
 }
 
 /// 진단 한 줄 — **`SHOW_ERROR_DETAIL`에서만 나온다.**
