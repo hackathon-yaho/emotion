@@ -507,6 +507,53 @@ void main() {
     });
   });
 
+  // Hume은 user 발화 끝에 상위 3개 표정을 **영문으로** 붙인다 (계약 v1.13 §4).
+  // AI서버는 CLM 쪽에서 떼지만 같은 꼬리가 **앱의 소켓으로도** 온다.
+  group('Hume 표정 꼬리를 뗀다 (계약 v1.13)', () {
+    test('끝의 영문 중괄호를 뗀다', () {
+      expect(
+        EviService.stripExpressionTail(
+            '아 내가 이거 합격하면은 좀. {slightly doubtful, slightly calm}'),
+        '아 내가 이거 합격하면은 좀.',
+      );
+    });
+
+    test('한글 중괄호는 건드리지 않는다 — 사용자가 말한 것이다', () {
+      expect(
+        EviService.stripExpressionTail('그러니까 {이런 식으로} 말했어'),
+        '그러니까 {이런 식으로} 말했어',
+      );
+      expect(
+        EviService.stripExpressionTail('마지막에 {중괄호로 끝났어}'),
+        '마지막에 {중괄호로 끝났어}',
+      );
+    });
+
+    test('꼬리가 없으면 그대로 둔다', () {
+      expect(EviService.stripExpressionTail('오늘 회의가 많았어'), '오늘 회의가 많았어');
+    });
+
+    test('소켓으로 온 발화에서 떼어 올린다', () async {
+      await start();
+      channel.push({
+        'type': 'user_message',
+        'message': {
+          'role': 'user',
+          'content': '오늘은 여기까지 하자 {very tired, quite sad, calm}'
+        },
+        'models': {
+          'prosody': {
+            'scores': {'Tiredness': 0.71}
+          }
+        },
+      });
+      await settle();
+      final spoke = events.whereType<EviUserSpoke>().single;
+      expect(spoke.text, '오늘은 여기까지 하자',
+          reason: '꼬리를 달고 오면 음성 종료 판정이 말끝을 못 읽는다');
+    });
+  });
+
   group('마이크', () {
     test('PCM을 base64 audio_input으로 보낸다 — 버튼에', () async {
       await start();

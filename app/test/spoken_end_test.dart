@@ -35,6 +35,14 @@ void main() {
     }
   });
 
+  // 꼬리는 `EviService._content`가 떼고 들어온다 (계약 v1.13). 여기서 다시
+  // 확인하는 이유는, 그 단계가 빠지면 **음성 종료가 조용히 죽기** 때문이다 —
+  // 문장이 길어져 16자 규칙에 걸리고 맺음도 못 읽는다.
+  test('표정 꼬리가 붙어 있으면 못 읽는다 — 떼고 들어와야 한다', () {
+    expect(SpokenEnd.says('그만할래 {calm, tired, interested}'), isFalse);
+    expect(SpokenEnd.says('그만할래'), isTrue);
+  });
+
   test('띄어쓰기가 고르지 않아도 읽는다 — 전사는 고르지 않다', () {
     expect(SpokenEnd.says('오늘은여기까지하자'), isTrue);
     expect(SpokenEnd.says('그 만 하 자'), isTrue);

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../config/env.dart';
@@ -546,8 +547,30 @@ class EviService {
     final message = json['message'];
     if (message is! Map<String, dynamic>) return null;
     final content = message['content'];
-    return content is String && content.isNotEmpty ? content : null;
+    if (content is! String || content.isEmpty) return null;
+    final text = stripExpressionTail(content);
+    return text.isEmpty ? null : text;
   }
+
+  /// **Hume이 발화 끝에 붙이는 영문 표정 꼬리를 뗀다** (계약 v1.13 §4).
+  ///
+  /// ```
+  /// "아 내가 이거 합격하면은 좀. {slightly doubtful, slightly calm, ...}"
+  /// ```
+  ///
+  /// 프로소디를 못 받는 LLM을 위한 Hume 기본 동작이고 **끄는 설정이 없다.**
+  /// AI서버가 CLM 쪽에서 떼지만(계약 v1.13), **같은 꼬리가 앱의 소켓으로도
+  /// 온다** — 우리는 `user_message`를 직접 받는 여섯 번째 소비자다.
+  ///
+  /// 떼지 않으면 두 가지가 깨진다. **텍스트 채널에 음성 채널이 섞이고**
+  /// (FR-025 — 앱은 프로소디를 파싱하지 않는다), 음성 종료 판정이 꼬리
+  /// 때문에 말끝을 못 읽는다 (`SpokenEnd`).
+  ///
+  /// **영문자로 시작하는 끝의 중괄호만** 뗀다 — 사용자가 한글로 말한
+  /// 중괄호는 건드리지 않는다.
+  @visibleForTesting
+  static String stripExpressionTail(String content) =>
+      content.replaceFirst(RegExp(r'\s*\{[A-Za-z][^{}]*\}\s*$'), '').trim();
 
   void _fail(EviFailure reason) => _emit(EviFailed(reason));
 
