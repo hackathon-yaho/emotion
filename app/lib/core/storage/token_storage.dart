@@ -16,6 +16,7 @@ class TokenStorage {
   static const _demoKey = 'demo';
   static const _unlinkKey = 'pending_unlink';
   static const _endedKey = 'ended_session';
+  static const _guestKey = 'guest';
 
   Future<String?> readJwt() => _storage.read(key: _jwtKey);
   Future<void> writeJwt(String jwt) => _storage.write(key: _jwtKey, value: jwt);
@@ -68,6 +69,17 @@ class TokenStorage {
   Future<void> writeEndedSession(String id) =>
       _storage.write(key: _endedKey, value: id);
 
+  /// **둘러보기(`POST /api/auth/dev`)로 들어온 세션인지** (계약 v1.14 §2-1-1).
+  ///
+  /// 그 사용자는 **카카오 계정과 연결돼 있지 않다.** 탈퇴에서 카카오 인가로
+  /// 보내면, 계정이 없는 사람은 막히고 있는 사람은 **우리 앱과 연결된 적도
+  /// 없는 자기 계정을 인가하게 된다** (백엔드 요청 `guest-withdraw.md`).
+  /// JWT와 같은 수명이라 `clearAll()`에서 함께 지운다.
+  Future<bool> readGuest() async =>
+      (await _storage.read(key: _guestKey)) == 'true';
+  Future<void> writeGuest(bool guest) =>
+      _storage.write(key: _guestKey, value: guest.toString());
+
   /// 로그아웃 — 기기의 토큰만 지운다. 서버 데이터는 남는다 (F1-03).
   ///
   /// **탈퇴 표시도 함께 지운다.** 남겨 두면 다음 로그인 복귀에서 그 코드를
@@ -76,5 +88,6 @@ class TokenStorage {
     await clearJwt();
     await clearPendingUnlink();
     await _storage.delete(key: _endedKey);
+    await _storage.delete(key: _guestKey);
   }
 }

@@ -73,6 +73,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             // **인가 때 쓴 것과 같은 값이어야 한다** — 서버가 대조한다.
             redirectUri: KakaoLogin.redirectUriFrom(here).toString(),
           );
+      // 카카오로 들어왔으니 둘러보기 표시를 지운다.
+      await ref.read(tokenStorageProvider).writeGuest(false);
       // ⑤ 먼저 지운다. 새로고침이 같은 코드를 다시 보내면 400이다.
       clearQuery();
       await ref.read(appSessionProvider).completeLogin(auth.jwt);
@@ -113,17 +115,22 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     });
     try {
       final auth = await ref.read(journalRepositoryProvider).authDev();
+      // **둘러보기라는 것을 남긴다** — 탈퇴가 카카오로 가면 안 된다.
+      await ref.read(tokenStorageProvider).writeGuest(true);
       await ref.read(appSessionProvider).completeLogin(auth.jwt);
       if (mounted) context.go(Routes.home);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = e.isNetwork
-            ? '연결이 되지 않습니다. 네트워크를 확인해 주세요.'
-            : (e.statusCode == 404
-                ? '둘러보기는 아직 준비되지 않았습니다.'
-                : '로그인이 완료되지 않았습니다. 다시 시도해 주세요.');
+        _error = switch (e) {
+          _ when e.isNetwork => '연결이 되지 않습니다. 네트워크를 확인해 주세요.',
+          _ when e.statusCode == 404 => '둘러보기는 아직 준비되지 않았습니다.',
+          // 분당 30회 상한 (§2-1-1). 서버 문구를 그대로 쓴다 — 우리가 지어낸
+          // 문장보다 정확하고, 상한이 바뀌면 그쪽이 먼저 안다.
+          _ when e.statusCode == 429 && e.message.isNotEmpty => e.message,
+          _ => '로그인이 완료되지 않았습니다. 다시 시도해 주세요.',
+        };
       });
     } on Object {
       if (!mounted) return;

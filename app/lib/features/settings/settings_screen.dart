@@ -198,6 +198,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// 계정이면 동의 화면 없이 되돌아온다.
   Future<void> _confirmLeave() async {
     final t = context.tokens;
+    // **둘러보기(§2-1-1)로 들어왔으면 카카오가 없다.** 그 사용자에게 카카오
+    // 인가를 시키면, 계정이 없는 사람은 탈퇴를 못 하고 있는 사람은 **우리
+    // 앱과 연결된 적도 없는 자기 계정을 인가하게 된다** (백엔드 요청
+    // `guest-withdraw.md`). 데이터 삭제는 본문 없는 `DELETE`만으로 끝난다.
+    final guest = await ref.read(tokenStorageProvider).readGuest();
+    if (!mounted) return;
     final ok = await showConfirmSheet(
       context,
       title: '계정을 지울까요?',
@@ -208,7 +214,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           text: '유예 기간이 없고 되돌릴 수 없습니다.',
           style: TextStyle(color: t.paper),
         ),
-        const TextSpan(text: ' 같은 카카오 계정으로 다시 시작하면 새 사용자가 됩니다.'),
+        // 둘러보기는 카카오 계정이 없다 — 그 문장을 쓰면 거짓말이 된다.
+        TextSpan(
+          text: guest
+              ? ' 둘러보기로 다시 들어오면 새 사용자로 시작합니다.'
+              : ' 같은 카카오 계정으로 다시 시작하면 새 사용자가 됩니다.',
+        ),
       ],
     );
     if (!ok) return;
@@ -219,7 +230,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     //
     // **샘플 모드와 키가 없는 빌드는 그냥 지운다.** 연결 해제는 선택이고
     // (§2-3), 없어도 데이터는 똑같이 지워진다.
-    final url = ref.read(dataModeProvider) == DataMode.sample
+    final url = guest || ref.read(dataModeProvider) == DataMode.sample
         ? null
         : KakaoLogin.authorizeUrl(
             redirectUri: KakaoLogin.redirectUriFrom(Uri.base),
