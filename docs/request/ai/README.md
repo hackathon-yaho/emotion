@@ -13,7 +13,7 @@ AI 개발자에게 요청할 사항을 문서로 정리하는 폴더입니다.
 
 | 문서 | 상태 | 막고 있던 작업 |
 | --- | --- | --- |
-| [hume-usage-for-voting.md](hume-usage-for-voting.md) | ⏳ **회신 대기** (2026-09-18, 요청자 백엔드) | **배포본 둘러보기 스위치를 켜는 것.** 9/21부터 투표자가 로그인 없이 음성 대화를 연다 — Hume 콘솔의 **남은 분수·지출 상한·동시 접속 수** 확인. 상한 기능이 없으면 백엔드가 코드로 넣는다 |
+| [hume-usage-for-voting.md](hume-usage-for-voting.md) | ⏳ **회신 대기** (2026-09-18, 요청자 백엔드) | 없음(스위치는 이미 켬) — **9/21 전 필요.** 9/21부터 투표자가 로그인 없이 음성 대화를 연다 — Hume 콘솔의 **남은 분수·지출 상한·동시 접속 수** 확인. 상한 기능이 없으면 백엔드가 코드로 넣는다 |
 | [prosody-suffix-in-transcript.md](prosody-suffix-in-transcript.md) | ⏳ **회신 대기** (2026-09-16) | 없음 — 다만 **지금 저장되는 모든 턴이 오염된 채 쌓인다.** 발화 원문 끝에 Hume이 프로소디를 영문으로 덧붙여 보내는데(`… {slightly doubtful, slightly calm}`) CLM 파서가 그대로 내보낸다. 기록·근거 화면에 말한 적 없는 문장이 보이는 것에 그치지 않고 **텍스트 valence LLM·응답 이력·태그 원문 대조까지 같은 문자열을 본다**(FR-025·FR-043) — 갭이 실제보다 작게 나왔을 수 있다 |
 | [env-example-drift.md](env-example-drift.md) | ⏳ **회신 대기** (2026-09-05) | **위기 응답 109 안내(F4)와 관찰 생성.** `.env.example` 세 줄이 `config.py`보다 낡아, 회신이 안내한 대로 복사하면 **`AI_RESPOND_EFFORT=low`(109가 잘린다)와 `AI_MODEL_OBSERVE=gemini-2.5-pro`(404)가 되살아난다.** 덧붙임으로 **cron 서비스(`cron-job.org`)** 와 **Config 5건 중 CLM만 배포에 묶여 있다는 것**도 함께 적었다 |
 | [deploy-handoff.md](deploy-handoff.md) | ✅ **회신 완료** (2026-09-05) | ~~배포 주소·새 시크릿·슬립 대 fail-closed 판단~~ → **cron이 맞다**(복귀 60초를 타임아웃으로 덮으면 Hume이 먼저 끊는다). ⚠️ **cron이 두 곳을 찔러야 한다** — AI서버도 Cloud Run 무료라 잠든다. AI서버는 **Cloud Run 배포**로 가고 주소가 나오면 준다. 회신 `../../response/backend/deploy-handoff.md` |

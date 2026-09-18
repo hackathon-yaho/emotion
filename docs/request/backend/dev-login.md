@@ -3,7 +3,7 @@
 > **상태: ✅ 회신 완료 (2026-09-18) — 전부 해결**
 > - 회신: `../../response/app/dev-login.md`
 > - **결론 요약**: 계약 v1.14 §2-1-1. **호출마다 새 익명 프로필**(`account` 없음, `isNewUser: true`), 응답은 §2-1과 같아 앱 변경 0. `DEV_LOGIN_ENABLED`(기본 꺼짐 → 404) + 서버 전체 분당 30회(429 `TOO_MANY_REQUESTS`). 탈퇴는 서버 쪽 문제없음. 10/7(본선이면 10/18)에 끄고 파기
-> - **남은 것**: 배포본 스위치 켜기 · 앱 탈퇴 흐름(`../app/guest-withdraw.md`) · Hume 사용량 확인(`../ai/hume-usage-for-voting.md`)
+> - **남은 것**: 앱 탈퇴 흐름(`../app/guest-withdraw.md`) · Hume 사용량 확인(`../ai/hume-usage-for-voting.md`)
 >
 > 아래 본문은 **요청 당시 원문**입니다. 확정된 최신 값은 계약 문서를 보세요.
 
