@@ -1,5 +1,7 @@
 # API 계약서 — 감정 케어 보이스 저널
 
+> **수정 기록 (2026-09-18 ⑫, 백엔드)** — **v1.14. 심사용 로그인 `POST /api/auth/dev`(§2-1-1) 신설.** 원티드가 투표자·심사위원이 **로그인 없이** 핵심 기능을 써 볼 수 있게 해 달라고 안내했다(심사·투표 9/21~). 앱 요청 `request/backend/dev-login.md` 회신. ① **호출마다 새 익명 프로필** — `account` 없이 `profile`·`user_baseline`만 만든다. 한 계정을 공유하면 **투표자끼리 서로의 발화 원문이 보인다** ② **환경변수 `DEV_LOGIN_ENABLED`로 켠다.** 꺼져 있으면 404 ③ **서버 전체 분당 30회** — 넘으면 **429 `TOO_MANY_REQUESTS`(§1-2 신설)** ④ §1-1 인증 제외 목록에 추가. **필드 추가·삭제·개명 없음**(엔드포인트 1개·오류 코드 1개 신설). 문서 버전 표가 v1.13에서 올라가지 않은 채였다 — 같이 맞췄다.
+>
 > **수정 기록 (2026-09-17 ⑪, AI)** — **v1.13. `transcript`의 「원문」은 Hume 표정 꼬리를 뗀 값이다.** Hume은 CLM에 보내는 user 발화 끝에 상위 3개 표정을 영문으로 붙인다 — `"아 내가 이거 합격하면은 좀. {slightly doubtful, slightly calm, very slightly interested}"`. 프로소디를 못 받는 LLM을 위한 기본 동작이고 끄는 설정이 없다. 우리 파서가 그대로 들고 있어 백엔드 근거 화면에 사용자가 말한 적 없는 문장이 나왔다(백엔드 발견). ① **§4 표에 「`content`의 꼬리」 행** ② **§3-2에 `transcript` 행** — AI서버가 파싱 시점에 한 번 떼고, **백엔드는 받은 값을 고치지 않는다**(원문의 정의를 한 곳에 둔다). **필드 추가·삭제·개명 없음.**
 >
 > **수정 기록 (2026-09-14 ⑩, 백엔드)** — **v1.12. `openSession`(§2-2)이 턴 0건 세션을 내주지 않는다.** 앱이 「46초 대화 뒤 이어하기가 7분을 새로 준다」고 요청해 확인했다(`request/backend/open-session-used-time.md`). **`usedSec` 계산은 맞았다.** 카드가 가리킨 것은 **종료 6초 뒤 생긴 턴 0건 세션**이었고(운영 DB·Hume 채팅 기록으로 확인), 원인은 앱 라우트다(`request/app/summary-route-restarts-session.md`). ① **턴 0건이면 `openSession`은 `null`이다** — 이어갈 대화가 없는데 「중단된 대화 · 남은 7분」으로 보였다. 기록 화면이 턴 0건을 감추는 기준(`response/backend/empty-session-visibility.md`)과 맞췄다 ② **§2-2 표에 `usedSec` 정의를 적었다** — 시작부터 마지막 턴까지. 「시작부터」만 적혀 있어 벽시계로 읽혔다 ⚠️ **벽시계로 바꾸자는 안은 택하지 않았다** — 앱이 죽고 5분 뒤 이어하면 잔여 시간이 0이 된다(TC-22). **필드 추가·삭제·개명 없음**(`openSession`이 `null`로 오는 경우만 늘어난다). 테스트 110건.
@@ -24,8 +26,8 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 문서 버전 | v1.12 |
-| 작성일 | 2026. 09. 03. (최종 개정 2026. 09. 08.) |
+| 문서 버전 | v1.14 |
+| 작성일 | 2026. 09. 03. (최종 개정 2026. 09. 18.) |
 | 상위 문서 | [prd.md](../00-context/prd.md) · [spec.md](../00-context/spec.md) · AI 내부 설계 [ai-pipeline.md](ai-pipeline.md) |
 | 범위 | ① 앱 ↔ 백엔드 ② AI서버 ↔ 백엔드(내부) ③ Hume ↔ AI서버(외부·변경 불가) |
 
@@ -44,7 +46,7 @@
 | Base URL | 백엔드 배포 도메인 (환경변수로 주입, 앱에 하드코딩 금지) |
 | 프로토콜 | HTTPS |
 | Content-Type | `application/json; charset=utf-8` |
-| 인증 | `Authorization: Bearer <JWT>` — `/api/auth/kakao`, `/api/health` 제외 전 엔드포인트 필수 |
+| 인증 | `Authorization: Bearer <JWT>` — `/api/auth/kakao`, `/api/auth/dev`, `/api/health` 제외 전 엔드포인트 필수 |
 | JWT 만료 | **7일.** 매일 쓰는 앱이라 더 짧으면 재로그인이 잦아 이탈 요인이 된다 |
 | 시각 | **저장·전송은 UTC ISO 8601** (`2026-09-18T12:34:56Z`) |
 | 일자 집계 | **KST(Asia/Seoul) 기준** — 사용자가 체감하는 "하루"가 기준이어야 트렌드가 맞다 |
@@ -83,6 +85,7 @@
 | 403 | `FORBIDDEN` | 다른 사용자의 리소스 접근 |
 | 404 | `NOT_FOUND` | 리소스 없음 (`SESSION_NOT_FOUND`, `OBSERVATION_NOT_FOUND`) |
 | 409 | `SESSION_NOT_RESUMABLE` | 이어하기 창(30분) 경과 또는 잔여 시간 없음 |
+| 429 | `TOO_MANY_REQUESTS` | 호출 빈도 상한 초과 — 현재는 `POST /api/auth/dev`(§2-1-1)만 |
 | 503 | `HUME_TOKEN_ISSUE_FAILED` | Hume 액세스 토큰 발급 실패 |
 | 500 | `INTERNAL_ERROR` | 그 외 |
 
@@ -157,6 +160,35 @@
 
 > `isNewUser`는 앱이 온보딩 고지(spec F1-05)를 띄울지 판단하는 데만 쓴다.
 > 재로그인 시 **동일한 `profileId`**가 반환되어야 한다 (spec TC-01).
+
+## 2-1-1. `POST /api/auth/dev` — 심사용 로그인 (v1.14)
+
+인증 불필요. **본문 없음**(`{}`도 받는다).
+
+원티드 심사·투표(9/21~10/5, 본선 진출 시 10/17 데모데이까지) 동안 **카카오 계정 없이** 서비스를 써 볼 수 있게 하는 경로다. 대회가 끝나면 닫는다.
+
+**응답 200** — §2-1과 **같은 모양**이다. 앱은 카카오 로그인과 똑같이 처리한다.
+
+```json
+{
+  "jwt": "eyJhbGciOi...",
+  "expiresAt": "2026-09-25T12:34:56Z",
+  "profileId": "prof_7f3a2b",
+  "isNewUser": true
+}
+```
+
+| 규칙 | 내용 |
+| --- | --- |
+| 계정 | **호출마다 새 익명 프로필.** `account`(카카오 식별자)를 만들지 않는다 — 개인정보가 하나도 없다. `isNewUser`는 **항상 `true`**다 |
+| 재방문 | 같은 브라우저는 받은 JWT(7일)로 같은 프로필을 계속 쓴다. **다시 부르면 다른 프로필이 된다** — 이전 기록으로 돌아가는 경로는 없다 |
+| 데모 모드 | **꺼져 있다**(`demoMode: false`). 투표자는 실제 사용자와 같은 화면을 본다(FR-031) |
+| 탈퇴 | §2-3 그대로 동작한다. 카카오 연결이 없으니 **본문 없이** 부른다 |
+
+| 오류 | 조건 |
+| --- | --- |
+| 404 `NOT_FOUND` | 서버에서 경로가 꺼져 있음(`DEV_LOGIN_ENABLED=false`, 기본값) |
+| 429 `TOO_MANY_REQUESTS` | **서버 전체** 분당 30회 초과. 사람 단위가 아니다 — 잠시 뒤 다시 누르면 된다 |
 
 ## 2-2. `GET /api/me` — 내 정보
 
@@ -905,7 +937,7 @@ data: [DONE]
 
 | 화면 | 호출 |
 | --- | --- |
-| S00 진입·로그인 | `POST /api/auth/kakao` |
+| S00 진입·로그인 | `POST /api/auth/kakao` · 둘러보기 `POST /api/auth/dev` |
 | S01 홈 | `GET /api/me`(`openSession` 포함), `GET /api/observations?limit=3` |
 | S02 대화 | `POST /api/session/start`(**정원이 차면 202 → §2-14 대기 화면 → 폴링 응답의 `session`으로 이어서**, v1.9) **또는** `POST /api/session/{id}/resume` → (Hume 직접 연결) → **`POST /api/session/{id}/chat-group`**(소켓 직후 1회, §2-5-2, v1.8) → **`GET /api/session/{id}/live` 폴링(§2-13, v1.3)** → `POST /api/session/{id}/end` |
 | S02-1 종료 요약 | 2-5 응답 재사용 (추가 호출 없음) |

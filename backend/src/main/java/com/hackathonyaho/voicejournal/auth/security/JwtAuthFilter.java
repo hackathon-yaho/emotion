@@ -28,8 +28,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
 
-    /** 계약 §1-1 — 이 둘만 인증 없이 통과한다. */
-    private static final Set<String> PUBLIC_PATHS = Set.of("/api/auth/kakao", "/api/health");
+    /** 계약 §1-1 — 이 셋만 인증 없이 통과한다. */
+    private static final Set<String> PUBLIC_PATHS = Set.of("/api/auth/kakao", "/api/auth/dev", "/api/health");
 
     private final JwtProvider jwtProvider;
     private final ObjectMapper objectMapper;

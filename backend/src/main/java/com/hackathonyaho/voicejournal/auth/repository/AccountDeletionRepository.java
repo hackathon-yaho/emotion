@@ -23,6 +23,12 @@ public class AccountDeletionRepository {
 
     private final JdbcTemplate jdbc;
 
+    /** 심사용 로그인(계약 §2-1-1)이 만든 프로필 — account 연결이 없다. */
+    public List<UUID> guestProfileIds() {
+        return jdbc.queryForList("select p.id from profile p where not exists"
+                + " (select 1 from account_profile ap where ap.profile_id = p.id)", UUID.class);
+    }
+
     @Transactional
     public void deleteAllFor(UUID profileId) {
         jdbc.update("delete from observation_evidence where observation_id in"

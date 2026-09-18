@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 /** F1-01 로그인 · F1-02 세션 유지. 서비스는 클래스 하나로 둔다 (인터페이스+Impl 없음). */
@@ -66,10 +67,39 @@ public class AuthService {
      */
     private UUID createNewUser(String kakaoId) {
         Account account = accountRepository.save(new Account(kakaoId));
-        Profile profile = profileRepository.save(Profile.create());
-        accountProfileRepository.save(new AccountProfile(account.getId(), profile.getId()));
-        userBaselineRepository.save(new UserBaseline(profile.getId()));
-        return profile.getId();
+        UUID profileId = createProfile();
+        accountProfileRepository.save(new AccountProfile(account.getId(), profileId));
+        return profileId;
+    }
+
+    private UUID createProfile() {
+        UUID profileId = profileRepository.save(Profile.create()).getId();
+        userBaselineRepository.save(new UserBaseline(profileId));
+        return profileId;
+    }
+
+    /**
+     * 계약 §2-1-1 심사용 로그인. 호출마다 새 프로필이다 — 한 계정을 공유하면
+     * 투표자끼리 서로의 발화 원문이 보인다.
+     *
+     * <p><b>account를 만들지 않는다.</b> 카카오 식별자가 없으니 개인정보가 없고,
+     * 파기 때 "연결 없는 프로필"로 정확히 골라낼 수 있다({@link #purgeGuests}).
+     */
+    @Transactional
+    public AuthResponse loginAsGuest() {
+        UUID profileId = createProfile();
+        JwtProvider.Issued issued = jwtProvider.issue(profileId);
+        return new AuthResponse(issued.token(), issued.expiresAt(), profileId, true);
+    }
+
+    /**
+     * 대회 뒤 투표자 데이터 파기. <b>탈퇴와 같은 삭제 경로를 탄다</b> — 10개 테이블
+     * 삭제 순서를 두 곳에 두지 않는다. 프로필마다 커밋되므로 중간에 실패하면 다시 부르면 된다.
+     */
+    public int purgeGuests() {
+        List<UUID> ids = accountDeletionRepository.guestProfileIds();
+        ids.forEach(accountDeletionRepository::deleteAllFor);
+        return ids.size();
     }
 
     /**

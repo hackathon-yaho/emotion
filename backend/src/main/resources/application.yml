@@ -47,6 +47,10 @@ app:
     # 계약 §2-4에서 null이 될 수 없다. 기본값을 주지 않으므로 없으면 기동에 실패한다 —
     # 런타임 503으로 만들면 서버는 떠 있는데 모든 세션 시작이 실패한다.
     config-id: ${HUME_CONFIG_ID}
+  dev-login:
+    # 계약 §2-1-1 심사용 무인증 로그인. 기본 꺼짐 — 꺼져 있으면 404.
+    # 원티드 심사·투표(9/21~) 동안만 배포본에서 켜고, 파기(response/app/dev-login.md) 전에 끈다.
+    enabled: ${DEV_LOGIN_ENABLED:false}
   internal:
     # AI서버 → 백엔드 인증 (계약 §3-1). 저장소에 넣지 않는다.
     shared-secret: ${INTERNAL_SHARED_SECRET}

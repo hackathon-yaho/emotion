@@ -121,6 +121,8 @@
 
 > **대기열 변수 2개는 선택이다** (계약 §2-14, v1.9) — `SESSION_QUEUE_ENABLED`(기본 `false`) · `SESSION_QUEUE_CAPACITY`(기본 5). **켤 때 `CAPACITY`를 Hume 플랜의 동시 접속 수와 맞춘다** — Free **1** / Starter·Creator **5** / Pro 10. 무료 상태로 5를 넣으면 두 번째 사람이 `E0700`을 맞는다.
 
+> **심사용 로그인 변수 1개** (계약 §2-1-1, v1.14) — `DEV_LOGIN_ENABLED`(기본 `false`, 꺼지면 404). **원티드 심사·투표(9/21~) 동안만 `true`.** Render는 환경변수를 바꾸면 재시작하므로 켜고 끌 때 1분쯤 비는 시간이 생긴다. **끄는 날과 파기 절차는 `../../docs/response/app/dev-login.md`** — 끈 뒤 `POST /internal/dev-profiles/purge`(켜진 채로 부르면 403). 투표자가 몰리면 동시 접속 상한에 걸리므로 **대기열(`SESSION_QUEUE_ENABLED`)을 같이 켤지 판단한다** — 앱이 202를 처리하는지(`request/app/session-queue.md`)가 먼저다.
+
 ## 배포 당일 순서
 
 > **1~10을 전부 실행했다.** 8(cron)은 2026-09-07에 AI가 Cloud Scheduler로, 9의 AI 절반(새 시크릿)과 10(AI서버 주소)도 같은 날 끝났다. **환경변수는 그 뒤 한 번 더 바뀌었다** — Hume 계정 이관으로 `HUME_API_KEY`·`HUME_SECRET_KEY`·`HUME_CONFIG_ID`를 2026-09-08에 교체했다(`../../docs/response/ai/hume-account-migration.md`).
