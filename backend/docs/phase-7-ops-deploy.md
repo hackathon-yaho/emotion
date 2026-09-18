@@ -121,7 +121,7 @@
 
 > **대기열 변수 2개는 선택이다** (계약 §2-14, v1.9) — `SESSION_QUEUE_ENABLED`(기본 `false`) · `SESSION_QUEUE_CAPACITY`(기본 5). **켤 때 `CAPACITY`를 Hume 플랜의 동시 접속 수와 맞춘다** — Free **1** / Starter·Creator **5** / Pro 10. 무료 상태로 5를 넣으면 두 번째 사람이 `E0700`을 맞는다.
 
-> **심사용 로그인 변수 1개** (계약 §2-1-1, v1.14) — `DEV_LOGIN_ENABLED`(기본 `false`, 꺼지면 404). **원티드 심사·투표(9/21~) 동안만 `true`.** Render는 환경변수를 바꾸면 재시작하므로 켜고 끌 때 1분쯤 비는 시간이 생긴다. **끄는 날과 파기 절차는 `../../docs/response/app/dev-login.md`** — 끈 뒤 `POST /internal/dev-profiles/purge`(켜진 채로 부르면 403). 투표자가 몰리면 동시 접속 상한에 걸리므로 **대기열(`SESSION_QUEUE_ENABLED`)을 같이 켤지 판단한다** — 앱이 202를 처리하는지(`request/app/session-queue.md`)가 먼저다.
+> **심사용 로그인 변수 1개** (계약 §2-1-1, v1.14) — `DEV_LOGIN_ENABLED`(기본 `false`, 꺼지면 404). **원티드 심사·투표(9/21~) 동안만 `true`.** Render는 환경변수를 바꾸면 재시작하므로 켜고 끌 때 1분쯤 비는 시간이 생긴다. **끄는 날과 파기 절차는 `../../docs/response/app/dev-login.md`** — 끈 뒤 `POST /internal/dev-profiles/purge`(켜진 채로 부르면 403). 투표자가 몰리면 동시 접속 상한에 걸리므로 **대기열(`SESSION_QUEUE_ENABLED`)도 같이 켠다** — 앱은 202 처리를 이미 붙였다(`../../docs/response/backend/session-queue.md`). 켜기 전에 `SESSION_QUEUE_CAPACITY`를 Hume 플랜의 동시 접속 수로 맞춘다(`../../docs/request/ai/hume-usage-for-voting.md` ③).
 
 ## 배포 당일 순서
 
