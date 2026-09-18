@@ -25,6 +25,34 @@
 
 > 글자 수는 **공백 포함 485자**입니다(공백 제외 385자). 줄이려면 마지막 문장(개발 과정)을 먼저 덜어내면 됩니다.
 
+## 사용 AI 툴 및 기술 스택
+
+### AI 툴
+
+| 툴 | 쓰임 |
+| --- | --- |
+| **Hume EVI 4-mini** | 음성 대화 + **프로소디 측정**(48종 표정 점수). 한국어 음성 `Jin-Hee`. EVI 3은 한국어 미지원이라 4-mini 고정 |
+| **Hume Custom Language Model** | 대화의 두뇌를 우리 서버로 가져오는 연결 고리. Hume이 우리 CLM 엔드포인트를 호출한다 |
+| **Google Gemini** | 텍스트 분석 `gemini-3.5-flash-lite` · 응답 `gemini-2.5-flash` · 관찰 `gemini-3.5-flash-lite` · 요약 `gemini-3.5-flash-lite`. OpenAI 호환 엔드포인트라 SDK는 `openai` |
+| **Claude Code (Claude Opus 5)** | 3인이 각자 한 파트씩 개발. 계약서 한 장과 요청·회신 문서로 인터페이스를 맞췄다 |
+
+### 기술 스택
+
+| 파트 | 스택 |
+| --- | --- |
+| **앱** | **Flutter 3.47** / Dart 3.13 · 웹 배포(CanvasKit) · Riverpod 2 · go_router 14 · dio 5 · `record`(마이크 PCM16 16kHz) · `audioplayers`(EVI 오디오) · `web_socket_channel`(EVI 소켓) · GitHub Pages |
+| **백엔드** | **Java 21 / Spring Boot 3.4** · JPA · PostgreSQL(Supabase) · JWT · Render |
+| **AI서버** | **Python 3.12 / FastAPI** · SSE 스트리밍 · Google Cloud Run(`asia-northeast3`) · Secret Manager |
+| **인증** | 카카오 OAuth(인가 코드 → 백엔드 교환) + 심사용 익명 로그인 `POST /api/auth/dev` |
+
+### 설계에서 지킨 것
+
+- **판정은 코드, 문장은 LLM** — 갭·패턴·태그·위기 규칙은 전부 코드가 판정합니다
+- **위기 감지는 규칙 OR LLM** — LLM이 죽어도 규칙만으로 109 안내가 나갑니다
+- **프로소디는 텍스트 채널에 넣지 않습니다** — 응답 LLM에는 플래그만
+- **음성 원본 미저장** — 마이크 바이트는 소켓으로만 나가고 재생 조각은 메모리에서 버립니다
+- **계약서 한 장(v1.14)** 이 인터페이스의 단일 출처입니다 — 3인이 병렬로 가는 동안 상대 파트가 없어도 각자 진행할 수 있었습니다
+
 ## 스크린샷 설명 (업로드 폼에 캡션이 있을 때)
 
 | # | 화면 | 캡션 |
